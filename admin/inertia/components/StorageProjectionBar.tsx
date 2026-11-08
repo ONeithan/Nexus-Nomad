@@ -40,13 +40,13 @@ export default function StorageProjectionBar({
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           <IconServer size={20} className="text-desert-green" />
-          <span className="font-semibold text-desert-green">Storage</span>
+          <span className="font-semibold text-desert-green">Armazenamento</span>
         </div>
         <div className="text-sm text-desert-stone-dark font-mono">
           {formatBytes(projectedTotal, 1)} / {formatBytes(totalSize, 1)}
           {projectedAddition > 0 && (
             <span className="text-desert-stone ml-2">
-              (+{formatBytes(projectedAddition, 1)} selected)
+              (+{formatBytes(projectedAddition, 1)} selecionado)
             </span>
           )}
         </div>
@@ -94,13 +94,13 @@ export default function StorageProjectionBar({
         <div className="flex items-center gap-4 text-xs">
           <div className="flex items-center gap-1.5">
             <div className="w-3 h-3 rounded bg-desert-stone" />
-            <span className="text-desert-stone-dark">Current ({formatBytes(currentUsed, 1)})</span>
+            <span className="text-desert-stone-dark">Atual ({formatBytes(currentUsed, 1)})</span>
           </div>
           {projectedAddition > 0 && (
             <div className="flex items-center gap-1.5">
               <div className={classNames('w-3 h-3 rounded', getProjectedColor())} />
               <span className="text-desert-stone-dark">
-                Selected (+{formatBytes(projectedAddition, 1)})
+                Selecionado (+{formatBytes(projectedAddition, 1)})
               </span>
             </div>
           )}
@@ -109,11 +109,11 @@ export default function StorageProjectionBar({
         {willExceed ? (
           <div className="flex items-center gap-1.5 text-desert-red text-xs font-medium">
             <IconAlertTriangle size={14} />
-            <span>Exceeds available space by {formatBytes(projectedTotal - totalSize, 1)}</span>
+            <span>Excede o espaço disponível em {formatBytes(projectedTotal - totalSize, 1)}</span>
           </div>
         ) : (
           <div className="text-xs text-desert-stone">
-            {formatBytes(remainingAfter, 1)} will remain free
+            {formatBytes(remainingAfter, 1)} permanecerão livres
           </div>
         )}
       </div>

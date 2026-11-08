@@ -24,9 +24,9 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
   const { configured: creatorPacksConfigured } = useCreatorPacks()
 
   const aiLabel =
-    aiAssistantName && aiAssistantName !== 'AI Assistant'
+    aiAssistantName && aiAssistantName !== 'AI Assistant' && aiAssistantName !== 'Assistente de IA'
       ? aiAssistantName
-      : 'Modelos & IA Remota'
+      : 'Assistente de IA'
 
   const navigation = [
     { name: 'Sistema & Discos', href: '/settings/system', icon: IconSettings, current: false },

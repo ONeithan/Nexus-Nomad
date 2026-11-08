@@ -1,4 +1,4 @@
-const GENERIC_CHAT_STREAM_ERROR = 'The model encountered an error. Please try again.'
+const GENERIC_CHAT_STREAM_ERROR = 'O modelo encontrou um erro. Por favor, tente novamente.'
 
 export function chatStreamErrorMessage(event: unknown): string | null {
   if (!event || typeof event !== 'object' || !('error' in event) || !event.error) {

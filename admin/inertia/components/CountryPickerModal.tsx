@@ -41,6 +41,46 @@ export type CountryPickerModalProps = Omit<
 // to country codes, so we skip them here.
 const SINGLE_COUNTRY_FILENAME_RE = /^([a-z]{2})_[\w-]+_z\d+\.pmtiles$/
 
+const CONTINENT_LABELS: Record<string, string> = {
+  Africa: 'África',
+  Antarctica: 'Antártida',
+  Asia: 'Ásia',
+  Europe: 'Europa',
+  'North America': 'América do Norte',
+  Oceania: 'Oceania',
+  'South America': 'América do Sul',
+  'Central America': 'América Central',
+  Caribbean: 'Caribe',
+  Other: 'Outros',
+}
+
+const GROUP_LABELS: Record<string, string> = {
+  'North America': 'América do Norte',
+  'South America': 'América do Sul',
+  'Central America': 'América Central',
+  Caribbean: 'Caribe',
+  Europe: 'Europa',
+  'European Union': 'União Europeia',
+  'Western Europe': 'Europa Ocidental',
+  'Eastern Europe': 'Europa Oriental',
+  Nordics: 'Países Nórdicos',
+  Scandinavia: 'Escandinávia',
+  'United Kingdom & Ireland': 'Reino Unido e Irlanda',
+  'Middle East': 'Oriente Médio',
+  'Southeast Asia': 'Sudeste Asiático',
+  'East Asia': 'Ásia Oriental',
+  'South Asia': 'Ásia Meridional',
+  Asia: 'Ásia',
+  Africa: 'África',
+  'North Africa': 'Norte da África',
+  'Sub-Saharan Africa': 'África Subsaariana',
+  Oceania: 'Oceania',
+  'Australia & New Zealand': 'Austrália e Nova Zelândia',
+  Iberia: 'Península Ibérica',
+  Balkans: 'Bálcãs',
+  Baltics: 'Países Bálticos',
+}
+
 const CountryPickerModal: React.FC<CountryPickerModalProps> = ({
   onDownloadStart,
   installedFilenames = [],
@@ -147,12 +187,12 @@ const CountryPickerModal: React.FC<CountryPickerModalProps> = ({
           maxzoom,
         })
         if (requestId !== preflightRequestIdRef.current) return
-        if (!res) throw new Error('Preflight returned no data')
+        if (!res) throw new Error('A pré-verificação não retornou dados')
         setPreflight(res)
       } catch (err: any) {
         if (requestId !== preflightRequestIdRef.current) return
         console.error('Preflight failed:', err)
-        setErrorMessage(err?.message ?? 'Estimate failed')
+        setErrorMessage(err?.message ?? 'Falha na estimativa')
       } finally {
         if (requestId === preflightRequestIdRef.current) setLoading(false)
       }
@@ -163,11 +203,11 @@ const CountryPickerModal: React.FC<CountryPickerModalProps> = ({
 
   async function startDownload() {
     if (selected.size === 0) {
-      setErrorMessage('Pick at least one country before downloading.')
+      setErrorMessage('Selecione pelo menos um país antes de iniciar o download.')
       return
     }
     if (loading || !preflight) {
-      setErrorMessage('Still estimating size — hold on a moment.')
+      setErrorMessage('Ainda estimando o tamanho — aguarde um momento.')
       return
     }
     try {
@@ -181,7 +221,7 @@ const CountryPickerModal: React.FC<CountryPickerModalProps> = ({
       onDownloadStart?.()
     } catch (err: any) {
       console.error('Extract dispatch failed:', err)
-      setErrorMessage(err?.message ?? 'Download failed')
+      setErrorMessage(err?.message ?? 'Falha no download')
     } finally {
       setDownloading(false)
     }
@@ -190,11 +230,11 @@ const CountryPickerModal: React.FC<CountryPickerModalProps> = ({
   return (
     <StyledModal
       {...modalProps}
-      title="Download map by country or region"
+      title="Baixar mapa por país ou região"
       open={true}
-      confirmText="Start Download"
+      confirmText="Iniciar Download"
       confirmIcon="IconDownload"
-      cancelText="Cancel"
+      cancelText="Cancelar"
       confirmVariant="primary"
       confirmLoading={loading || downloading}
       cancelLoading={loading || downloading}
@@ -209,7 +249,7 @@ const CountryPickerModal: React.FC<CountryPickerModalProps> = ({
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder={`Search ${countries.length} countries...`}
+              placeholder={`Buscar em ${countries.length} países...`}
               className="w-full pl-9 pr-3 py-2 rounded-md border border-border-default bg-surface-primary text-text-primary text-sm focus:outline-none focus:ring-2 focus:ring-desert-green"
             />
           </div>
@@ -219,7 +259,7 @@ const CountryPickerModal: React.FC<CountryPickerModalProps> = ({
               onClick={clearAll}
               className="text-sm text-text-muted hover:text-text-primary px-3 cursor-pointer"
             >
-              Clear all
+              Limpar tudo
             </button>
           )}
         </div>
@@ -227,7 +267,7 @@ const CountryPickerModal: React.FC<CountryPickerModalProps> = ({
         {groups.length > 0 && (
           <div>
             <p className="text-xs uppercase tracking-wide text-text-muted mb-2">
-              Quick picks
+              Seleções rápidas
             </p>
             <div className="flex flex-wrap gap-2">
               {groups.map((group) => {
@@ -247,7 +287,7 @@ const CountryPickerModal: React.FC<CountryPickerModalProps> = ({
                     )}
                   >
                     {allIn && <IconCheck className="inline w-3 h-3 mr-1" />}
-                    {group.name}{' '}
+                    {GROUP_LABELS[group.name] ?? group.name}{' '}
                     <span className="opacity-60">({group.countries.length})</span>
                   </button>
                 )
@@ -263,13 +303,13 @@ const CountryPickerModal: React.FC<CountryPickerModalProps> = ({
             </div>
           ) : grouped.length === 0 ? (
             <p className="text-text-muted text-sm p-6 text-center">
-              No countries match "{search}".
+              Nenhum país corresponde a "{search}".
             </p>
           ) : (
             grouped.map(([continent, list]) => (
               <div key={continent}>
                 <div className="sticky top-0 bg-surface-secondary border-b border-border-default px-4 py-2 text-xs uppercase tracking-wide text-text-muted font-semibold z-10">
-                  {continent}
+                  {CONTINENT_LABELS[continent] ?? continent}
                 </div>
                 <ul>
                   {list.map((country) => {
@@ -301,9 +341,9 @@ const CountryPickerModal: React.FC<CountryPickerModalProps> = ({
                           {isInstalled && (
                             <span
                               className="text-[10px] uppercase tracking-wide font-semibold px-1.5 py-0.5 rounded bg-desert-green/15 text-desert-green border border-desert-green/30"
-                              title="Already downloaded — re-select to update with a different zoom"
+                              title="Já baixado — selecione novamente para atualizar com um zoom diferente"
                             >
-                              Installed
+                              Instalado
                             </span>
                           )}
                           <span className="text-xs font-mono text-text-muted">
@@ -322,7 +362,8 @@ const CountryPickerModal: React.FC<CountryPickerModalProps> = ({
         {selectedCountries.length > 0 && (
           <div>
             <p className="text-xs uppercase tracking-wide text-text-muted mb-2">
-              {selectedCountries.length} selected
+              {selectedCountries.length}{' '}
+              {selectedCountries.length === 1 ? 'selecionado' : 'selecionados'}
             </p>
             <div className="flex flex-wrap gap-2 max-h-24 overflow-y-auto">
               {selectedCountries.map((country) => (
@@ -335,7 +376,7 @@ const CountryPickerModal: React.FC<CountryPickerModalProps> = ({
                     type="button"
                     onClick={() => toggleCountry(country.code)}
                     className="hover:bg-white/20 rounded cursor-pointer"
-                    aria-label={`Remove ${country.name}`}
+                    aria-label={`Remover ${country.name}`}
                   >
                     <IconX className="w-3 h-3" />
                   </button>
@@ -347,7 +388,7 @@ const CountryPickerModal: React.FC<CountryPickerModalProps> = ({
 
         <div>
           <label className="block text-sm text-text-primary font-medium mb-2">
-            Max zoom level: <span className="font-mono">{maxzoom}</span>
+            Nível máximo de zoom: <span className="font-mono">{maxzoom}</span>
           </label>
           <input
             type="range"
@@ -360,12 +401,12 @@ const CountryPickerModal: React.FC<CountryPickerModalProps> = ({
             disabled={downloading}
           />
           <div className="flex justify-between text-xs text-text-muted mt-1 font-mono">
-            <span>z{EXTRACT_MIN_ZOOM} (world)</span>
-            <span>z{EXTRACT_MAX_ZOOM} (street)</span>
+            <span>z{EXTRACT_MIN_ZOOM} (mundo)</span>
+            <span>z{EXTRACT_MAX_ZOOM} (rua)</span>
           </div>
           <p className="text-xs text-text-muted mt-2">
-            Lower zoom = smaller file, less detail. Zoom 15 shows individual streets;
-            zoom 10 shows city-level detail.
+            Menor zoom = arquivo menor, menos detalhes. O zoom 15 exibe ruas individuais;
+            o zoom 10 exibe detalhes em nível de cidade.
           </p>
         </div>
 
@@ -395,20 +436,20 @@ function PreflightStatus({ errorMessage, loading, preflight, hasSelection }: Pre
     return <p className="text-desert-red">{errorMessage}</p>
   }
   if (loading) {
-    return <p className="text-text-muted">Estimating size…</p>
+    return <p className="text-text-muted">Estimando tamanho…</p>
   }
   if (preflight) {
     return (
       <p className="text-text-primary">
-        {preflight.tiles.toLocaleString()} tiles, ~{formatBytes(preflight.bytes, 1)}{' '}
-        <span className="text-text-muted">(source build {preflight.source.date})</span>
+        {preflight.tiles.toLocaleString('pt-BR')} blocos, ~{formatBytes(preflight.bytes, 1)}{' '}
+        <span className="text-text-muted">(compilação base {preflight.source.date})</span>
       </p>
     )
   }
   if (!hasSelection) {
-    return <p className="text-text-muted">Pick at least one country to estimate size.</p>
+    return <p className="text-text-muted">Selecione pelo menos um país para estimar o tamanho.</p>
   }
-  return <p className="text-text-muted">Estimating size…</p>
+  return <p className="text-text-muted">Estimando tamanho…</p>
 }
 
 export default CountryPickerModal

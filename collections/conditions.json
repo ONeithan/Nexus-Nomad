@@ -3,8 +3,8 @@
   "conditions": [
     {
       "slug": "pain",
-      "label": "Pain",
-      "category": "Pain, fever & inflammation",
+      "label": "Dor",
+      "category": "Dor, febre e inflamação",
       "searchTerms": [
         "pain",
         "aches",
@@ -15,8 +15,8 @@
     },
     {
       "slug": "headache",
-      "label": "Headache",
-      "category": "Pain, fever & inflammation",
+      "label": "Dor de cabeça / Enxaqueca",
+      "category": "Dor, febre e inflamação",
       "searchTerms": [
         "headache",
         "migraine",
@@ -26,8 +26,8 @@
     },
     {
       "slug": "muscle-joint-pain",
-      "label": "Muscle & joint pain",
-      "category": "Pain, fever & inflammation",
+      "label": "Dor muscular e articular",
+      "category": "Dor, febre e inflamação",
       "searchTerms": [
         "muscular aches",
         "muscle aches",
@@ -39,8 +39,8 @@
     },
     {
       "slug": "fever",
-      "label": "Fever",
-      "category": "Pain, fever & inflammation",
+      "label": "Febre",
+      "category": "Dor, febre e inflamação",
       "searchTerms": [
         "fever",
         "reduces fever",
@@ -50,8 +50,8 @@
     },
     {
       "slug": "menstrual-cramps",
-      "label": "Menstrual cramps",
-      "category": "Pain, fever & inflammation",
+      "label": "Cólicas menstruais",
+      "category": "Dor, febre e inflamação",
       "searchTerms": [
         "menstrual cramps",
         "menstrual pain",
@@ -61,8 +61,8 @@
     },
     {
       "slug": "cough",
-      "label": "Cough",
-      "category": "Cold, cough & allergy",
+      "label": "Tosse",
+      "category": "Gripe, tosse e alergia",
       "searchTerms": [
         "cough",
         "cough suppressant",
@@ -72,8 +72,8 @@
     },
     {
       "slug": "nasal-congestion",
-      "label": "Nasal congestion",
-      "category": "Cold, cough & allergy",
+      "label": "Congestão nasal",
+      "category": "Gripe, tosse e alergia",
       "searchTerms": [
         "nasal congestion",
         "stuffy nose",
@@ -84,8 +84,8 @@
     },
     {
       "slug": "sore-throat",
-      "label": "Sore throat",
-      "category": "Cold, cough & allergy",
+      "label": "Dor de garganta",
+      "category": "Gripe, tosse e alergia",
       "searchTerms": [
         "sore throat",
         "sore mouth",
@@ -95,8 +95,8 @@
     },
     {
       "slug": "common-cold",
-      "label": "Common cold",
-      "category": "Cold, cough & allergy",
+      "label": "Resfriado comum",
+      "category": "Gripe, tosse e alergia",
       "searchTerms": [
         "common cold",
         "cold symptoms",
@@ -106,8 +106,8 @@
     },
     {
       "slug": "allergic-reaction",
-      "label": "Allergies & allergic reactions",
-      "category": "Cold, cough & allergy",
+      "label": "Alergias e reações alérgicas",
+      "category": "Gripe, tosse e alergia",
       "searchTerms": [
         "allergy",
         "allergic reactions",
@@ -120,8 +120,8 @@
     },
     {
       "slug": "heartburn",
-      "label": "Heartburn",
-      "category": "Stomach & digestion",
+      "label": "Azia e queimação",
+      "category": "Estômago e digestão",
       "searchTerms": [
         "heartburn",
         "acid indigestion",
@@ -132,8 +132,8 @@
     },
     {
       "slug": "indigestion",
-      "label": "Indigestion & upset stomach",
-      "category": "Stomach & digestion",
+      "label": "Má digestão e desconforto estomacal",
+      "category": "Estômago e digestão",
       "searchTerms": [
         "indigestion",
         "upset stomach",
@@ -145,8 +145,8 @@
     },
     {
       "slug": "nausea-vomiting",
-      "label": "Nausea & vomiting",
-      "category": "Stomach & digestion",
+      "label": "Náusea e vômito",
+      "category": "Estômago e digestão",
       "searchTerms": [
         "nausea",
         "vomiting",
@@ -155,8 +155,8 @@
     },
     {
       "slug": "diarrhea",
-      "label": "Diarrhea",
-      "category": "Stomach & digestion",
+      "label": "Diarreia",
+      "category": "Estômago e digestão",
       "searchTerms": [
         "diarrhea",
         "antidiarrheal",
@@ -166,8 +166,8 @@
     },
     {
       "slug": "constipation",
-      "label": "Constipation",
-      "category": "Stomach & digestion",
+      "label": "Prisão de ventre (constipação)",
+      "category": "Estômago e digestão",
       "searchTerms": [
         "constipation",
         "laxative",
@@ -178,8 +178,8 @@
     },
     {
       "slug": "motion-sickness",
-      "label": "Motion sickness",
-      "category": "Stomach & digestion",
+      "label": "Enjoo de movimento (cinetose)",
+      "category": "Estômago e digestão",
       "searchTerms": [
         "motion sickness",
         "travel sickness",
@@ -189,8 +189,8 @@
     },
     {
       "slug": "gas",
-      "label": "Gas & bloating",
-      "category": "Stomach & digestion",
+      "label": "Gases e estufamento",
+      "category": "Estômago e digestão",
       "searchTerms": [
         "gas",
         "bloating",
@@ -201,8 +201,8 @@
     },
     {
       "slug": "wounds-cuts",
-      "label": "Wounds & cuts",
-      "category": "Skin & wounds",
+      "label": "Ferimentos e cortes",
+      "category": "Pele e ferimentos",
       "searchTerms": [
         "minor cuts",
         "scrapes",
@@ -214,8 +214,8 @@
     },
     {
       "slug": "burns",
-      "label": "Burns",
-      "category": "Skin & wounds",
+      "label": "Queimaduras",
+      "category": "Pele e ferimentos",
       "searchTerms": [
         "burns",
         "minor burns",
@@ -226,8 +226,8 @@
     },
     {
       "slug": "insect-bites-stings",
-      "label": "Insect bites & stings",
-      "category": "Skin & wounds",
+      "label": "Picadas e ferroadas de insetos",
+      "category": "Pele e ferimentos",
       "searchTerms": [
         "insect bites",
         "insect stings",
@@ -238,8 +238,8 @@
     },
     {
       "slug": "skin-rash-itch",
-      "label": "Rash & itching",
-      "category": "Skin & wounds",
+      "label": "Irritação na pele e coceira",
+      "category": "Pele e ferimentos",
       "searchTerms": [
         "itching",
         "rash",
@@ -251,8 +251,8 @@
     },
     {
       "slug": "poison-ivy",
-      "label": "Poison ivy & plant rashes",
-      "category": "Skin & wounds",
+      "label": "Dermatite por plantas (hera venenosa)",
+      "category": "Pele e ferimentos",
       "searchTerms": [
         "poison ivy",
         "poison oak",
@@ -262,8 +262,8 @@
     },
     {
       "slug": "fungal-infection",
-      "label": "Athlete’s foot & ringworm",
-      "category": "Skin & wounds",
+      "label": "Pé de atleta (frieira) e micoses",
+      "category": "Pele e ferimentos",
       "searchTerms": [
         "athlete’s foot",
         "ringworm",
@@ -275,8 +275,8 @@
     },
     {
       "slug": "dry-skin",
-      "label": "Dry & chapped skin",
-      "category": "Skin & wounds",
+      "label": "Pele seca e rachada",
+      "category": "Pele e ferimentos",
       "searchTerms": [
         "dry skin",
         "chapped skin",
@@ -287,8 +287,8 @@
     },
     {
       "slug": "acne",
-      "label": "Acne",
-      "category": "Skin & wounds",
+      "label": "Acne e espinhas",
+      "category": "Pele e ferimentos",
       "searchTerms": [
         "acne",
         "pimples",
@@ -298,8 +298,8 @@
     },
     {
       "slug": "eye-irritation",
-      "label": "Eye irritation & dryness",
-      "category": "Eyes, ears & mouth",
+      "label": "Irritação e ressecamento ocular",
+      "category": "Olhos, ouvidos e boca",
       "searchTerms": [
         "eye irritation",
         "dry eyes",
@@ -311,8 +311,8 @@
     },
     {
       "slug": "earache",
-      "label": "Earache & ear wax",
-      "category": "Eyes, ears & mouth",
+      "label": "Dor de ouvido e excesso de cera",
+      "category": "Olhos, ouvidos e boca",
       "searchTerms": [
         "earache",
         "ear wax",
@@ -323,8 +323,8 @@
     },
     {
       "slug": "canker-sores",
-      "label": "Canker & cold sores",
-      "category": "Eyes, ears & mouth",
+      "label": "Aftas e herpes labial",
+      "category": "Olhos, ouvidos e boca",
       "searchTerms": [
         "canker sores",
         "cold sores",
@@ -335,8 +335,8 @@
     },
     {
       "slug": "toothache",
-      "label": "Toothache",
-      "category": "Eyes, ears & mouth",
+      "label": "Dor de dente",
+      "category": "Olhos, ouvidos e boca",
       "searchTerms": [
         "toothache",
         "tooth pain",
@@ -346,8 +346,8 @@
     },
     {
       "slug": "sleeplessness",
-      "label": "Sleeplessness",
-      "category": "Sleep, stress & general",
+      "label": "Insônia e dificuldade para dormir",
+      "category": "Sono, estresse e cuidados gerais",
       "searchTerms": [
         "sleeplessness",
         "insomnia",
@@ -358,8 +358,8 @@
     },
     {
       "slug": "dehydration",
-      "label": "Dehydration",
-      "category": "Sleep, stress & general",
+      "label": "Desidratação",
+      "category": "Sono, estresse e cuidados gerais",
       "searchTerms": [
         "dehydration",
         "oral rehydration",
@@ -370,8 +370,8 @@
     },
     {
       "slug": "hemorrhoids",
-      "label": "Hemorrhoids",
-      "category": "Sleep, stress & general",
+      "label": "Hemorroidas",
+      "category": "Sono, estresse e cuidados gerais",
       "searchTerms": [
         "hemorrhoids",
         "hemorrhoidal",
@@ -381,8 +381,8 @@
     },
     {
       "slug": "yeast-infection",
-      "label": "Vaginal yeast infection",
-      "category": "Infections (OTC-treatable)",
+      "label": "Candidíase vaginal",
+      "category": "Infecções (tratáveis sem receita)",
       "searchTerms": [
         "vaginal yeast infection",
         "yeast infection",
@@ -392,8 +392,8 @@
     },
     {
       "slug": "pinworm",
-      "label": "Pinworm",
-      "category": "Infections (OTC-treatable)",
+      "label": "Oxiuríase (verme oxiúro)",
+      "category": "Infecções (tratáveis sem receita)",
       "searchTerms": [
         "pinworm",
         "pinworm infection",
@@ -402,8 +402,8 @@
     },
     {
       "slug": "cold-sore-lip",
-      "label": "Chapped & sun-protected lips",
-      "category": "Sleep, stress & general",
+      "label": "Lábios rachados e proteção solar labial",
+      "category": "Sono, estresse e cuidados gerais",
       "searchTerms": [
         "lip protectant",
         "chapped lips",
@@ -413,8 +413,8 @@
     },
     {
       "slug": "eye-allergy",
-      "label": "Eye allergies",
-      "category": "Eyes, ears & mouth",
+      "label": "Alergia ocular",
+      "category": "Olhos, ouvidos e boca",
       "searchTerms": [
         "eye allergy",
         "itchy eyes due to allergies",

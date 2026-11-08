@@ -100,8 +100,9 @@ COPY --from=build /app/build /app
 # from the tag when semantic-release did not commit the bump back).
 RUN echo "{\"version\":\"${VERSION}\"}" > /app/version.json
 
-# Copy docs and README for access within the container
+# Copy docs, collections, and README for access within the container
 COPY admin/docs /app/docs
+COPY collections /app/collections
 COPY README.md /app/README.md
 
 # Empty Calibre library, seeded into storage/books on Calibre-Web install

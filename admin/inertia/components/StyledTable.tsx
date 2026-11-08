@@ -43,7 +43,7 @@ function StyledTable<T extends { [key: string]: any }>({
   tableBodyClassName = '',
   tableBodyStyle = {},
   data = [],
-  noDataText = 'No records found',
+  noDataText = 'Nenhum registro encontrado',
   onRowClick,
   columns = [],
   className = '',

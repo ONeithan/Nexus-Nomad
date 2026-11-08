@@ -1,17 +1,17 @@
 {
-  "spec_version": "2026-03-15",
+  "spec_version": "2026-11-09",
   "categories": [
     {
-      "name": "Medicine",
+      "name": "Medicina & Saúde",
       "slug": "medicine",
       "icon": "IconStethoscope",
-      "description": "Medical references, guides, and encyclopedias for healthcare information and emergency preparedness.",
+      "description": "Referências médicas, guias práticos e enciclopédias de saúde para emergências e primeiros socorros.",
       "language": "en",
       "tiers": [
         {
-          "name": "Essential",
+          "name": "Essencial",
           "slug": "medicine-essential",
-          "description": "Core medical references for first aid, medications, and emergency care. Start here.",
+          "description": "Referências essenciais para consulta rápida. Ideal para começar com baixo consumo de disco.",
           "recommended": true,
           "resources": [
             {
@@ -32,10 +32,10 @@
             },
             {
               "id": "fas-military-medicine_en",
-              "version": "2025-06",
+              "version": "2026-10",
               "title": "Military Medicine",
               "description": "Tactical and field medicine manuals",
-              "url": "https://download.kiwix.org/zim/zimit/fas-military-medicine_en_2025-06.zim",
+              "url": "https://download.kiwix.org/zim/zimit/irp.fas.org_en_military-medicine_2026-10.zim",
               "size_mb": 78
             },
             {
@@ -49,9 +49,9 @@
           ]
         },
         {
-          "name": "Standard",
+          "name": "Padrão",
           "slug": "medicine-standard",
-          "description": "Comprehensive medical encyclopedia with detailed health information. Includes everything in Essential.",
+          "description": "Acervo intermediário com guias detalhados e maior cobertura. Inclui todo o conteúdo do nível Essencial.",
           "includesTier": "medicine-essential",
           "resources": [
             {
@@ -74,17 +74,17 @@
           ]
         },
         {
-          "name": "Comprehensive",
+          "name": "Completo",
           "slug": "medicine-comprehensive",
-          "description": "Professional-level medical references and textbooks. Includes everything in Standard.",
+          "description": "A coleção mais profunda e detalhada, com manuais avançados e cobertura máxima. Inclui tudo do nível Padrão.",
           "includesTier": "medicine-standard",
           "resources": [
             {
               "id": "wikipedia_en_medicine_maxi",
-              "version": "2026-01",
+              "version": "2026-10",
               "title": "Wikipedia Medicine",
               "description": "Curated medical articles from Wikipedia with images",
-              "url": "https://download.kiwix.org/zim/wikipedia/wikipedia_en_medicine_maxi_2026-01.zim",
+              "url": "https://download.kiwix.org/zim/wikipedia/wikipedia_en_medicine_maxi_2026-10.zim",
               "size_mb": 2000
             },
             {
@@ -108,16 +108,16 @@
       ]
     },
     {
-      "name": "Survival & Preparedness",
+      "name": "Sobrevivência & Preparação",
       "slug": "survival",
       "icon": "IconShieldCheck",
-      "description": "Emergency preparedness, bug-out planning, and tactical survival skills for crisis situations.",
+      "description": "Guias de emergência, técnicas de sobrevivência, proteção e autonomia em situações críticas.",
       "language": "en",
       "tiers": [
         {
-          "name": "Essential",
+          "name": "Essencial",
           "slug": "survival-essential",
-          "description": "Water, food, and knot references plus core survival videos. Start here for emergency basics.",
+          "description": "Referências essenciais para consulta rápida. Ideal para começar com baixo consumo de disco.",
           "recommended": true,
           "resources": [
             {
@@ -163,9 +163,9 @@
           ]
         },
         {
-          "name": "Standard",
+          "name": "Padrão",
           "slug": "survival-standard",
-          "description": "Official disaster planning, field skills, and radio communications, plus bug-out and urban survival techniques. Includes everything in Essential.",
+          "description": "Acervo intermediário com guias detalhados e maior cobertura. Inclui todo o conteúdo do nível Essencial.",
           "includesTier": "survival-essential",
           "resources": [
             {
@@ -178,18 +178,18 @@
             },
             {
               "id": "outdoors.stackexchange.com_en_all",
-              "version": "2026-02",
+              "version": "2026-10",
               "title": "The Great Outdoors Q&A",
               "description": "Answered questions on hiking, camping, navigation, and wilderness skills",
-              "url": "https://download.kiwix.org/zim/stack_exchange/outdoors.stackexchange.com_en_all_2026-02.zim",
+              "url": "https://download.kiwix.org/zim/stack_exchange/outdoors.stackexchange.com_en_all_2026-10.zim",
               "size_mb": 142
             },
             {
               "id": "ham.stackexchange.com_en_all",
-              "version": "2026-02",
+              "version": "2026-10",
               "title": "Amateur Radio Q&A",
               "description": "Answered questions on radio equipment, antennas, licensing, and emergency communications",
-              "url": "https://download.kiwix.org/zim/stack_exchange/ham.stackexchange.com_en_all_2026-02.zim",
+              "url": "https://download.kiwix.org/zim/stack_exchange/ham.stackexchange.com_en_all_2026-10.zim",
               "size_mb": 75
             },
             {
@@ -211,9 +211,9 @@
           ]
         },
         {
-          "name": "Comprehensive",
+          "name": "Completo",
           "slug": "survival-comprehensive",
-          "description": "Complete prepper library - post-disaster recovery, growing and storing food, off-grid technical references, and classic military strategy. Includes everything in Standard.",
+          "description": "A coleção mais profunda e detalhada, com manuais avançados e cobertura máxima. Inclui tudo do nível Padrão.",
           "includesTier": "survival-standard",
           "resources": [
             {
@@ -261,32 +261,32 @@
       ]
     },
     {
-      "name": "Education & Reference",
+      "name": "Educação & Referência",
       "slug": "education",
       "icon": "IconSchool",
-      "description": "Encyclopedias, textbooks, tutorials, and educational videos for self-directed learning.",
+      "description": "Enciclopédias gerais, livros didáticos, tutoriais práticos e material educativo abrangente.",
       "language": "en",
       "tiers": [
         {
-          "name": "Essential",
+          "name": "Essencial",
           "slug": "education-essential",
-          "description": "Core reference materials - open textbooks and essential educational content. Lightweight, text-focused.",
+          "description": "Referências essenciais para consulta rápida. Ideal para começar com baixo consumo de disco.",
           "recommended": true,
           "resources": [
             {
               "id": "wikibooks_en_all_nopic",
-              "version": "2026-01",
+              "version": "2026-10",
               "title": "Wikibooks",
               "description": "Open-content textbooks covering math, science, computing, and more",
-              "url": "https://download.kiwix.org/zim/wikibooks/wikibooks_en_all_nopic_2026-01.zim",
+              "url": "https://download.kiwix.org/zim/wikibooks/wikibooks_en_all_nopic_2026-10.zim",
               "size_mb": 3100
             }
           ]
         },
         {
-          "name": "Standard",
+          "name": "Padrão",
           "slug": "education-standard",
-          "description": "Adds educational videos, university-level tutorials, and STEM textbooks. Includes Essential.",
+          "description": "Acervo intermediário com guias detalhados e maior cobertura. Inclui todo o conteúdo do nível Essencial.",
           "includesTier": "education-essential",
           "resources": [
             {
@@ -299,10 +299,10 @@
             },
             {
               "id": "wikiversity_en_all_maxi",
-              "version": "2026-02",
+              "version": "2026-11",
               "title": "Wikiversity",
               "description": "Tutorials, courses, and learning materials for all levels",
-              "url": "https://download.kiwix.org/zim/wikiversity/wikiversity_en_all_maxi_2026-02.zim",
+              "url": "https://download.kiwix.org/zim/wikiversity/wikiversity_en_all_maxi_2026-11.zim",
               "size_mb": 2370
             },
             {
@@ -340,17 +340,17 @@
           ]
         },
         {
-          "name": "Comprehensive",
+          "name": "Completo",
           "slug": "education-comprehensive",
-          "description": "Complete educational library with enhanced textbooks and TED talks. Includes Standard.",
+          "description": "A coleção mais profunda e detalhada, com manuais avançados e cobertura máxima. Inclui tudo do nível Padrão.",
           "includesTier": "education-standard",
           "resources": [
             {
               "id": "wikibooks_en_all_maxi",
-              "version": "2026-01",
+              "version": "2026-10",
               "title": "Wikibooks (With Images)",
               "description": "Open textbooks with full illustrations and diagrams",
-              "url": "https://download.kiwix.org/zim/wikibooks/wikibooks_en_all_maxi_2026-01.zim",
+              "url": "https://download.kiwix.org/zim/wikibooks/wikibooks_en_all_maxi_2026-10.zim",
               "size_mb": 5400
             },
             {
@@ -398,56 +398,56 @@
       ]
     },
     {
-      "name": "DIY & Repair",
+      "name": "Oficina, Reparos & Faça Você Mesmo",
       "slug": "diy",
       "icon": "IconTool",
-      "description": "Fix it yourself - repair guides, home improvement, woodworking, and vehicle maintenance.",
+      "description": "Manuais de conserto, melhorias caseiras, marcenaria, eletrônica e manutenção veicular.",
       "language": "en",
       "tiers": [
         {
-          "name": "Essential",
+          "name": "Essencial",
           "slug": "diy-essential",
-          "description": "Core repair knowledge - woodworking basics and vehicle maintenance Q&A.",
+          "description": "Referências essenciais para consulta rápida. Ideal para começar com baixo consumo de disco.",
           "recommended": true,
           "resources": [
             {
               "id": "woodworking.stackexchange.com_en_all",
-              "version": "2026-02",
+              "version": "2026-10",
               "title": "Woodworking Q&A",
               "description": "Stack Exchange Q&A for carpentry, joinery, and woodcraft",
-              "url": "https://download.kiwix.org/zim/stack_exchange/woodworking.stackexchange.com_en_all_2026-02.zim",
+              "url": "https://download.kiwix.org/zim/stack_exchange/woodworking.stackexchange.com_en_all_2026-10.zim",
               "size_mb": 99
             },
             {
               "id": "mechanics.stackexchange.com_en_all",
-              "version": "2026-02",
+              "version": "2026-10",
               "title": "Motor Vehicle Maintenance Q&A",
               "description": "Stack Exchange Q&A for car and motorcycle repair",
-              "url": "https://download.kiwix.org/zim/stack_exchange/mechanics.stackexchange.com_en_all_2026-02.zim",
+              "url": "https://download.kiwix.org/zim/stack_exchange/mechanics.stackexchange.com_en_all_2026-10.zim",
               "size_mb": 321
             }
           ]
         },
         {
-          "name": "Standard",
+          "name": "Padrão",
           "slug": "diy-standard",
-          "description": "Home improvement expertise with thousands of Q&A threads. Includes Essential.",
+          "description": "Acervo intermediário com guias detalhados e maior cobertura. Inclui todo o conteúdo do nível Essencial.",
           "includesTier": "diy-essential",
           "resources": [
             {
               "id": "diy.stackexchange.com_en_all",
-              "version": "2026-02",
+              "version": "2026-10",
               "title": "DIY & Home Improvement Q&A",
               "description": "Stack Exchange Q&A for home repairs, electrical, plumbing, and construction",
-              "url": "https://download.kiwix.org/zim/stack_exchange/diy.stackexchange.com_en_all_2026-02.zim",
+              "url": "https://download.kiwix.org/zim/stack_exchange/diy.stackexchange.com_en_all_2026-10.zim",
               "size_mb": 1900
             }
           ]
         },
         {
-          "name": "Comprehensive",
+          "name": "Completo",
           "slug": "diy-comprehensive",
-          "description": "Complete repair library with step-by-step guides for electronics and appliances. Includes Standard.",
+          "description": "A coleção mais profunda e detalhada, com manuais avançados e cobertura máxima. Inclui tudo do nível Padrão.",
           "includesTier": "diy-standard",
           "resources": [
             {
@@ -463,24 +463,24 @@
       ]
     },
     {
-      "name": "Agriculture & Food",
+      "name": "Agricultura & Alimentação",
       "slug": "agriculture",
       "icon": "IconPlant",
-      "description": "Grow and prepare your own food - gardening, cooking techniques, and food preservation.",
+      "description": "Cultivo próprio, conservação de alimentos, técnicas de culinária e produção agrícola.",
       "language": "en",
       "tiers": [
         {
-          "name": "Essential",
+          "name": "Essencial",
           "slug": "agriculture-essential",
-          "description": "Quick recipes and cooking basics for everyday meal preparation.",
+          "description": "Referências essenciais para consulta rápida. Ideal para começar com baixo consumo de disco.",
           "recommended": true,
           "resources": [
             {
               "id": "foss.cooking_en_all",
-              "version": "2026-02",
+              "version": "2026-11",
               "title": "FOSS Cooking",
               "description": "Quick and easy cooking guides and recipes",
-              "url": "https://download.kiwix.org/zim/zimit/foss.cooking_en_all_2026-02.zim",
+              "url": "https://download.kiwix.org/zim/zimit/foss.cooking_en_all_2026-11.zim",
               "size_mb": 24
             },
             {
@@ -494,25 +494,25 @@
           ]
         },
         {
-          "name": "Standard",
+          "name": "Padrão",
           "slug": "agriculture-standard",
-          "description": "Gardening knowledge and cooking expertise from community Q&A. Includes Essential.",
+          "description": "Acervo intermediário com guias detalhados e maior cobertura. Inclui todo o conteúdo do nível Essencial.",
           "includesTier": "agriculture-essential",
           "resources": [
             {
               "id": "gardening.stackexchange.com_en_all",
-              "version": "2026-02",
+              "version": "2026-10",
               "title": "Gardening Q&A",
               "description": "Stack Exchange Q&A for growing your own food, plant care, and landscaping",
-              "url": "https://download.kiwix.org/zim/stack_exchange/gardening.stackexchange.com_en_all_2026-02.zim",
+              "url": "https://download.kiwix.org/zim/stack_exchange/gardening.stackexchange.com_en_all_2026-10.zim",
               "size_mb": 923
             },
             {
               "id": "cooking.stackexchange.com_en_all",
-              "version": "2026-02",
+              "version": "2026-10",
               "title": "Cooking Q&A",
               "description": "Stack Exchange Q&A for cooking techniques, food safety, and recipes",
-              "url": "https://download.kiwix.org/zim/stack_exchange/cooking.stackexchange.com_en_all_2026-02.zim",
+              "url": "https://download.kiwix.org/zim/stack_exchange/cooking.stackexchange.com_en_all_2026-10.zim",
               "size_mb": 236
             },
             {
@@ -526,9 +526,9 @@
           ]
         },
         {
-          "name": "Comprehensive",
+          "name": "Completo",
           "slug": "agriculture-comprehensive",
-          "description": "Complete self-sufficiency with homesteading videos, classic agricultural texts, and advanced techniques. Includes Standard.",
+          "description": "A coleção mais profunda e detalhada, com manuais avançados e cobertura máxima. Inclui tudo do nível Padrão.",
           "includesTier": "agriculture-standard",
           "resources": [
             {
@@ -552,16 +552,16 @@
       ]
     },
     {
-      "name": "Computing & Technology",
+      "name": "Computação & Tecnologia",
       "slug": "computing",
       "icon": "IconCode",
-      "description": "Programming tutorials, electronics projects, and technical documentation for makers and developers.",
+      "description": "Tutoriais de programação, eletrônica, redes e documentação técnica para desenvolvedores.",
       "language": "en",
       "tiers": [
         {
-          "name": "Essential",
+          "name": "Essencial",
           "slug": "computing-essential",
-          "description": "Learn to code with interactive tutorials and core programming documentation.",
+          "description": "Referências essenciais para consulta rápida. Ideal para começar com baixo consumo de disco.",
           "recommended": true,
           "resources": [
             {
@@ -607,25 +607,25 @@
           ]
         },
         {
-          "name": "Standard",
+          "name": "Padrão",
           "slug": "computing-standard",
-          "description": "Maker projects with Arduino and Raspberry Pi, plus more programming docs. Includes Essential.",
+          "description": "Acervo intermediário com guias detalhados e maior cobertura. Inclui todo o conteúdo do nível Essencial.",
           "includesTier": "computing-essential",
           "resources": [
             {
               "id": "arduino.stackexchange.com_en_all",
-              "version": "2026-02",
+              "version": "2026-10",
               "title": "Arduino Q&A",
               "description": "Stack Exchange Q&A for Arduino microcontroller projects",
-              "url": "https://download.kiwix.org/zim/stack_exchange/arduino.stackexchange.com_en_all_2026-02.zim",
+              "url": "https://download.kiwix.org/zim/stack_exchange/arduino.stackexchange.com_en_all_2026-10.zim",
               "size_mb": 247
             },
             {
               "id": "raspberrypi.stackexchange.com_en_all",
-              "version": "2026-02",
+              "version": "2026-10",
               "title": "Raspberry Pi Q&A",
               "description": "Stack Exchange Q&A for Raspberry Pi projects and troubleshooting",
-              "url": "https://download.kiwix.org/zim/stack_exchange/raspberrypi.stackexchange.com_en_all_2026-02.zim",
+              "url": "https://download.kiwix.org/zim/stack_exchange/raspberrypi.stackexchange.com_en_all_2026-10.zim",
               "size_mb": 285
             },
             {
@@ -655,25 +655,25 @@
           ]
         },
         {
-          "name": "Comprehensive",
+          "name": "Completo",
           "slug": "computing-comprehensive",
-          "description": "Deep electronics knowledge and extensive Q&A for hardware projects. Includes Standard.",
+          "description": "A coleção mais profunda e detalhada, com manuais avançados e cobertura máxima. Inclui tudo do nível Padrão.",
           "includesTier": "computing-standard",
           "resources": [
             {
               "id": "electronics.stackexchange.com_en_all",
-              "version": "2026-02",
+              "version": "2026-10",
               "title": "Electronics Q&A",
               "description": "Stack Exchange Q&A for circuit design, components, and electrical engineering",
-              "url": "https://download.kiwix.org/zim/stack_exchange/electronics.stackexchange.com_en_all_2026-02.zim",
+              "url": "https://download.kiwix.org/zim/stack_exchange/electronics.stackexchange.com_en_all_2026-10.zim",
               "size_mb": 3800
             },
             {
               "id": "robotics.stackexchange.com_en_all",
-              "version": "2026-02",
+              "version": "2026-10",
               "title": "Robotics Q&A",
               "description": "Stack Exchange Q&A for robotics projects and automation",
-              "url": "https://download.kiwix.org/zim/stack_exchange/robotics.stackexchange.com_en_all_2026-02.zim",
+              "url": "https://download.kiwix.org/zim/stack_exchange/robotics.stackexchange.com_en_all_2026-10.zim",
               "size_mb": 233
             },
             {
@@ -686,10 +686,10 @@
             },
             {
               "id": "devdocs_en_bash",
-              "version": "2026-01",
+              "version": "2026-10",
               "title": "Linux Documentation",
               "description": "Linux command reference and system administration",
-              "url": "https://download.kiwix.org/zim/devdocs/devdocs_en_bash_2026-01.zim",
+              "url": "https://download.kiwix.org/zim/devdocs/devdocs_en_bash_2026-10.zim",
               "size_mb": 1
             }
           ]

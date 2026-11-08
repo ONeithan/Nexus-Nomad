@@ -62,13 +62,13 @@ export default function KbGuardrailModal({
                   <div className="flex items-start gap-3">
                     <IconAlertTriangle className="h-6 w-6 text-amber-600 dark:text-amber-300 flex-shrink-0 mt-0.5" />
                     <Dialog.Title className="text-lg font-semibold text-text-primary">
-                      Confirm large AI indexing operation
+                      Confirmar operação grande de indexação de IA
                     </Dialog.Title>
                   </div>
                   <button
                     onClick={onCancel}
                     className="text-text-muted hover:text-text-primary transition-colors flex-shrink-0"
-                    aria-label="Cancel"
+                    aria-label="Cancelar"
                   >
                     <IconX size={20} />
                   </button>
@@ -76,27 +76,27 @@ export default function KbGuardrailModal({
 
                 <div className="px-6 py-5 space-y-3">
                   <p className="text-text-primary text-sm">
-                    Indexing this batch for the AI Assistant will use approximately{' '}
-                    <strong>{formatBytes(estimateBytes, 1)}</strong> of disk space for embeddings, on top of the raw downloads.
+                    A indexação deste lote para o Assistente de IA usará aproximadamente{' '}
+                    <strong>{formatBytes(estimateBytes, 1)}</strong> de espaço em disco para embeddings, além do tamanho dos downloads brutos.
                   </p>
 
                   {freeReason && (
                     <p className="text-text-secondary text-sm">
-                      That's more than 10% of your remaining free disk space ({formatBytes(freeReason.freeBytes, 1)} free). Embedding can take several hours and is hard to interrupt cleanly once started.
+                      Isso representa mais de 10% do seu espaço livre restante ({formatBytes(freeReason.freeBytes, 1)} livres). O processo de embedding pode levar várias horas e é difícil de interromper com segurança depois de iniciado.
                     </p>
                   )}
 
                   <p className="text-text-secondary text-sm">
-                    If you'd rather review per-item before indexing, cancel here and switch your Auto-index setting to <strong>Manual</strong> from the Knowledge Base panel.
+                    Se preferir revisar item por item antes de indexar, cancele aqui e altere sua configuração de Auto-indexação para <strong>Manual</strong> no painel da Base de Conhecimento.
                   </p>
                 </div>
 
                 <div className="bg-surface-secondary px-6 py-4 flex justify-end gap-3">
                   <StyledButton variant="outline" size="md" onClick={onCancel}>
-                    Cancel
+                    Cancelar
                   </StyledButton>
                   <StyledButton variant="primary" size="md" onClick={onConfirm}>
-                    Proceed anyway
+                    Prosseguir mesmo assim
                   </StyledButton>
                 </div>
               </Dialog.Panel>

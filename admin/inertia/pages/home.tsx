@@ -159,9 +159,13 @@ export default function Home(props: {
     )
     .forEach((service) => {
       const resolvedAiName =
-        aiAssistantName && aiAssistantName !== 'AI Assistant'
+        aiAssistantName &&
+        aiAssistantName !== 'AI Assistant' &&
+        aiAssistantName !== 'Assistente de IA'
           ? aiAssistantName
-          : service.friendly_name || 'Assistente de IA'
+          : service.friendly_name && service.friendly_name !== 'AI Assistant'
+            ? service.friendly_name
+            : 'Assistente de IA'
 
       items.push({
         label:

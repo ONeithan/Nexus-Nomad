@@ -39,29 +39,29 @@ function buildCoreCapabilities(aiAssistantName: string): Capability[] {
   return [
     {
       id: 'information',
-      name: 'Information Library',
+      name: 'Biblioteca Offline',
       technicalName: 'Kiwix',
       description:
-        'Offline access to Wikipedia, medical references, how-to guides, and encyclopedias',
+        'Acesso offline à Wikipédia, referências médicas, guias práticos e enciclopédias',
       features: [
-        'Complete Wikipedia offline',
-        'Medical references and first aid guides',
-        'DIY repair guides and how-to content',
-        'Project Gutenberg books and literature',
+        'Wikipédia completa offline',
+        'Referências médicas e guias de primeiros socorros',
+        'Guias de reparo faça-você-mesmo e conteúdos práticos',
+        'Livros e literatura do Projeto Gutenberg',
       ],
       services: [SERVICE_NAMES.KIWIX],
       icon: 'IconBooks',
     },
     {
       id: 'education',
-      name: 'Education Platform',
+      name: 'Plataforma Educacional',
       technicalName: 'Kolibri',
-      description: 'Interactive learning platform with video courses and exercises',
+      description: 'Plataforma interativa de aprendizado com cursos em vídeo e exercícios',
       features: [
-        'Khan Academy math and science courses',
-        'K-12 curriculum content',
-        'Interactive exercises and quizzes',
-        'Progress tracking for learners',
+        'Cursos de matemática e ciências da Khan Academy',
+        'Conteúdo curricular do ensino fundamental e médio',
+        'Exercícios interativos e questionários',
+        'Acompanhamento de progresso para estudantes',
       ],
       services: [SERVICE_NAMES.KOLIBRI_GEN2],
       icon: 'IconSchool',
@@ -70,12 +70,12 @@ function buildCoreCapabilities(aiAssistantName: string): Capability[] {
       id: 'ai',
       name: aiAssistantName,
       technicalName: 'Ollama',
-      description: 'Local AI chat that runs entirely on your hardware - no internet required',
+      description: 'Chat de IA local que roda inteiramente no seu hardware — sem precisar de internet',
       features: [
-        'Private conversations that never leave your device',
-        'No internet connection needed after setup',
-        'Ask questions, get help with writing, brainstorm ideas',
-        'Runs on your own hardware with local AI models',
+        'Conversas privadas que nunca saem do seu dispositivo',
+        'Sem necessidade de conexão com a internet após a configuração',
+        'Tire dúvidas, receba ajuda com textos e desenvolva ideias',
+        'Roda no seu próprio hardware com modelos de IA locais',
       ],
       services: [SERVICE_NAMES.OLLAMA],
       icon: 'IconRobot',
@@ -94,12 +94,12 @@ function buildCoreCapabilities(aiAssistantName: string): Capability[] {
 type WizardStep = 1 | 2 | 3 | 4 | 5 | 6
 
 const STEP_LABELS: Record<WizardStep, string> = {
-  1: 'Apps',
-  2: 'Maps',
-  3: 'Content',
-  4: 'Creator Packs',
-  5: 'AI',
-  6: 'Review',
+  1: 'Aplicativos',
+  2: 'Mapas',
+  3: 'Conteúdo',
+  4: 'Pacotes de Criadores',
+  5: 'IA',
+  6: 'Revisão',
 }
 
 const CURATED_MAP_COLLECTIONS_KEY = 'curated-map-collections'
@@ -110,7 +110,9 @@ export default function EasySetupWizard(props: {
   system: { services: ServiceSlim[]; remoteOllamaUrl: string }
 }) {
   const { aiAssistantName } = usePage<{ aiAssistantName: string }>().props
-  const CORE_CAPABILITIES = buildCoreCapabilities(aiAssistantName)
+  const resolvedAiName =
+    !aiAssistantName || aiAssistantName === 'AI Assistant' ? 'Assistente de IA' : aiAssistantName
+  const CORE_CAPABILITIES = buildCoreCapabilities(resolvedAiName)
 
   const [currentStep, setCurrentStep] = useState<WizardStep>(1)
   const [selectedServices, setSelectedServices] = useState<string[]>([])
@@ -379,7 +381,7 @@ export default function EasySetupWizard(props: {
     if (!isOnline) {
       addNotification({
         type: 'error',
-        message: 'You must have an internet connection to complete the setup.',
+        message: 'Você precisa de uma conexão com a internet para concluir a configuração.',
       })
       return
     }
@@ -406,7 +408,7 @@ export default function EasySetupWizard(props: {
       if (remoteOllamaEnabled && remoteOllamaUrl) {
         const remoteResult = await api.configureRemoteOllama(remoteOllamaUrl)
         if (!remoteResult?.success) {
-          const msg = (remoteResult as any)?.message || 'Failed to configure remote Ollama.'
+          const msg = (remoteResult as any)?.message || 'Falha ao configurar o Ollama remoto.'
           setRemoteOllamaUrlError(msg)
           setIsProcessing(false)
           setCurrentStep(1)
@@ -445,7 +447,7 @@ export default function EasySetupWizard(props: {
 
       addNotification({
         type: 'success',
-        message: 'Setup wizard completed! Your selections are being processed.',
+        message: 'Assistente de configuração concluído! Suas seleções estão sendo processadas.',
       })
 
       router.visit('/easy-setup/complete')
@@ -453,7 +455,7 @@ export default function EasySetupWizard(props: {
       console.error('Error during setup:', error)
       addNotification({
         type: 'error',
-        message: 'An error occurred during setup. Some items may not have been processed.',
+        message: 'Ocorreu um erro durante a configuração. Alguns itens podem não ter sido processados.',
       })
     } finally {
       setIsProcessing(false)
@@ -506,7 +508,7 @@ export default function EasySetupWizard(props: {
     }))
 
     return (
-      <nav aria-label="Progress" className="px-6 pt-6">
+      <nav aria-label="Progresso" className="px-6 pt-6">
         <ol
           role="list"
           className="divide-y divide-border-default rounded-md md:flex md:divide-y-0 md:justify-between border border-desert-green"
@@ -610,7 +612,7 @@ export default function EasySetupWizard(props: {
         remoteOllamaEnabled
       if (hasAiSelections) {
         const confirmed = window.confirm(
-          "Turning off AI will discard your AI model picks, indexing policy, and remote Ollama configuration. Continue?"
+          'Desativar a IA descartará suas escolhas de modelos de IA, política de indexação e configuração do Ollama remoto. Continuar?'
         )
         if (!confirmed) return
       }
@@ -669,7 +671,7 @@ export default function EasySetupWizard(props: {
               </h3>
               {installed && (
                 <span className="text-xs bg-desert-green text-white px-2 py-0.5 rounded-full">
-                  Installed
+                  Instalado
                 </span>
               )}
             </div>
@@ -679,7 +681,7 @@ export default function EasySetupWizard(props: {
                 installed ? 'text-text-muted' : selected ? 'text-green-100' : 'text-text-muted'
               )}
             >
-              Powered by {capability.technicalName}
+              Desenvolvido com {capability.technicalName}
             </p>
             <p
               className={classNames(
@@ -747,23 +749,23 @@ export default function EasySetupWizard(props: {
     return (
       <div className="space-y-8">
         <div className="text-center mb-6">
-          <h2 className="text-3xl font-bold text-text-primary mb-2">What do you want NOMAD to do?</h2>
+          <h2 className="text-3xl font-bold text-text-primary mb-2">O que você quer que o NOMAD faça?</h2>
           <p className="text-text-secondary">
-            Select the capabilities you need. You can always add more later.
+            Selecione as capacidades de que você precisa. Você sempre pode adicionar mais depois.
           </p>
         </div>
 
         {allInstalled ? (
           <div className="text-center py-12">
             <p className="text-text-secondary text-lg">
-              All available capabilities are already installed!
+              Todas as capacidades disponíveis já estão instaladas!
             </p>
             <StyledButton
               variant="primary"
               className="mt-4"
               onClick={() => router.visit('/settings/apps')}
             >
-              Manage Apps
+              Gerenciar Aplicativos
             </StyledButton>
           </div>
         ) : (
@@ -771,7 +773,7 @@ export default function EasySetupWizard(props: {
             {/* Core Capabilities */}
             {existingCoreCapabilities.length > 0 && (
               <div>
-                <h3 className="text-lg font-semibold text-text-primary mb-4">Core Capabilities</h3>
+                <h3 className="text-lg font-semibold text-text-primary mb-4">Capacidades Principais</h3>
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                   {existingCoreCapabilities.map((capability) => {
                     if (capability.id === 'ai') {
@@ -794,7 +796,7 @@ export default function EasySetupWizard(props: {
                                   }}
                                   className="w-4 h-4 accent-desert-green"
                                 />
-                                <span className="text-sm font-medium text-gray-700">Use remote Ollama instance</span>
+                                <span className="text-sm font-medium text-gray-700">Usar instância remota do Ollama</span>
                               </label>
                               {remoteOllamaEnabled && (
                                 <div className="mt-3">
@@ -831,11 +833,11 @@ export default function EasySetupWizard(props: {
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 rounded-lg bg-surface-secondary p-4">
                 <div>
                   <h3 className="text-md font-medium text-text-primary mb-1">
-                    Looking for more apps?
+                    Procurando mais aplicativos?
                   </h3>
                   <p className="text-sm text-text-secondary">
-                    Notes, data tools, and the full catalog of add-on apps are available any time in
-                    Supply Depot.
+                    Notas, ferramentas de dados e o catálogo completo de aplicativos extras estão
+                    disponíveis a qualquer momento no Depósito de Suprimentos.
                   </p>
                 </div>
                 <StyledButton
@@ -843,7 +845,7 @@ export default function EasySetupWizard(props: {
                   onClick={() => router.visit('/supply-depot')}
                   className="flex-shrink-0"
                 >
-                  Open Supply Depot
+                  Abrir Depósito de Suprimentos
                 </StyledButton>
               </div>
             </div>
@@ -856,22 +858,22 @@ export default function EasySetupWizard(props: {
   const renderStep2 = () => (
     <div className="space-y-6">
       <div className="text-center mb-6">
-        <h2 className="text-3xl font-bold text-text-primary mb-2">Choose Map Regions</h2>
+        <h2 className="text-3xl font-bold text-text-primary mb-2">Escolher Regiões de Mapa</h2>
         <p className="text-text-secondary">
-          Select map region collections to download for offline use. You can always download more
-          regions later.
+          Selecione coleções de regiões de mapa para baixar para uso offline. Você sempre pode
+          baixar mais regiões depois.
         </p>
       </div>
       <div className="mx-auto max-w-2xl rounded-lg border border-border-subtle bg-surface-secondary p-3 text-center">
         <p className="text-sm text-text-secondary">
-          Only need a specific country, or want the whole world? Individual countries and a full
-          global map can be installed any time from the{' '}
+          Precisa apenas de um país específico ou quer o mundo inteiro? Países individuais e um mapa
+          global completo podem ser instalados a qualquer momento pelo{' '}
           <button
             type="button"
             onClick={() => router.visit('/settings/maps')}
             className="font-medium text-desert-green underline"
           >
-            Maps Manager
+            Gerenciador de Mapas
           </button>
           .
         </p>
@@ -907,7 +909,7 @@ export default function EasySetupWizard(props: {
         </div>
       ) : (
         <div className="text-center py-12">
-          <p className="text-text-secondary text-lg">No map collections available at this time.</p>
+          <p className="text-text-secondary text-lg">Nenhuma coleção de mapas disponível no momento.</p>
         </div>
       )}
     </div>
@@ -924,11 +926,11 @@ export default function EasySetupWizard(props: {
     return (
       <div className="space-y-6">
         <div className="text-center mb-6">
-          <h2 className="text-3xl font-bold text-text-primary mb-2">Choose Content</h2>
+          <h2 className="text-3xl font-bold text-text-primary mb-2">Escolher Conteúdo</h2>
           <p className="text-text-secondary">
             {isInformationSelected
-              ? 'Select content categories for offline knowledge.'
-              : 'Configure content for your selected capabilities.'}
+              ? 'Selecione categorias de conteúdo para conhecimento offline.'
+              : 'Configure o conteúdo para as capacidades selecionadas.'}
           </p>
         </div>
 
@@ -962,8 +964,8 @@ export default function EasySetupWizard(props: {
                 <IconBooks className="w-6 h-6 text-text-primary" />
               </div>
               <div>
-                <h3 className="text-xl font-semibold text-text-primary">Additional Content</h3>
-                <p className="text-sm text-text-muted">Curated collections for offline reference</p>
+                <h3 className="text-xl font-semibold text-text-primary">Conteúdo Adicional</h3>
+                <p className="text-sm text-text-muted">Coleções curadas para consulta offline</p>
               </div>
             </div>
 
@@ -1006,8 +1008,8 @@ export default function EasySetupWizard(props: {
         {!isInformationSelected && (
           <div className="text-center py-12">
             <p className="text-text-secondary text-lg">
-              No content-based capabilities selected. You can skip this step or go back to select
-              capabilities that require content.
+              Nenhuma capacidade baseada em conteúdo selecionada. Você pode pular esta etapa ou
+              voltar para selecionar capacidades que utilizam conteúdo.
             </p>
           </div>
         )}
@@ -1022,9 +1024,9 @@ export default function EasySetupWizard(props: {
     return (
       <div className="space-y-6">
         <div className="text-center mb-6">
-          <h2 className="text-3xl font-bold text-text-primary mb-2">Stock Creator Packs</h2>
+          <h2 className="text-3xl font-bold text-text-primary mb-2">Pacotes de Criadores</h2>
           <p className="text-text-secondary">
-            Branded video collections from creators, downloaded for offline viewing in Kiwix.
+            Coleções de vídeos de criadores de conteúdo, baixadas para visualização offline no Kiwix.
           </p>
         </div>
 
@@ -1045,7 +1047,7 @@ export default function EasySetupWizard(props: {
           </div>
         ) : (
           <div className="text-center py-12">
-            <p className="text-text-secondary text-lg">No creator packs available right now.</p>
+            <p className="text-text-secondary text-lg">Nenhum pacote de criador disponível no momento.</p>
           </div>
         )}
       </div>
@@ -1058,9 +1060,9 @@ export default function EasySetupWizard(props: {
     return (
       <div className="space-y-6">
         <div className="text-center mb-6">
-          <h2 className="text-3xl font-bold text-text-primary mb-2">Configure {aiAssistantName}</h2>
+          <h2 className="text-3xl font-bold text-text-primary mb-2">Configurar {resolvedAiName}</h2>
           <p className="text-text-secondary">
-            Choose models to download and set how {aiAssistantName} handles new content.
+            Escolha modelos para baixar e defina como o {resolvedAiName} lida com novos conteúdos.
           </p>
         </div>
 
@@ -1069,14 +1071,14 @@ export default function EasySetupWizard(props: {
             <IconCpu className="w-6 h-6 text-text-primary" />
           </div>
           <div>
-            <h3 className="text-xl font-semibold text-text-primary">AI Models</h3>
-            <p className="text-sm text-text-muted">Select models to download for offline AI</p>
+            <h3 className="text-xl font-semibold text-text-primary">Modelos de IA</h3>
+            <p className="text-sm text-text-muted">Selecione modelos para baixar para IA offline</p>
           </div>
         </div>
         {remoteOllamaEnabled && remoteOllamaUrl ? (
           <Alert
-            title="Remote Ollama selected"
-            message="Models are managed on the remote machine. You can add models from Settings > AI Assistant after setup, note this is only supported when using Ollama, not LM Studio and other OpenAI API software."
+            title="Ollama remoto selecionado"
+            message="Os modelos são gerenciados na máquina remota. Você pode adicionar modelos em Configurações > Assistente de IA após a configuração; observe que isso só é compatível ao usar o Ollama, e não o LM Studio ou outros softwares compatíveis com a API da OpenAI."
             type="info"
             variant="bordered"
           />
@@ -1125,7 +1127,7 @@ export default function EasySetupWizard(props: {
                             : 'text-text-muted'
                         )}
                       >
-                        Size: {model.tags[0].size}
+                        Tamanho: {model.tags[0].size}
                       </div>
                     )}
                     {model.tags?.[0]?.input.toLowerCase().includes('image') && (
@@ -1137,7 +1139,7 @@ export default function EasySetupWizard(props: {
                             : 'text-desert-green'
                         )}
                       >
-                        Supports images
+                        Suporta imagens
                       </div>
                     )}
                   </div>
@@ -1159,7 +1161,7 @@ export default function EasySetupWizard(props: {
           </div>
         ) : (
           <div className="text-center py-8 bg-surface-secondary rounded-lg">
-            <p className="text-text-secondary">No recommended AI models available at this time.</p>
+            <p className="text-text-secondary">Nenhum modelo de IA recomendado disponível no momento.</p>
           </div>
         )}
 
@@ -1168,10 +1170,10 @@ export default function EasySetupWizard(props: {
             rag.defaultIngestPolicy on wizard submit. */}
         <div className="mt-8 pt-6 border-t border-border-subtle">
           <h4 className="text-lg font-semibold text-text-primary mb-1">
-            Auto-index new content for {aiAssistantName}?
+            Indexar automaticamente novos conteúdos para o {resolvedAiName}?
           </h4>
           <p className="text-sm text-text-muted mb-4">
-            When you add new ZIMs, documents, or curated content, should {aiAssistantName} index them automatically so it can search them while answering your questions?
+            Quando você adicionar novos arquivos ZIM, documentos ou conteúdos curados, o {resolvedAiName} deve indexá-los automaticamente para poder pesquisá-los ao responder às suas perguntas?
           </p>
           <div className="inline-flex rounded-md border border-border-default overflow-hidden" role="group">
             <button
@@ -1184,7 +1186,7 @@ export default function EasySetupWizard(props: {
                   : 'bg-surface-primary text-text-secondary hover:bg-surface-secondary'
               )}
             >
-              Yes, always
+              Sim, sempre
             </button>
             <button
               type="button"
@@ -1196,11 +1198,11 @@ export default function EasySetupWizard(props: {
                   : 'bg-surface-primary text-text-secondary hover:bg-surface-secondary'
               )}
             >
-              Ask me first
+              Perguntar primeiro
             </button>
           </div>
           <p className="text-xs text-text-muted mt-3">
-            You can change this any time from the Knowledge Base panel inside AI Chat.
+            Você pode alterar isso a qualquer momento no painel Base de Conhecimento dentro do Chat de IA.
           </p>
         </div>
       </div>
@@ -1219,14 +1221,14 @@ export default function EasySetupWizard(props: {
     return (
       <div className="space-y-6">
         <div className="text-center mb-6">
-          <h2 className="text-3xl font-bold text-text-primary mb-2">Review Your Selections</h2>
-          <p className="text-text-secondary">Review your choices before starting the setup process.</p>
+          <h2 className="text-3xl font-bold text-text-primary mb-2">Revise Suas Seleções</h2>
+          <p className="text-text-secondary">Revise suas escolhas antes de iniciar o processo de configuração.</p>
         </div>
 
         {!hasSelections ? (
           <Alert
-            title="No Selections Made"
-            message="You haven't selected anything to install or download. You can go back to make selections or go back to the home page."
+            title="Nenhuma Seleção Feita"
+            message="Você não selecionou nada para instalar ou baixar. Você pode voltar para fazer seleções ou retornar à página inicial."
             type="info"
             variant="bordered"
           />
@@ -1235,7 +1237,7 @@ export default function EasySetupWizard(props: {
             {selectedServices.length > 0 && (
               <div className="bg-surface-primary rounded-lg border-2 border-desert-stone-light p-6">
                 <h3 className="text-xl font-semibold text-text-primary mb-4">
-                  Capabilities to Install
+                  Capacidades para Instalar
                 </h3>
                 <ul className="space-y-2">
                   {CORE_CAPABILITIES.filter((cap) =>
@@ -1258,7 +1260,7 @@ export default function EasySetupWizard(props: {
             {selectedMapCollections.length > 0 && (
               <div className="bg-surface-primary rounded-lg border-2 border-desert-stone-light p-6">
                 <h3 className="text-xl font-semibold text-text-primary mb-4">
-                  Map Collections to Download ({selectedMapCollections.length})
+                  Coleções de Mapas para Baixar ({selectedMapCollections.length})
                 </h3>
                 <ul className="space-y-2">
                   {selectedMapCollections.map((slug) => {
@@ -1277,7 +1279,7 @@ export default function EasySetupWizard(props: {
             {selectedCreatorPacks.length > 0 && (
               <div className="bg-surface-primary rounded-lg border-2 border-desert-stone-light p-6">
                 <h3 className="text-xl font-semibold text-text-primary mb-4">
-                  Creator Packs to Install ({selectedCreatorPacks.length})
+                  Pacotes de Criadores para Instalar ({selectedCreatorPacks.length})
                 </h3>
                 <ul className="space-y-2">
                   {selectedCreatorPacks.map((id) => {
@@ -1296,7 +1298,7 @@ export default function EasySetupWizard(props: {
             {selectedTiers.size > 0 && (
               <div className="bg-surface-primary rounded-lg border-2 border-desert-stone-light p-6">
                 <h3 className="text-xl font-semibold text-text-primary mb-4">
-                  Content Categories ({selectedTiers.size})
+                  Categorias de Conteúdo ({selectedTiers.size})
                 </h3>
                 {Array.from(selectedTiers.entries()).map(([categorySlug, tier]) => {
                   const category = categories?.find((c) => c.slug === categorySlug)
@@ -1310,7 +1312,7 @@ export default function EasySetupWizard(props: {
                           {category.name} - {tier.name}
                         </span>
                         <span className="text-text-muted text-sm ml-2">
-                          ({resources.length} files)
+                          ({resources.length} {resources.length === 1 ? 'arquivo' : 'arquivos'})
                         </span>
                       </div>
                       <ul className="ml-7 space-y-1">
@@ -1328,7 +1330,7 @@ export default function EasySetupWizard(props: {
 
             {selectedWikipedia && selectedWikipedia !== 'none' && (
               <div className="bg-surface-primary rounded-lg border-2 border-desert-stone-light p-6">
-                <h3 className="text-xl font-semibold text-text-primary mb-4">Wikipedia</h3>
+                <h3 className="text-xl font-semibold text-text-primary mb-4">Wikipédia</h3>
                 {(() => {
                   const option = wikipediaState?.options.find((o) => o.id === selectedWikipedia)
                   return option ? (
@@ -1340,7 +1342,7 @@ export default function EasySetupWizard(props: {
                       <span className="text-text-muted text-sm">
                         {option.size_mb > 0
                           ? `${(option.size_mb / 1024).toFixed(1)} GB`
-                          : 'No download'}
+                          : 'Sem download'}
                       </span>
                     </div>
                   ) : null
@@ -1351,7 +1353,7 @@ export default function EasySetupWizard(props: {
             {selectedAiModels.length > 0 && (
               <div className="bg-surface-primary rounded-lg border-2 border-desert-stone-light p-6">
                 <h3 className="text-xl font-semibold text-text-primary mb-4">
-                  AI Models to Download ({selectedAiModels.length})
+                  Modelos de IA para Baixar ({selectedAiModels.length})
                 </h3>
                 <ul className="space-y-2">
                   {selectedAiModels.map((modelName) => {
@@ -1375,16 +1377,16 @@ export default function EasySetupWizard(props: {
             {isAiInSetup && (
               <div className="bg-surface-primary rounded-lg border-2 border-desert-stone-light p-6">
                 <h3 className="text-xl font-semibold text-text-primary mb-2">
-                  Auto-index Setting
+                  Configuração de Indexação Automática
                 </h3>
                 <p className="text-text-secondary text-sm">
                   {ingestPolicy === 'Always' ? (
                     <>
-                      New content will be <strong>indexed automatically</strong> as it arrives so {aiAssistantName} can search it.
+                      Novos conteúdos serão <strong>indexados automaticamente</strong> assim que chegarem para que o {resolvedAiName} possa pesquisá-los.
                     </>
                   ) : (
                     <>
-                      New content will <strong>wait for you to opt in</strong> from the Knowledge Base panel before {aiAssistantName} indexes it.
+                      Novos conteúdos <strong>aguardarão sua confirmação</strong> no painel Base de Conhecimento antes que o {resolvedAiName} os indexe.
                     </>
                   )}
                 </p>
@@ -1392,8 +1394,8 @@ export default function EasySetupWizard(props: {
             )}
 
             <Alert
-              title="Ready to Start"
-              message="Click 'Complete Setup' to begin installing apps and downloading content. This may take some time depending on your internet connection and the size of the downloads."
+              title="Pronto para Começar"
+              message="Clique em 'Concluir Configuração' para começar a instalar aplicativos e baixar conteúdos. Isso pode levar algum tempo dependendo da sua conexão com a internet e do tamanho dos downloads."
               type="info"
               variant="solid"
             />
@@ -1405,11 +1407,11 @@ export default function EasySetupWizard(props: {
 
   return (
     <AppLayout>
-      <Head title="Easy Setup Wizard" />
+      <Head title="Assistente de Configuração Rápida" />
       {!isOnline && (
         <Alert
-          title="No Internet Connection"
-          message="You'll need an internet connection to proceed. Please connect to the internet and try again."
+          title="Sem Conexão com a Internet"
+          message="Você precisará de uma conexão com a internet para prosseguir. Conecte-se à internet e tente novamente."
           type="warning"
           variant="solid"
           className="mb-8"
@@ -1444,7 +1446,7 @@ export default function EasySetupWizard(props: {
                     variant="outline"
                     icon="IconChevronLeft"
                   >
-                    Back
+                    Voltar
                   </StyledButton>
                 )}
 
@@ -1453,18 +1455,25 @@ export default function EasySetupWizard(props: {
                     const count = CORE_CAPABILITIES.filter((cap) =>
                       cap.services.some((s) => selectedServices.includes(s))
                     ).length
-                    return `${count} ${count === 1 ? 'capability' : 'capabilities'}`
+                    return `${count} ${count === 1 ? 'capacidade' : 'capacidades'}`
                   })()}
-                  , {selectedMapCollections.length} map region
-                  {selectedMapCollections.length !== 1 && 's'}, {selectedTiers.size}{' '}
-                  content categor{selectedTiers.size !== 1 ? 'ies' : 'y'},{' '}
+                  , {selectedMapCollections.length}{' '}
+                  {selectedMapCollections.length === 1 ? 'região de mapa' : 'regiões de mapa'},{' '}
+                  {selectedTiers.size}{' '}
+                  {selectedTiers.size === 1 ? 'categoria de conteúdo' : 'categorias de conteúdo'},{' '}
                   {creatorPacksConfigured && (
                     <>
-                      {selectedCreatorPacks.length} creator pack
-                      {selectedCreatorPacks.length !== 1 && 's'},{' '}
+                      {selectedCreatorPacks.length}{' '}
+                      {selectedCreatorPacks.length === 1
+                        ? 'pacote de criador'
+                        : 'pacotes de criadores'}
+                      ,{' '}
                     </>
                   )}
-                  {selectedAiModels.length} AI model{selectedAiModels.length !== 1 && 's'} selected
+                  {selectedAiModels.length}{' '}
+                  {selectedAiModels.length === 1
+                    ? 'modelo de IA selecionado'
+                    : 'modelos de IA selecionados'}
                 </p>
               </div>
 
@@ -1474,7 +1483,7 @@ export default function EasySetupWizard(props: {
                   disabled={isProcessing}
                   variant="outline"
                 >
-                  Cancel & Go to Home
+                  Cancelar e Ir ao Início
                 </StyledButton>
 
                 {currentStep < finalStep ? (
@@ -1484,7 +1493,7 @@ export default function EasySetupWizard(props: {
                     variant="primary"
                     icon="IconChevronRight"
                   >
-                    Next
+                    Próximo
                   </StyledButton>
                 ) : (
                   <StyledButton
@@ -1494,7 +1503,7 @@ export default function EasySetupWizard(props: {
                     variant="success"
                     icon="IconCheck"
                   >
-                    Complete Setup
+                    Concluir Configuração
                   </StyledButton>
                 )}
               </div>

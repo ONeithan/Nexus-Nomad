@@ -41,9 +41,12 @@ perform_update() {
     log "System update initiated"
     sleep 1
 
-    # Apply target image tag to compose.yml before pulling
+    # Apply target image tag to compose.yml before pulling (supports both Nexus NOMAD and upstream Project NOMAD images)
     log "Applying image tag '${target_tag}' to compose.yml..."
-    if sed -i "s|\(image: ghcr\.io/crosstalk-solutions/project-nomad\):.*|\1:${target_tag}|" "$COMPOSE_FILE" 2>> "$LOG_FILE"; then
+    if sed -i \
+        -e "s|\(image: ghcr\.io/oneithan/nexus-nomad\):.*|\1:${target_tag}|" \
+        -e "s|\(image: ghcr\.io/crosstalk-solutions/project-nomad\):.*|\1:${target_tag}|" \
+        "$COMPOSE_FILE" 2>> "$LOG_FILE"; then
         log "Successfully updated compose.yml admin image tag to '${target_tag}'"
     else
         log "ERROR: Failed to update compose.yml image tag"

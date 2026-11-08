@@ -4,139 +4,139 @@ import SettingsLayout from '~/layouts/SettingsLayout'
 export default function LegalPage() {
   return (
     <SettingsLayout>
-      <Head title="Legal Notices | Project NOMAD" />
+      <Head title="Avisos Legais | Project NOMAD" />
       <div className="xl:pl-72 w-full">
         <main className="px-12 py-6 max-w-4xl">
-          <h1 className="text-4xl font-semibold mb-8">Legal Notices</h1>
+          <h1 className="text-4xl font-semibold mb-8">Avisos Legais</h1>
 
-          {/* License Agreement */}
+          {/* Contrato de Licença */}
           <section className="mb-10">
-            <h2 className="text-2xl font-semibold mb-4">License Agreement</h2>
-            <p className="text-text-primary mb-3">Copyright 2024-2026 Crosstalk Solutions, LLC</p>
+            <h2 className="text-2xl font-semibold mb-4">Contrato de Licença</h2>
+            <p className="text-text-primary mb-3">Copyright 2024-2026 Crosstalk Solutions, LLC &amp; colaboradores de código aberto</p>
             <p className="text-text-primary mb-3">
-              Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);
-              you may not use this file except in compliance with the License.
-              You may obtain a copy of the License at
+              Licenciado sob a Licença Apache, Versão 2.0 (a &quot;Licença&quot;); você não pode
+              utilizar este software exceto em conformidade com a Licença. Você pode obter uma
+              cópia oficial da Licença em:
             </p>
             <p className="text-text-primary mb-3">
               <a href="https://www.apache.org/licenses/LICENSE-2.0" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">https://www.apache.org/licenses/LICENSE-2.0</a>
             </p>
             <p className="text-text-primary">
-              Unless required by applicable law or agreed to in writing, software
-              distributed under the License is distributed on an &quot;AS IS&quot; BASIS,
-              WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-              See the License for the specific language governing permissions and
-              limitations under the License.
+              Salvo quando exigido pela legislação aplicável ou acordado por escrito, o software
+              distribuído sob a Licença é fornecido &quot;NO ESTADO EM QUE SE ENCONTRA&quot;
+              (&quot;AS IS&quot;), SEM GARANTIAS OU CONDIÇÕES DE QUALQUER TIPO, expressas ou
+              implícitas. Consulte a Licença para verificar o texto específico que rege as
+              permissões e limitações sob a Licença.
             </p>
           </section>
 
-          {/* Third-Party Software */}
+          {/* Software de Terceiros */}
           <section className="mb-10">
-            <h2 className="text-2xl font-semibold mb-4">Third-Party Software Attribution</h2>
+            <h2 className="text-2xl font-semibold mb-4">Atribuição de Software de Terceiros</h2>
             <p className="text-text-primary mb-4">
-              Project NOMAD&trade; integrates the following open source projects. We are grateful to
-              their developers and communities:
+              O Project NOMAD&trade; integra os seguintes projetos de código aberto. Agradecemos
+              aos seus desenvolvedores e comunidades:
             </p>
             <ul className="space-y-3 text-text-primary">
               <li>
-                <strong>Kiwix</strong> - Offline Wikipedia and content reader (GPL-3.0 License)
+                <strong>Kiwix</strong> - Leitor offline da Wikipédia e conteúdos educacionais (Licença GPL-3.0)
                 <br />
                 <a href="https://kiwix.org" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">https://kiwix.org</a>
               </li>
               <li>
-                <strong>Kolibri</strong> - Offline learning platform by Learning Equality (MIT License)
+                <strong>Kolibri</strong> - Plataforma de aprendizagem offline da Learning Equality (Licença MIT)
                 <br />
                 <a href="https://learningequality.org/kolibri" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">https://learningequality.org/kolibri</a>
               </li>
               <li>
-                <strong>Ollama</strong> - Local large language model runtime (MIT License)
+                <strong>Ollama</strong> - Runtime local para grandes modelos de linguagem (Licença MIT)
                 <br />
                 <a href="https://ollama.com" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">https://ollama.com</a>
               </li>
               <li>
-                <strong>CyberChef</strong> - Data analysis and encoding toolkit by GCHQ (Apache 2.0 License)
+                <strong>CyberChef</strong> - Conjunto de ferramentas para análise e codificação de dados por GCHQ (Licença Apache 2.0)
                 <br />
                 <a href="https://github.com/gchq/CyberChef" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">https://github.com/gchq/CyberChef</a>
               </li>
               <li>
-                <strong>FlatNotes</strong> - Self-hosted note-taking application (MIT License)
+                <strong>FlatNotes</strong> - Aplicativo auto-hospedado de anotações (Licença MIT)
                 <br />
                 <a href="https://github.com/dullage/flatnotes" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">https://github.com/dullage/flatnotes</a>
               </li>
               <li>
-                <strong>Qdrant</strong> - Vector search engine for AI knowledge base (Apache 2.0 License)
+                <strong>Qdrant</strong> - Mecanismo de busca vetorial para a base de conhecimento de IA (Licença Apache 2.0)
                 <br />
                 <a href="https://github.com/qdrant/qdrant" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">https://github.com/qdrant/qdrant</a>
               </li>
             </ul>
           </section>
 
-          {/* Privacy Statement */}
+          {/* Declaração de Privacidade */}
           <section className="mb-10">
-            <h2 className="text-2xl font-semibold mb-4">Privacy Statement</h2>
+            <h2 className="text-2xl font-semibold mb-4">Declaração de Privacidade</h2>
             <p className="text-text-primary mb-3">
-              Project NOMAD is designed with privacy as a core principle:
+              O Project NOMAD foi projetado tendo a privacidade como princípio fundamental:
             </p>
             <ul className="list-disc list-inside space-y-2 text-text-primary">
-              <li><strong>Zero Telemetry:</strong> NOMAD does not collect, transmit, or store any usage data, analytics, or telemetry.</li>
-              <li><strong>Local-First:</strong> All your data, downloaded content, AI conversations, and notes remain on your device.</li>
-              <li><strong>No Accounts Required:</strong> NOMAD operates without user accounts or authentication by default.</li>
-              <li><strong>Network Optional:</strong> An internet connection is only required to download content or updates. All installed features work fully offline.</li>
+              <li><strong>Zero Telemetria:</strong> O NOMAD não coleta, transmite nem armazena quaisquer dados de uso, métricas ou telemetria.</li>
+              <li><strong>Local em Primeiro Lugar:</strong> Todos os seus dados, conteúdos baixados, conversas com a IA e anotações permanecem no seu dispositivo.</li>
+              <li><strong>Sem Necessidade de Contas:</strong> O NOMAD opera sem contas de usuário ou autenticação obrigatória por padrão.</li>
+              <li><strong>Rede Opcional:</strong> A conexão com a internet só é necessária para baixar conteúdos ou atualizações. Todos os recursos instalados funcionam totalmente offline.</li>
             </ul>
           </section>
 
-          {/* Content Disclaimer */}
+          {/* Isenção de Responsabilidade de Conteúdo */}
           <section className="mb-10">
-            <h2 className="text-2xl font-semibold mb-4">Content Disclaimer</h2>
+            <h2 className="text-2xl font-semibold mb-4">Isenção de Responsabilidade de Conteúdo</h2>
             <p className="text-text-primary mb-3">
-              Project NOMAD provides tools to download and access content from third-party sources
-              including Wikipedia, Wikibooks, medical references, educational platforms, and other
-              publicly available resources.
+              O Project NOMAD fornece ferramentas para baixar e acessar conteúdos de fontes de
+              terceiros, incluindo Wikipédia, Wikilivros, referências médicas, plataformas
+              educacionais e outros recursos disponíveis publicamente.
             </p>
             <p className="text-text-primary mb-3">
-              Crosstalk Solutions, LLC does not create, control, verify, or guarantee the accuracy,
-              completeness, or reliability of any third-party content. The inclusion of any content
-              does not constitute an endorsement.
+              A Crosstalk Solutions, LLC e os autores de código aberto não criam, controlam,
+              verificam nem garantem a precisão, integridade ou confiabilidade de qualquer conteúdo
+              de terceiros. A inclusão de qualquer conteúdo não constitui endosso.
             </p>
             <p className="text-text-primary">
-              Users are responsible for evaluating the appropriateness and accuracy of any content
-              they download and use.
+              Os usuários são responsáveis por avaliar a adequação e a precisão de qualquer
+              conteúdo que baixarem e utilizarem.
             </p>
           </section>
 
-          {/* Medical Disclaimer */}
+          {/* Isenção de Responsabilidade Médica */}
           <section className="mb-10">
-            <h2 className="text-2xl font-semibold mb-4">Medical and Emergency Information Disclaimer</h2>
+            <h2 className="text-2xl font-semibold mb-4">Isenção de Responsabilidade Médica e de Emergência</h2>
             <p className="text-text-primary mb-3">
-              Some content available through NOMAD includes medical references, first aid guides,
-              and emergency preparedness information. This content is provided for general
-              informational purposes only.
+              Alguns conteúdos disponíveis por meio do NOMAD incluem referências médicas, guias de
+              primeiros socorros e informações de preparação para emergências. Este conteúdo é
+              fornecido apenas para fins informativos gerais.
             </p>
             <p className="text-text-primary mb-3 font-semibold">
-              This information is NOT a substitute for professional medical advice, diagnosis, or treatment.
+              Estas informações NÃO substituem aconselhamento, diagnóstico ou tratamento médico profissional.
             </p>
             <ul className="list-disc list-inside space-y-2 text-text-primary mb-3">
-              <li>Always seek the advice of qualified health providers with questions about medical conditions.</li>
-              <li>Never disregard professional medical advice or delay seeking it because of something you read in offline content.</li>
-              <li>In a medical emergency, call emergency services immediately if available.</li>
-              <li>Medical information may become outdated. Verify critical information with current professional sources when possible.</li>
+              <li>Procure sempre a orientação de profissionais de saúde qualificados em caso de dúvidas sobre condições médicas.</li>
+              <li>Nunca ignore orientação médica profissional nem adie a busca por atendimento devido a algo que leu no conteúdo offline.</li>
+              <li>Em caso de emergência médica, acione imediatamente os serviços de emergência locais, se disponíveis.</li>
+              <li>Informações médicas podem ficar desatualizadas. Sempre que possível, confirme informações críticas em fontes profissionais atualizadas.</li>
             </ul>
           </section>
 
-          {/* Data Storage Notice */}
+          {/* Armazenamento de Dados */}
           <section className="mb-10">
-            <h2 className="text-2xl font-semibold mb-4">Data Storage</h2>
+            <h2 className="text-2xl font-semibold mb-4">Armazenamento de Dados</h2>
             <p className="text-text-primary mb-3">
-              All data associated with Project NOMAD is stored locally on your device:
+              Todos os dados associados ao Project NOMAD são armazenados localmente no seu dispositivo:
             </p>
             <ul className="list-disc list-inside space-y-2 text-text-primary">
-              <li><strong>Installation Directory:</strong> /opt/project-nomad</li>
-              <li><strong>Downloaded Content:</strong> /opt/project-nomad/storage</li>
-              <li><strong>Application Data:</strong> Stored in Docker volumes on your local system</li>
+              <li><strong>Diretório de Instalação:</strong> /opt/project-nomad</li>
+              <li><strong>Conteúdo Baixado:</strong> /opt/project-nomad/storage</li>
+              <li><strong>Dados dos Aplicativos:</strong> Armazenados em volumes Docker no seu sistema local</li>
             </ul>
             <p className="text-text-primary mt-3">
-              You maintain full control over your data. Uninstalling NOMAD or deleting these
-              directories will permanently remove all associated data.
+              Você mantém controle total sobre os seus dados. Desinstalar o NOMAD ou excluir esses
+              diretórios removerá permanentemente todos os dados associados.
             </p>
           </section>
 

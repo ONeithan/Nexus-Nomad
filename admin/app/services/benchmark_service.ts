@@ -706,7 +706,7 @@ export class BenchmarkService {
           if (aiScores.ai_tokens_per_second !== undefined && aiScores.ai_tokens_per_second !== null) {
             this._emitPartialResult({
               status: 'running_ai',
-              label: 'AI',
+              label: 'IA',
               value: Math.round(aiScores.ai_tokens_per_second),
               unit: 'tok/s',
             })
@@ -714,10 +714,10 @@ export class BenchmarkService {
         } catch (error: any) {
           // For AI-only benchmarks, failing is fatal - don't save useless results with all zeros
           if (type === 'ai') {
-            throw new Error(`AI benchmark failed: ${error.message}. Make sure AI Assistant is installed and running.`)
+            throw new Error(`Falha no benchmark de IA: ${error.message}. Verifique se o Assistente de IA está instalado e em execução.`)
           }
           // For full benchmarks, AI is optional - continue without it
-          logger.warn(`AI benchmark skipped: ${error.message}`)
+          logger.warn(`Benchmark de IA ignorado: ${error.message}`)
         }
       }
 
@@ -828,34 +828,34 @@ export class BenchmarkService {
     this._updateStatus('running_cpu', 'Running CPU benchmark (single-thread)...')
     const cpuSingle = await this._runSysbenchCpu(1)
 
-    this._updateStatus('running_cpu', `Running CPU benchmark (${multiThreads}-thread)...`)
+    this._updateStatus('running_cpu', `Executando benchmark de CPU (${multiThreads}-threads)...`)
     const cpuMulti = await this._runSysbenchCpu(multiThreads)
 
     // Run memory benchmark
-    this._updateStatus('running_memory', 'Running memory benchmark...')
+    this._updateStatus('running_memory', 'Executando benchmark de memória...')
     const memoryResult = await this._runSysbenchMemory()
     this._emitPartialResult({
       status: 'running_memory',
-      label: 'Memory',
+      label: 'Memória',
       value: Math.round(memoryResult.operations_per_second),
       unit: 'ops/s',
     })
 
     // Run disk benchmarks
-    this._updateStatus('running_disk_read', 'Running disk read benchmark...')
+    this._updateStatus('running_disk_read', 'Executando benchmark de leitura de disco...')
     const diskReadResult = await this._runSysbenchDiskRead()
     this._emitPartialResult({
       status: 'running_disk_read',
-      label: 'Read',
+      label: 'Leitura',
       value: Math.round(diskReadResult.read_mb_per_sec),
       unit: 'MB/s',
     })
 
-    this._updateStatus('running_disk_write', 'Running disk write benchmark...')
+    this._updateStatus('running_disk_write', 'Executando benchmark de escrita de disco...')
     const diskWriteResult = await this._runSysbenchDiskWrite()
     this._emitPartialResult({
       status: 'running_disk_write',
-      label: 'Write',
+      label: 'Escrita',
       value: Math.round(diskWriteResult.write_mb_per_sec),
       unit: 'MB/s',
     })
@@ -1779,18 +1779,18 @@ export class BenchmarkService {
    */
   private _getStageLabel(status: BenchmarkStatus): string {
     const labelMap: Record<BenchmarkStatus, string> = {
-      idle: 'Idle',
-      starting: 'Starting',
-      detecting_hardware: 'Detecting Hardware',
-      running_cpu: 'CPU Benchmark',
-      running_memory: 'Memory Benchmark',
-      running_disk_read: 'Disk Read Test',
-      running_disk_write: 'Disk Write Test',
-      downloading_ai_model: 'Downloading AI Model',
-      running_ai: 'AI Inference Test',
-      calculating_score: 'Calculating Score',
-      completed: 'Complete',
-      error: 'Error',
+      idle: 'Inativo',
+      starting: 'Iniciando',
+      detecting_hardware: 'Detectando Hardware',
+      running_cpu: 'Teste de CPU',
+      running_memory: 'Teste de Memória',
+      running_disk_read: 'Teste de Leitura de Disco',
+      running_disk_write: 'Teste de Escrita de Disco',
+      downloading_ai_model: 'Baixando Modelo de IA',
+      running_ai: 'Teste de Inferência de IA',
+      calculating_score: 'Calculando Pontuação',
+      completed: 'Concluído',
+      error: 'Erro',
     }
     return labelMap[status] || status
   }

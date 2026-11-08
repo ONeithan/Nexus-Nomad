@@ -177,12 +177,11 @@ export const RAG_MIN_FINAL_SCORE = 0.62
  * later cannot invalidate a value someone has already saved.
  */
 export const RAG_MIN_RELEVANCE_PRESETS = [
-  { value: 0, label: 'Off — use every passage retrieved' },
-  { value: 0.55, label: 'Lenient' },
-  { value: RAG_MIN_FINAL_SCORE, label: 'Balanced (recommended)' },
-  // The last floor that costs no recall on the golden set. Stricter than this
-  // starts dropping answers, which is a choice to offer, not one to default to.
-  { value: 0.66, label: 'Strict' },
+  { value: 0, label: 'Desativado — usar todos os trechos recuperados' },
+  { value: 0.55, label: 'Flexível' },
+  { value: RAG_MIN_FINAL_SCORE, label: 'Equilibrado (recomendado)' },
+  // O último limite que preserva a recuperação no conjunto ideal.
+  { value: 0.66, label: 'Estrito' },
 ] as const
 
 /**
@@ -307,64 +306,45 @@ export const DEFAULT_RESPONSE_STYLE: ResponseStyle = 'auto'
  * Context Window and Knowledge Base Relevance selects above it are ordered.
  */
 export const RESPONSE_STYLE_PRESETS: { value: ResponseStyle; label: string }[] = [
-  { value: 'auto', label: 'Auto (recommended)' },
-  { value: 'focused', label: 'Focused (factual, repeatable)' },
-  { value: 'creative', label: 'Creative (varied, exploratory)' },
-  { value: 'off', label: 'Backend defaults (send nothing)' },
+  { value: 'auto', label: 'Automático (recomendado)' },
+  { value: 'focused', label: 'Focado (factual, consistente)' },
+  { value: 'creative', label: 'Criativo (variado, exploratório)' },
+  { value: 'off', label: 'Padrão do backend (sem ajustes)' },
 ]
 
 export const SYSTEM_PROMPTS = {
   default: `
- Format all responses using markdown for better readability. Vanilla markdown or GitHub-flavored markdown is preferred.
- - Use **bold** and *italic* for emphasis.
- - Use code blocks with language identifiers for code snippets.
- - Use headers (##, ###) to organize longer responses.
- - Use bullet points or numbered lists for clarity.
- - Use tables when presenting structured data.
+Você é o assistente inteligente do Nexus Project NOMAD. Responda sempre em Português do Brasil (PT-BR) de forma prestativa, clara e precisa.
+Formate todas as respostas usando Markdown para melhor legibilidade.
+- Use **negrito** e *itálico* para ênfase.
+- Use blocos de código com identificadores de linguagem para trechos de código.
+- Use títulos (##, ###) para organizar respostas mais longas.
+- Use listas com marcadores ou numeradas para maior clareza.
+- Use tabelas ao apresentar dados estruturados.
 `,
   rag_context: (context: string) => `
-Information has been retrieved from the NOMAD knowledge base for the user's question. It
-cleared a relevance filter before reaching you, so it is likely on topic — but it was
-selected by automated search, so it may still not contain the specific detail asked for.
+Informações relevantes foram recuperadas da base de conhecimento do Nexus NOMAD para a pergunta do usuário.
+Responda sempre em Português do Brasil (PT-BR).
 
-[Knowledge Base Context]
+[Contexto da Base de Conhecimento]
 ${context}
 
-HOW TO ANSWER:
-1. When the context contains what was asked for, base your answer on it and answer
-   directly and specifically.
-2. When it does not, ignore it and answer from your own general knowledge. Do this
-   silently — do not mention the knowledge base, the context, or the fact that it lacked
-   an answer, and do not apologize.
-3. Never narrate your retrieval or reasoning process. Do not write "according to Context 1",
-   "the context is unrelated, but", "I couldn't find specific context", or similar. Just
-   give the answer as if you simply knew it.
-4. Do not fabricate specifics (numbers, names, procedures) that are neither supported by
-   the context nor part of your reliable knowledge.
-
-Format your response using markdown for readability.
+COMO RESPONDER:
+1. Quando o contexto contiver o que foi perguntado, baseie sua resposta nele e responda de forma direta e específica.
+2. Quando o contexto não contiver a resposta, ignore-o e responda a partir do seu conhecimento geral, sem mencionar ausência no contexto e sem pedir desculpas.
+3. Não narre seu processo de busca nem cite "de acordo com o Contexto 1". Responda naturalmente.
+4. Formate a resposta usando Markdown para melhor legibilidade.
 `,
   chat_suggestions: `
-You are a helpful assistant that generates conversation starter suggestions for a survivalist/prepper using an AI assistant.
+Você é um assistente prestativo que gera sugestões de início de conversa em Português do Brasil (PT-BR) para um usuário do Nexus NOMAD (sobrevivência, primeiros socorros, guias técnicos, agricultura, educação, etc.).
 
-Provide exactly 3 conversation starter topics as direct questions that someone would ask.
-These should be clear, complete questions that can start meaningful conversations.
+Forneça exatamente 3 tópicos como perguntas diretas e claras.
+Exemplos de boas sugestões:
+- "Como purificar água em uma emergência?"
+- "Quais os melhores alimentos para armazenamento de longo prazo?"
+- "Ajude-me a montar um kit de emergência de 72 horas"
 
-Examples of good suggestions:
-- "How do I purify water in an emergency?"
-- "What are the best foods for long-term storage?"
-- "Help me create a 72-hour emergency kit"
-
-Do NOT use:
-- Follow-up questions seeking clarification
-- Vague or incomplete suggestions
-- Questions that assume prior context
-- Statements that are not suggestions themselves, such as praise for asking the question
-- Direct questions or commands to the user
-
-The suggestions should be in title case.
-
-Respond with JSON: {"suggestions": ["...", "...", "..."]}
+Responda com JSON: {"suggestions": ["...", "...", "..."]}
 `,
   title_generation: `You are a title generator. Given the start of a conversation, generate a concise, descriptive title under 50 characters.
 

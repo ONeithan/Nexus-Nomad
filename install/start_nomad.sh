@@ -1,27 +1,27 @@
 #!/bin/bash
 
-echo "Finding Project NOMAD containers..."
+echo "Localizando contêineres do Nexus Project NOMAD..."
 
-# -a to include all containers (running and stopped)
+# -a inclui todos os contêineres (em execução e parados)
 containers=$(docker ps -a --filter "name=^nomad_" --format "{{.Names}}")
 
 if [ -z "$containers" ]; then
-    echo "No containers found for Project NOMAD Is it installed?"
+    echo "Nenhum contêiner do Nexus Project NOMAD encontrado. O sistema está instalado?"
     exit 0
 fi
 
-echo "Found the following containers:"
+echo "Contêineres encontrados:"
 echo "$containers"
 echo ""
 
 for container in $containers; do
-    echo "Starting container: $container"
+    echo "Iniciando contêiner: $container"
     if docker start "$container"; then
-        echo "✓ Successfully started $container"
+        echo "✓ $container iniciado com sucesso"
     else
-        echo "✗ Failed to start $container"
+        echo "✗ Falha ao iniciar $container"
     fi
     echo ""
 done
 
-echo "Finished initiating start of all Project NOMAD containers."
+echo "Inicialização de todos os contêineres do Nexus Project NOMAD concluída."

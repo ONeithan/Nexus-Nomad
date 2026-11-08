@@ -55,16 +55,16 @@ export default function Maps(props: {
   }
 
   const alertMessage = !props.maps.baseAssetsExist
-    ? 'The base map assets have not been installed. Please download them first to enable map functionality.'
+    ? 'Os recursos base do mapa ainda não foram instalados. Baixe-os primeiro para habilitar a funcionalidade de mapas.'
     : !props.maps.worldBasemapExists
-    ? 'The world base map has not been downloaded yet, so the map may appear blank outside downloaded regions. Connect this NOMAD to the internet and download it (~15 MB) from Map Settings.'
+    ? 'O mapa-múndi base ainda não foi baixado, portanto o mapa pode aparecer em branco fora das regiões baixadas. Conecte este NOMAD à internet e baixe-o (~15 MB) nas Configurações de Mapas.'
     : props.maps.regionFiles.length === 0
-    ? 'No map regions have been downloaded yet. Please download some regions to enable map functionality.'
+    ? 'Nenhuma região de mapa foi baixada ainda. Baixe algumas regiões para habilitar a funcionalidade de mapas.'
     : null
 
   return (
     <MapsLayout>
-      <Head title="Maps" />
+      <Head title="Mapas" />
 
       <div className="relative w-full h-screen overflow-hidden">
         {/* Navbar */}
@@ -75,7 +75,7 @@ export default function Maps(props: {
         >
           <Link href="/home" className="flex items-center">
             <IconArrowLeft className="mr-2" size={24} />
-            <p className="text-lg text-text-secondary">Back to Home</p>
+            <p className="text-lg text-text-secondary">Voltar ao Início</p>
           </Link>
 
           <div className="flex items-center gap-2">
@@ -94,7 +94,7 @@ export default function Maps(props: {
               type="button"
               onClick={() => handleCoordinateAction('fly')}
               className="rounded border border-border-default bg-surface-primary p-2 text-text-secondary hover:bg-surface-secondary"
-              title="Fly to coordinates"
+              title="Ir para as coordenadas"
             >
               <IconPlaneTilt size={18}/>
             </button>
@@ -103,7 +103,7 @@ export default function Maps(props: {
               type="button"
               onClick={() => handleCoordinateAction('marker')}
               className="rounded border border-border-default bg-surface-primary p-2 text-text-secondary hover:bg-surface-secondary"
-              title="Add marker at coordinates"
+              title="Adicionar marcador nas coordenadas"
             >
               <IconMapPin size={18}/>
             </button>
@@ -116,14 +116,14 @@ export default function Maps(props: {
                   ? 'bg-desert-green text-white'
                   : 'bg-surface-primary text-text-secondary hover:bg-surface-secondary'
               }`}
-              title={showCoordinatesEnabled ? 'Hide coordinates' : 'Show coordinates'}
+              title={showCoordinatesEnabled ? 'Ocultar coordenadas' : 'Mostrar coordenadas'}
             >
               <IconCrosshair size={18}/>
             </button>
 
             <Link href="/settings/maps" className="mr-4">
               <StyledButton variant="primary" icon="IconSettings">
-                Manage Map Regions
+                Gerenciar Regiões de Mapa
               </StyledButton>
             </Link>
           </div>
@@ -143,7 +143,7 @@ export default function Maps(props: {
               className="w-full"
               buttonProps={{
                 variant: 'secondary',
-                children: 'Go to Map Settings',
+                children: 'Ir para Configurações de Mapas',
                 icon: 'IconSettings',
                 onClick: () => router.visit('/settings/maps'),
               }}

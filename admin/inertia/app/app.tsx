@@ -14,7 +14,7 @@ import NotificationsProvider from '~/providers/NotificationProvider'
 import { ThemeProvider } from '~/providers/ThemeProvider'
 import { UsePageProps } from '../../types/system'
 
-const appName = import.meta.env.VITE_APP_NAME || 'Project NOMAD'
+const appName = import.meta.env.VITE_APP_NAME || 'Nexus Project NOMAD'
 const queryClient = new QueryClient()
 
 // Patch the global crypto object for non-HTTPS/localhost contexts
@@ -28,7 +28,7 @@ if (!window.crypto?.randomUUID) {
 createInertiaApp({
   progress: { color: '#424420' },
 
-  title: (title) => `${title} - ${appName}`,
+  title: (title) => (title ? `${title} - ${appName}` : appName),
 
   resolve: (name) => {
     return resolvePageComponent(`../pages/${name}.tsx`, import.meta.glob('../pages/**/*.tsx'))

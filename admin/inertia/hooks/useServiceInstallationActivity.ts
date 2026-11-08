@@ -15,7 +15,7 @@ export default function useServiceInstallationActivity() {
           service_name: data.service_name ?? 'unknown',
           type: data.status ?? 'unknown',
           timestamp: new Date().toISOString(),
-          message: data.message ?? 'No message provided',
+          message: data.message ?? 'Nenhuma mensagem informada',
         },
       ])
     })

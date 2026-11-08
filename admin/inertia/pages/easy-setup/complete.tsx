@@ -14,11 +14,11 @@ export default function EasySetupWizardComplete() {
 
   return (
     <AppLayout>
-      <Head title="Easy Setup Wizard Complete" />
+      <Head title="Configuração Rápida Concluída" />
       {!isOnline && (
         <Alert
-          title="No Internet Connection"
-          message="It looks like you're not connected to the internet. Installing apps and downloading content will require an internet connection."
+          title="Sem Conexão com a Internet"
+          message="Parece que você não está conectado à internet. Instalar aplicativos e baixar conteúdos exigirá uma conexão com a internet."
           type="warning"
           variant="solid"
           className="mb-8"
@@ -26,15 +26,15 @@ export default function EasySetupWizardComplete() {
       )}
       <div className="max-w-7xl mx-auto px-4 py-8">
         <div className="bg-surface-primary rounded-md shadow-md p-6">
-          <StyledSectionHeader title="App Installation Activity" className=" mb-4" />
+          <StyledSectionHeader title="Atividade de Instalação de Aplicativos" className=" mb-4" />
           <InstallActivityFeed
             activity={installActivity}
             className="!shadow-none border-desert-stone-light border"
           />
           <ActiveDownloads withHeader />
           <Alert
-            title="Running in the Background"
-            message='Feel free to leave this page at any time - your app installs and downloads will continue in the background! Please note, the Information Library (if installed) may be unavailable until all initial downloads complete.'
+            title="Executando em Segundo Plano"
+            message="Fique à vontade para sair desta página a qualquer momento — as instalações de aplicativos e os downloads continuarão em segundo plano! Observe que a Biblioteca Offline (se instalada) pode ficar indisponível até que todos os downloads iniciais sejam concluídos."
             type="info"
             variant="solid"
             className='mt-12'
@@ -42,7 +42,7 @@ export default function EasySetupWizardComplete() {
           <div className="flex justify-center mt-8 pt-4 border-t border-desert-stone-light">
             <div className="flex space-x-4">
               <StyledButton onClick={() => router.visit('/home')} icon="IconHome">
-                Go to Home
+                Ir ao Início
               </StyledButton>
             </div>
           </div>

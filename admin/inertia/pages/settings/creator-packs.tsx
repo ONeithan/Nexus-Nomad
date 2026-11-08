@@ -9,13 +9,13 @@ export default function CreatorPacksPage() {
 
   return (
     <SettingsLayout>
-      <Head title="Creator Packs" />
+      <Head title="Pacotes de Criadores | Project NOMAD" />
       <div className="xl:pl-72 w-full">
         <main className="px-12 py-6">
-          <h1 className="text-4xl font-semibold mb-2">Creator Packs</h1>
+          <h1 className="text-4xl font-semibold mb-2">Pacotes de Criadores</h1>
           <p className="text-text-muted mb-4">
-            Install branded video collections from creators. Packs download in the background and
-            play offline through Kiwix.
+            Instale coleções de vídeos selecionadas de criadores de conteúdo. Os pacotes são
+            baixados em segundo plano e reproduzidos offline pelo Kiwix.
           </p>
 
           {configured ? (
@@ -27,7 +27,7 @@ export default function CreatorPacksPage() {
             </>
           ) : (
             <p className="text-text-muted mt-4">
-              Creator Packs aren&apos;t available on this build.
+              Os Pacotes de Criadores não estão disponíveis nesta compilação.
             </p>
           )}
         </main>

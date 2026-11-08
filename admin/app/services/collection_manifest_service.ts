@@ -1,3 +1,4 @@
+import { existsSync, readFileSync } from 'node:fs'
 import axios from 'axios'
 import vine from '@vinejs/vine'
 import logger from '@adonisjs/core/services/logger'
@@ -29,10 +30,17 @@ import type {
 } from '../../types/collections.js'
 
 const SPEC_URLS: Record<ManifestType, string> = {
-  zim_categories: 'https://raw.githubusercontent.com/Crosstalk-Solutions/project-nomad/refs/heads/main/collections/kiwix-categories.json',
-  maps: 'https://github.com/Crosstalk-Solutions/project-nomad/raw/refs/heads/main/collections/maps.json',
-  wikipedia: 'https://raw.githubusercontent.com/Crosstalk-Solutions/project-nomad/refs/heads/main/collections/wikipedia.json',
-  creator_packs: 'https://raw.githubusercontent.com/Crosstalk-Solutions/project-nomad/refs/heads/main/collections/creator-packs.json',
+  zim_categories: 'https://raw.githubusercontent.com/ONeithan/Nexus-Nomad/refs/heads/main/collections/kiwix-categories.json',
+  maps: 'https://raw.githubusercontent.com/ONeithan/Nexus-Nomad/refs/heads/main/collections/maps.json',
+  wikipedia: 'https://raw.githubusercontent.com/ONeithan/Nexus-Nomad/refs/heads/main/collections/wikipedia.json',
+  creator_packs: 'https://raw.githubusercontent.com/ONeithan/Nexus-Nomad/refs/heads/main/collections/creator-packs.json',
+}
+
+const LOCAL_SPEC_FILES: Record<ManifestType, string> = {
+  zim_categories: 'kiwix-categories.json',
+  maps: 'maps.json',
+  wikipedia: 'wikipedia.json',
+  creator_packs: 'creator-packs.json',
 }
 
 const VALIDATORS: Record<ManifestType, any> = {
@@ -47,13 +55,40 @@ export class CollectionManifestService {
 
   // ---- Spec management ----
 
+  private getLocalSpecData(type: ManifestType): any | null {
+    const fn = LOCAL_SPEC_FILES[type]
+    const candidates = [
+      `/app/collections/${fn}`,
+      join(process.cwd(), `collections/${fn}`),
+      join(process.cwd(), `../collections/${fn}`),
+    ]
+    for (const p of candidates) {
+      if (existsSync(p)) {
+        try {
+          return JSON.parse(readFileSync(p, 'utf-8'))
+        } catch (err) {
+          logger.warn(`[CollectionManifestService] Failed reading local spec at ${p}: ${err}`)
+        }
+      }
+    }
+    return null
+  }
+
   async fetchAndCacheSpec(type: ManifestType): Promise<boolean> {
     try {
-      const response = await axios.get(SPEC_URLS[type], { timeout: 15000 })
+      let rawData: any = null
+      try {
+        const response = await axios.get(SPEC_URLS[type], { timeout: 8000 })
+        rawData = response.data
+      } catch (netErr) {
+        // Fallback to local bundled JSON when offline or network fails
+        rawData = this.getLocalSpecData(type)
+        if (!rawData) throw netErr
+      }
 
       const validated = await vine.validate({
         schema: VALIDATORS[type],
-        data: response.data,
+        data: rawData,
       })
 
       const existing = await CollectionManifest.find(type)
@@ -84,8 +119,12 @@ export class CollectionManifestService {
 
   async getCachedSpec<T>(type: ManifestType): Promise<T | null> {
     const manifest = await CollectionManifest.find(type)
-    if (!manifest) return null
-    return manifest.spec_data as T
+    if (manifest?.spec_data) {
+      return manifest.spec_data as T
+    }
+    // Final fallback to bundled local JSON
+    const local = this.getLocalSpecData(type)
+    return (local as T) || null
   }
 
   async getSpecWithFallback<T>(type: ManifestType): Promise<T | null> {

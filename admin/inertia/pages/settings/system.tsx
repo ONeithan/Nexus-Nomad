@@ -401,7 +401,7 @@ export default function SettingsPage(props: {
                         </div>
                         <div className="flex justify-between text-xs text-desert-stone-dark mt-2">
                           <span>Usado: {formatBytes(nfs.used)}</span>
-                          <span>Total do Dataset: {formatBytes(nfs.size)}</span>
+                          <span>Capacidade Total: {formatBytes(nfs.size)}</span>
                         </div>
                       </div>
                     )
@@ -468,7 +468,7 @@ export default function SettingsPage(props: {
                   { label: 'Distribuição', value: info?.os.distro },
                   { label: 'Versão do Kernel', value: info?.os.kernel },
                   { label: 'Arquitetura', value: info?.os.arch },
-                  { label: 'Nome do Host (Hostname)', value: info?.os.hostname },
+                  { label: 'Nome do Host', value: info?.os.hostname },
                   { label: 'Plataforma', value: info?.os.platform },
                 ]}
               />
@@ -572,7 +572,7 @@ export default function SettingsPage(props: {
               Status Operacional
             </h2>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              <StatusCard title="Tempo Ligado (Uptime)" value={uptimeDisplay} />
+              <StatusCard title="Tempo de Atividade" value={uptimeDisplay} />
               <StatusCard title="Threads de CPU" value={info?.cpu.cores || 0} />
               <StatusCard title="Discos Detectados" value={detectedDiskCount} />
               <StatusCard title="Capacidade Total" value={formatBytes(totalRawBytes)} />

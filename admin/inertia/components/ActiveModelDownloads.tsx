@@ -87,24 +87,24 @@ const ActiveModelDownloads = ({ withHeader = false }: ActiveModelDownloadsProps)
 
         openModal(
             <StyledModal
-                title="Cancel Download?"
+                title="Cancelar Download?"
                 onConfirm={() => {
                     closeAllModals()
                     runCancel(download)
                 }}
                 onCancel={closeAllModals}
                 open={true}
-                confirmText="Cancel Download"
-                cancelText="Keep Downloading"
+                confirmText="Cancelar Download"
+                cancelText="Continuar Baixando"
             >
                 <div className="space-y-3 text-text-primary">
                     <p>
-                        Stop downloading <span className="font-mono font-semibold">{download.model}</span>?
+                        Interromper o download de <span className="font-mono font-semibold">{download.model}</span>?
                     </p>
                     <p className="text-sm text-text-muted">
-                        Any data already downloaded will remain on disk. If you re-download
-                        this model later, it will resume from where it left off rather than
-                        starting over.
+                        Os dados já baixados permanecerão no disco. Se você baixar este modelo
+                        novamente mais tarde, ele continuará de onde parou em vez de começar do
+                        zero.
                     </p>
                 </div>
             </StyledModal>,
@@ -114,7 +114,7 @@ const ActiveModelDownloads = ({ withHeader = false }: ActiveModelDownloadsProps)
 
     return (
         <>
-            {withHeader && <StyledSectionHeader title="Active Model Downloads" className="mt-12 mb-4" />}
+            {withHeader && <StyledSectionHeader title="Downloads de Modelos Ativos" className="mt-12 mb-4" />}
             <div className="space-y-4">
                 {downloads && downloads.length > 0 ? (
                     downloads.map((download) => {
@@ -161,7 +161,7 @@ const ActiveModelDownloads = ({ withHeader = false }: ActiveModelDownloadsProps)
                                                     <button
                                                         onClick={() => confirmCancel(download)}
                                                         className="flex-shrink-0 p-1 rounded hover:bg-red-100 transition-colors"
-                                                        title="Cancel download"
+                                                        title="Cancelar download"
                                                     >
                                                         <IconX className="w-4 h-4 text-text-muted hover:text-red-500" />
                                                     </button>
@@ -201,7 +201,7 @@ const ActiveModelDownloads = ({ withHeader = false }: ActiveModelDownloadsProps)
                                         <div className="flex items-center gap-2">
                                             <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
                                             <span className="text-xs text-text-muted">
-                                                Downloading...{speed > 0 ? ` ${formatSpeed(speed)}` : ''}
+                                                Baixando...{speed > 0 ? ` ${formatSpeed(speed)}` : ''}
                                             </span>
                                         </div>
                                     </div>
@@ -210,7 +210,7 @@ const ActiveModelDownloads = ({ withHeader = false }: ActiveModelDownloadsProps)
                         )
                     })
                 ) : (
-                    <p className="text-text-muted">No active model downloads</p>
+                    <p className="text-text-muted">Nenhum download de modelo ativo</p>
                 )}
             </div>
         </>

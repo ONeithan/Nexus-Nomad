@@ -38,21 +38,21 @@ const CreatorPackCard: React.FC<CreatorPackCardProps> = ({ pack, selected, onCli
   const statusBadge = selected ? (
     <span className="flex items-center text-lime-600 dark:text-lime-400 text-sm font-medium">
       <IconCircleCheck className="w-5 h-5 mr-1" />
-      Selected
+      Selecionado
     </span>
   ) : isDownloading ? (
     <span className="flex items-center text-lime-600 dark:text-lime-400 text-sm font-medium">
       <IconLoader2 className="w-5 h-5 mr-1 animate-spin" />
-      Downloading
+      Baixando
     </span>
   ) : isInstalled ? (
     <span className="flex items-center text-lime-600 dark:text-lime-400 text-sm font-medium">
       <IconCircleCheck className="w-5 h-5 mr-1" />
-      Installed
+      Instalado
     </span>
   ) : (
     <span className="flex items-center text-text-muted text-sm font-medium">
-      Install
+      Instalar
       <IconChevronRight className="w-5 h-5 ml-1" />
     </span>
   )
@@ -86,11 +86,12 @@ const CreatorPackCard: React.FC<CreatorPackCardProps> = ({ pack, selected, onCli
       <div className="flex items-center justify-between gap-3 px-5 py-3">
         <div className="min-w-0">
           <p className="text-sm text-text-secondary truncate">
-            {pack.video_count} videos &middot; {formatBytes(sizeBytes, 0)}
+            {pack.video_count} {pack.video_count === 1 ? 'vídeo' : 'vídeos'} &middot;{' '}
+            {formatBytes(sizeBytes, 0)}
           </p>
           {hasUpdate && (
             <span className="inline-block mt-1 text-xs px-2 py-0.5 rounded bg-lime-500/20 text-lime-700 dark:text-lime-300">
-              Update available
+              Atualização disponível
             </span>
           )}
         </div>
@@ -99,8 +100,8 @@ const CreatorPackCard: React.FC<CreatorPackCardProps> = ({ pack, selected, onCli
           {onUninstall && isInstalled && (
             <button
               type="button"
-              title="Uninstall pack"
-              aria-label="Uninstall pack"
+              title="Desinstalar pacote"
+              aria-label="Desinstalar pacote"
               className="p-1 rounded text-text-muted hover:text-red-500 hover:bg-red-500/10 transition-colors"
               onClick={(e) => {
                 e.stopPropagation()

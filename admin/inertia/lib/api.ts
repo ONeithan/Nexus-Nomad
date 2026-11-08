@@ -348,7 +348,7 @@ class API {
         })
         const responseBody = await response.json().catch(() => null)
         if (!response.ok) {
-          throw new Error(responseBody?.message ?? `HTTP error: ${response.status}`)
+          throw new Error(responseBody?.message ?? `Erro HTTP: ${response.status}`)
         }
         return responseBody as NomadChatResponse
       }
@@ -376,7 +376,7 @@ class API {
 
     if (!response.ok || !response.body) {
       const errorBody = await response.json().catch(() => null)
-      throw new Error(errorBody?.message ?? `HTTP error: ${response.status}`)
+      throw new Error(errorBody?.message ?? `Erro HTTP: ${response.status}`)
     }
 
     const reader = response.body.getReader()
@@ -989,12 +989,12 @@ class API {
     } catch (error: any) {
       // For 409 Conflict errors, throw a specific error that the UI can handle
       if (error.response?.status === 409) {
-        const err = new Error(error.response?.data?.error || 'This benchmark has already been submitted to the repository')
+        const err = new Error(error.response?.data?.error || 'Este benchmark já foi enviado para o repositório')
           ; (err as any).status = 409
         throw err
       }
       // For other errors, extract the message and throw
-      const errorMessage = error.response?.data?.error || error.message || 'Failed to submit benchmark'
+      const errorMessage = error.response?.data?.error || error.message || 'Falha ao enviar o benchmark'
       throw new Error(errorMessage)
     }
   }

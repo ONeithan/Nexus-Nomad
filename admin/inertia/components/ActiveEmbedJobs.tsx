@@ -25,7 +25,7 @@ const ActiveEmbedJobs = ({ withHeader = false }: ActiveEmbedJobsProps) => {
   return (
     <>
       {withHeader && (
-        <StyledSectionHeader title="Processing Queue" className="mt-12 mb-4" />
+        <StyledSectionHeader title="Fila de Processamento" className="mt-12 mb-4" />
       )}
 
       <div className="space-y-4">
@@ -56,12 +56,12 @@ const ActiveEmbedJobs = ({ withHeader = false }: ActiveEmbedJobsProps) => {
                   </span>
                   {lastActivityMs !== undefined && (
                     <span className="text-xs text-text-muted">
-                      · last activity {formatTimeAgo(lastActivityMs, tick)}
+                      · última atividade {formatTimeAgo(lastActivityMs, tick)}
                     </span>
                   )}
                   {typeof job.chunks === 'number' && job.chunks > 0 && (
                     <span className="text-xs text-text-muted">
-                      · {job.chunks.toLocaleString()} chunks
+                      · {job.chunks.toLocaleString('pt-BR')} fragmentos
                     </span>
                   )}
                 </div>
@@ -80,7 +80,7 @@ const ActiveEmbedJobs = ({ withHeader = false }: ActiveEmbedJobsProps) => {
             )
           })
         ) : (
-          <p className="text-text-muted">No files are currently being processed</p>
+          <p className="text-text-muted">Nenhum arquivo está sendo processado no momento</p>
         )}
       </div>
     </>

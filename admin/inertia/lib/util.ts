@@ -78,7 +78,7 @@ export function catchInternal<Fn extends (...args: any[]) => any>(fn: Fn): (...a
       console.error('Internal error caught:', error)
 
       if (globalNotificationCallback) {
-        const errorMessage = 'An internal error occurred. Please try again or check the console for details. ' + (error instanceof Error ? String(error.message).slice(0, 50) : '')
+        const errorMessage = 'Ocorreu um erro interno. Tente novamente ou verifique o console para mais detalhes. ' + (error instanceof Error ? String(error.message).slice(0, 50) : '')
         globalNotificationCallback({
           message: errorMessage,
           type: 'error',
