@@ -50,6 +50,8 @@ jobs:
           tags: |
             ghcr.io/${{ steps.meta.outputs.repo_lc }}:latest
             ghcr.io/${{ steps.meta.outputs.repo_lc }}:${{ steps.meta.outputs.version }}
+            ghcr.io/${{ steps.meta.outputs.repo_lc }}:v1.0.1
+            ghcr.io/${{ steps.meta.outputs.repo_lc }}:1.0.1
             ghcr.io/${{ steps.meta.outputs.repo_lc }}:sha-${{ steps.meta.outputs.short_sha }}
           build-args: |
             VERSION=${{ steps.meta.outputs.version }}

@@ -66,9 +66,16 @@ perform_update() {
         log "Successfully pulled latest images"
         write_status "pulled" 60 "Images pulled successfully"
     else
-        log "ERROR: Failed to pull images"
-        write_status "error" 0 "Failed to pull Docker images - check logs"
-        return 1
+        log "Target tag pull failed, attempting fallback to :latest..."
+        sed -i -e "s|\(image: ghcr\.io/oneithan/nexus-nomad\):.*|\1:latest|" "$COMPOSE_FILE" 2>> "$LOG_FILE"
+        if docker compose -p "$COMPOSE_PROJECT_NAME" -f "$COMPOSE_FILE" pull >> "$LOG_FILE" 2>&1; then
+            log "Successfully pulled images via :latest fallback"
+            write_status "pulled" 60 "Images pulled successfully"
+        else
+            log "ERROR: Failed to pull images"
+            write_status "error" 0 "Failed to pull Docker images - check logs"
+            return 1
+        fi
     fi
     
     sleep 2
