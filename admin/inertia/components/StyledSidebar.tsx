@@ -69,19 +69,19 @@ const StyledSidebar: React.FC<StyledSidebarProps> = ({ title, items }) => {
         <nav className="flex flex-1 flex-col">
           <ul role="list" className="flex flex-1 flex-col gap-y-7">
             <li>
+              <div className="mb-3">
+                <Link
+                  href="/home"
+                  className="flex flex-row items-center gap-x-2 text-desert-green hover:bg-desert-green/10 rounded-md p-2 text-sm font-semibold transition-colors border border-desert-green/20"
+                >
+                  <IconArrowLeft aria-hidden="true" className="size-5 shrink-0" />
+                  <span>Voltar ao Início</span>
+                </Link>
+              </div>
               <ul role="list" className="-mx-2 space-y-1">
                 {items.map((item) => (
                   <ListItem key={item.name} {...item} current={currentPath === item.href} />
                 ))}
-                <li className="ml-2 mt-4">
-                  <Link
-                    href="/home"
-                    className="flex flex-row items-center gap-x-3 text-desert-green text-sm font-semibold"
-                  >
-                    <IconArrowLeft aria-hidden="true" className="size-6 shrink-0" />
-                    Voltar ao Início
-                  </Link>
-                </li>
               </ul>
             </li>
           </ul>

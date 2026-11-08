@@ -12,7 +12,7 @@ export default function SupportPage() {
           <p className="text-text-muted mb-10 text-lg">
             O Project NOMAD é 100% gratuito e de código aberto — sem assinaturas, sem cobranças
             ocultas e sem pegadinhas. Esta edição em Português Brasileiro (<strong>Nexus NOMAD</strong>) é
-            mantida pela comunidade sobre o projeto original da <strong>Crosstalk Solutions</strong>.
+            um fork desenvolvido e mantido de forma independente por <strong>ONeithan</strong> a partir do projeto original da <strong>Crosstalk Solutions</strong>.
             Se você deseja apoiar a continuidade e evolução do ecossistema, confira abaixo como ajudar.
           </p>
 
@@ -20,9 +20,9 @@ export default function SupportPage() {
           <section className="mb-12">
             <h2 className="text-2xl font-semibold mb-3">Edição Brasileira — Nexus NOMAD</h2>
             <p className="text-text-muted mb-4">
-              O fork <strong>ONeithan/Nexus-Nomad</strong> traz tradução nativa para Português
-              Brasileiro (PT-BR), ajustes de experiência local e melhorias voltadas à comunidade
-              lusófona. Deixe uma estrela no repositório e participe com sugestões ou correções!
+              O fork <strong>ONeithan/Nexus-Nomad</strong> foi criado e é mantido exclusivamente por <strong>ONeithan</strong>,
+              trazendo tradução nativa completa para Português Brasileiro (PT-BR), ajustes de experiência local e melhorias
+              para quem precisa de conhecimento, sobrevivência e ferramentas 100% offline. Deixe uma estrela no repositório para apoiar o projeto!
             </p>
             <a
               href="https://github.com/ONeithan/Nexus-Nomad"

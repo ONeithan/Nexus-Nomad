@@ -27,11 +27,11 @@ function getScalarBundle(): string {
  * Scalar auto-detects the `#api-reference` element and reads `data-url`.
  */
 const REFERENCE_HTML = `<!doctype html>
-<html lang="en">
+<html lang="pt-BR">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Nomad Admin API Reference</title>
+    <title>Nexus NOMAD — Referência da API</title>
   </head>
   <body>
     <div id="app"></div>

@@ -56,13 +56,13 @@ export function buildOpenApiDocument(force = false): JsonObject {
   cached = {
     openapi: '3.1.0',
     info: {
-      title: 'Nomad Admin API',
+      title: 'API do Nexus NOMAD',
       description:
-        'HTTP API for the Nomad admin appliance. Generated from the application ' +
-        'routes and VineJS validators — see `/reference` for the interactive UI.',
+        'API HTTP do Centro de Comando do Nexus NOMAD. Gerada a partir das rotas ' +
+        'da aplicação e validadores VineJS — veja `/reference` para a interface interativa.',
       version: SystemService.getAppVersion(),
     },
-    servers: [{ url: '/', description: 'This appliance' }],
+    servers: [{ url: '/', description: 'Este servidor' }],
     tags: [...tagSet].sort().map((name) => ({ name })),
     paths,
   }

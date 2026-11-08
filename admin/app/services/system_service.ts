@@ -705,6 +705,18 @@ export class SystemService {
           }
         }
       } catch (err: any) {
+        // Fallback: tentar listar tags caso ainda não exista uma Release formal publicada
+        try {
+          const tagsResp = await axios.get(
+            'https://api.github.com/repos/ONeithan/Nexus-Nomad/tags',
+            { headers: { Accept: 'application/vnd.github+json' }, timeout: 5000 }
+          )
+          if (tagsResp?.data?.[0]?.name) {
+            latestVersion = tagsResp.data[0].name.replace(/^v/, '').trim()
+          }
+        } catch {
+          // Mantém latestVersion como currentVersion
+        }
         logger.warn(`[SystemService] Unable to fetch latest release from GitHub: ${err?.message || err}`)
       }
 
