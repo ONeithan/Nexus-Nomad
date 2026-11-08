@@ -34,10 +34,10 @@ function getDiskTypeLabel(disk: NomadDiskInfo): string {
 function getMountRoleLabel(mount: string): string {
   if (mount === '/') return 'Sistema Operacional & Banco de Dados'
   if (mount === '/storage' || mount === '/app/storage' || mount === '/mnt/nomad_storage') {
-    return 'Pool Principal do Acervo NOMAD'
+    return 'Armazenamento Principal do NOMAD'
   }
   if (mount.startsWith('/boot')) return 'Inicialização UEFI / Boot'
-  if (mount.includes('truenas') || mount.includes('nfs')) return 'Expansão de Rede (TrueNAS / NFS)'
+  if (mount.includes('nfs') || mount.includes('nas')) return 'Volume de Rede (NFS / SMB)'
   return 'Partição Montada'
 }
 
@@ -126,7 +126,7 @@ export default function SettingsPage(props: {
             </div>
           )}
 
-          {/* ── Topologia de Discos Conectados (Estilo TrueNAS) ───────────────────── */}
+          {/* ── Topologia de Discos Conectados ─────────────────────────────────────── */}
           <section id="discos" className="mb-12 scroll-mt-6">
             <h2 className="text-2xl font-bold text-desert-green mb-4 flex items-center gap-2">
               <div className="w-1 h-6 bg-desert-green" />
@@ -207,7 +207,7 @@ export default function SettingsPage(props: {
                       key={disk.name}
                       className="bg-desert-white rounded-xl border border-desert-stone-light shadow-sm overflow-hidden flex flex-col"
                     >
-                      {/* Cabeçalho do Disco (Estilo TrueNAS Topology Card) */}
+                      {/* Cabeçalho da Unidade Física */}
                       <div className="px-6 py-4 bg-surface-secondary border-b border-desert-stone-lighter flex flex-wrap items-center justify-between gap-3">
                         <div className="flex items-center gap-3">
                           <div className="w-11 h-11 rounded-lg bg-desert-green-lighter border border-desert-green-light flex items-center justify-center text-desert-green">
@@ -364,7 +364,7 @@ export default function SettingsPage(props: {
               </div>
             )}
 
-            {/* Pools de Rede (NFS / SMB — ex: TrueNAS Scale NEXUS-STORAGE) */}
+            {/* Pools de Rede (NFS / SMB) */}
             {networkMounts.length > 0 && (
               <div className="mt-6">
                 <h3 className="text-lg font-bold text-desert-green mb-3 flex items-center gap-2">

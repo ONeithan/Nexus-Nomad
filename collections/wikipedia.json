@@ -14,32 +14,32 @@
       "name": "Wikipédia em Português (Essencial - Top 50.000)",
       "description": "Os 50.000 artigos mais importantes em português com imagens reduzidas. Rápido e leve.",
       "size_mb": 850,
-      "url": "https://download.kiwix.org/zim/wikipedia/wikipedia_pt_top_mini_2026-06.zim",
-      "version": "2026-06"
+      "url": "https://download.kiwix.org/zim/wikipedia/wikipedia_pt_top_mini_2026-10.zim",
+      "version": "2026-10"
     },
     {
       "id": "pt-all-nopic",
       "name": "Wikipédia em Português Completa (Sem Imagens)",
       "description": "Mais de 1,1 milhão de artigos em português integralmente em texto. Excelente equilíbrio.",
       "size_mb": 14200,
-      "url": "https://download.kiwix.org/zim/wikipedia/wikipedia_pt_all_nopic_2026-06.zim",
-      "version": "2026-06"
+      "url": "https://download.kiwix.org/zim/wikipedia/wikipedia_pt_all_nopic_2026-05.zim",
+      "version": "2026-05"
     },
     {
       "id": "pt-all-maxi",
       "name": "Wikipédia em Português Integral (Com Todas as Imagens)",
       "description": "A experiência enciclopédica máxima: 1,1+ milhão de artigos com todas as fotos e gráficos em alta resolução.",
       "size_mb": 46500,
-      "url": "https://download.kiwix.org/zim/wikipedia/wikipedia_pt_all_maxi_2026-06.zim",
-      "version": "2026-06"
+      "url": "https://download.kiwix.org/zim/wikipedia/wikipedia_pt_all_maxi_2026-05.zim",
+      "version": "2026-05"
     },
     {
       "id": "en-all-mini",
       "name": "Wikipédia em Inglês (Opcional - Compacta)",
       "description": "Mais de 6 milhões de artigos em inglês em formato condensado como referência internacional secundária.",
       "size_mb": 12531,
-      "url": "https://download.kiwix.org/zim/wikipedia/wikipedia_en_all_mini_2026-06.zim",
-      "version": "2026-06"
+      "url": "https://download.kiwix.org/zim/wikipedia/wikipedia_en_all_mini_2026-09.zim",
+      "version": "2026-09"
     }
   ]
 }

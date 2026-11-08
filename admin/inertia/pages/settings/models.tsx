@@ -277,25 +277,24 @@ export default function ModelsPage(props: {
       <div className="xl:pl-72 w-full">
         <main className="px-6 lg:px-12 py-6">
           <h1 className="text-4xl font-semibold text-desert-green mb-3">
-            Modelos &amp; Conexão de IA Remota
+            {aiAssistantName && aiAssistantName !== 'AI Assistant'
+              ? aiAssistantName
+              : 'Assistente de IA & Modelos'}
           </h1>
           <p className="text-text-muted mb-6">
-            Conecte o Nexus NOMAD a um servidor Ollama ou OpenAI-compatível rodando em outra máquina
-            da sua rede local (sem consumir CPU ou RAM deste servidor), ou gerencie os ajustes de RAG
-            e respostas do Assistente.
+            Gerencie modelos locais do Ollama, ajuste a Base de Conhecimento (RAG) ou conecte o
+            NOMAD a qualquer servidor compatível com Ollama ou API OpenAI na sua rede.
           </p>
 
-          <StyledSectionHeader title="Conexão de IA Remota na Rede Local (Recomendado)" className="mt-4 mb-4" />
-          <div className="bg-surface-primary rounded-lg border-2 border-desert-green p-6 mb-8 shadow-sm">
+          <StyledSectionHeader title="Conexão Remota (Opcional — Ollama / API OpenAI)" className="mt-4 mb-4" />
+          <div className="bg-surface-primary rounded-lg border-2 border-border-subtle p-6 mb-8 shadow-sm">
             <p className="text-sm text-text-secondary mb-4">
-              Aponte para o Ollama ou servidor compatível com OpenAI rodando em outro computador do
-              seu homelab (ex: Dell OptiPlex ou PC principal). No servidor remoto onde o Ollama roda,
-              certifique-se de iniciá-lo com{' '}
+              Conecte a qualquer servidor compatível com Ollama ou API OpenAI (Ollama remoto, LM
+              Studio, llama.cpp e outros). Para instâncias remotas do Ollama, inicie o servidor com{' '}
               <code className="bg-surface-secondary px-1.5 py-0.5 rounded font-mono">
                 OLLAMA_HOST=0.0.0.0
               </code>
-              . Ao clicar em <strong>Salvar e Testar</strong>, o Assistente de IA e a busca semântica
-              (Qdrant) serão ativados automaticamente sem rodar modelos pesados localmente!
+              .
             </p>
             <div className="flex flex-col sm:flex-row sm:items-end gap-3">
               <div className="flex-1">

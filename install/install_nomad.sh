@@ -207,7 +207,7 @@ setup_nvidia_container_toolkit() {
   fi
 
   if ! $has_nvidia_gpu; then
-    echo -e "${YELLOW}#${RESET} Nenhuma GPU NVIDIA dedicada detectada (normal no Acer TravelMate P449 / Intel HD). Continuando...\n"
+    echo -e "${YELLOW}#${RESET} Nenhuma GPU NVIDIA dedicada detectada. Continuando em modo padrão...\n"
     return 0
   fi
 
@@ -228,7 +228,7 @@ setup_nvidia_container_toolkit() {
 
 get_install_confirmation() {
   echo -e "${YELLOW}#${RESET} Este assistente instalará o ${GREEN}Nexus Project NOMAD (PT-BR)${RESET} a partir de ${WHITE_R}${GITHUB_USER}/${GITHUB_REPO}${RESET}."
-  echo -e "${YELLOW}#${RESET} Sistema e banco de dados ficarão em ${WHITE_R}/opt/project-nomad${RESET} (disco primário NVMe)."
+  echo -e "${YELLOW}#${RESET} Sistema e banco de dados ficarão em ${WHITE_R}/opt/project-nomad${RESET} (disco principal do sistema)."
   if mountpoint -q /mnt/nomad_storage 2>/dev/null; then
     echo -e "${GREEN}#${RESET} Disco secundário detectado em ${WHITE_R}/mnt/nomad_storage${RESET}! Todo o acervo pesado (ZIMs, PDFs, Mapas, Livros) será gravado nele automaticamente."
   fi
@@ -270,15 +270,15 @@ detect_and_create_directories() {
     sudo chown "$(whoami):$(whoami)" "$NOMAD_DIR"
   fi
 
-  # Detecta automaticamente se o HD secundário de 1 TB está montado em /mnt/nomad_storage
+  # Detecta automaticamente se há um volume secundário montado em /mnt/nomad_storage
   if [[ -n "${NOMAD_STORAGE_OVERRIDE:-}" ]]; then
     STORAGE_TARGET_DIR="${NOMAD_STORAGE_OVERRIDE}"
   elif mountpoint -q /mnt/nomad_storage 2>/dev/null; then
     STORAGE_TARGET_DIR="/mnt/nomad_storage"
-    echo -e "${GREEN}#${RESET} Disco secundário montado em /mnt/nomad_storage detectado! Configurando pool de armazenamento nele.\n"
+    echo -e "${GREEN}#${RESET} Volume dedicado em /mnt/nomad_storage detectado! Configurando armazenamento nele.\n"
   else
     STORAGE_TARGET_DIR="${NOMAD_DIR}/storage"
-    echo -e "${YELLOW}#${RESET} /mnt/nomad_storage não está montado; usando armazenamento padrão em ${STORAGE_TARGET_DIR}.\n"
+    echo -e "${YELLOW}#${RESET} Usando diretório de armazenamento padrão em ${STORAGE_TARGET_DIR}.\n"
   fi
 
   sudo mkdir -p \
@@ -287,8 +287,7 @@ detect_and_create_directories() {
     "${STORAGE_TARGET_DIR}/books" \
     "${STORAGE_TARGET_DIR}/maps" \
     "${STORAGE_TARGET_DIR}/media" \
-    "${STORAGE_TARGET_DIR}/kb_uploads" \
-    "${STORAGE_TARGET_DIR}/acervo_odyssey"
+    "${STORAGE_TARGET_DIR}/kb_uploads"
 
   sudo touch "${STORAGE_TARGET_DIR}/logs/admin.log"
 }
@@ -427,14 +426,11 @@ verify_gpu_setup() {
 success_message() {
   echo -e "${GREEN}#########################################################################${RESET}"
   echo -e "${GREEN}#${RESET} Instalação do ${GREEN}Nexus Project NOMAD (PT-BR)${RESET} concluída com sucesso!"
-  echo -e "${GREEN}#${RESET} Sistema / Banco de Dados (NVMe): ${WHITE_R}${NOMAD_DIR}${RESET}"
-  echo -e "${GREEN}#${RESET} Armazenamento do Acervo:         ${WHITE_R}${STORAGE_TARGET_DIR}${RESET}"
+  echo -e "${GREEN}#${RESET} Diretório do sistema:       ${WHITE_R}${NOMAD_DIR}${RESET}"
+  echo -e "${GREEN}#${RESET} Diretório de armazenamento: ${WHITE_R}${STORAGE_TARGET_DIR}${RESET}"
   echo -e "${GREEN}#${RESET}"
-  echo -e "${GREEN}#${RESET} Acesse o Centro de Comando pelo navegador de qualquer PC da rede:"
-  echo -e "${GREEN}#${RESET}   -> ${WHITE_R}http://${local_ip_address}:8080${RESET}"
-  echo -e "${GREEN}#${RESET}"
-  echo -e "${GREEN}#${RESET} Dica para IA Remota (sem pesar neste notebook):"
-  echo -e "${GREEN}#${RESET}   Abra Configurações -> Modelos & IA Remota e conecte o IP do seu servidor Ollama na LAN."
+  echo -e "${GREEN}#${RESET} Acesse o Centro de Comando pelo navegador:"
+  echo -e "${GREEN}#${RESET}   -> ${WHITE_R}http://localhost:8080${RESET} ou ${WHITE_R}http://${local_ip_address}:8080${RESET}"
   echo -e "${GREEN}#########################################################################${RESET}\n"
 }
 

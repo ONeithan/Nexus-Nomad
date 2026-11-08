@@ -373,9 +373,9 @@ export default function Home(props: {
           className="rounded border-2 border-dashed border-border-default bg-transparent text-text-muted hover:border-desert-green hover:text-text-primary transition-colors h-48 flex flex-col items-center justify-center cursor-pointer text-center px-4"
         >
           <IconPlus size={40} />
-          <h3 className="font-bold text-xl mt-2">Adicionar Atalho da Rede</h3>
+          <h3 className="font-bold text-xl mt-2">Adicionar Atalho</h3>
           <p className="text-sm mt-1">
-            Atalho rápido para outro serviço da sua rede (TrueNAS, Portainer, Roteador)
+            Um atalho rápido para outro serviço na sua rede local
           </p>
         </button>
       </div>
