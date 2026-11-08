@@ -1,199 +1,127 @@
 <div align="center">
-<img src="admin/public/nomad-primary.svg" width="200" alt="Project NOMAD"/>
+<img src="admin/public/nomad-primary.svg" width="220" alt="Nexus Project NOMAD"/>
 
-# Project NOMAD
-### Knowledge That Never Goes Offline
+# Nexus Project NOMAD
+### Conhecimento Civilizatório que Nunca Fica Offline
 
-[![Website](https://img.shields.io/badge/Website-projectnomad.us-blue)](https://www.projectnomad.us)
-[![Discord](https://img.shields.io/badge/Discord-Join%20Community-5865F2)](https://discord.com/invite/crosstalksolutions)
-[![Benchmark](https://img.shields.io/badge/Benchmark-Leaderboard-green)](https://benchmark.projectnomad.us)
+[![Versão](https://img.shields.io/badge/Versão-1.0.0--Nexus-olive)](https://github.com/ONeithan/Nexus-Nomad)
+[![Idioma](https://img.shields.io/badge/Idioma-Português%20(PT--BR)-green)](https://github.com/ONeithan/Nexus-Nomad)
+[![Modo](https://img.shields.io/badge/Operação-100%25%20Offline-blue)](https://github.com/ONeithan/Nexus-Nomad)
+[![Acervo](https://img.shields.io/badge/Acervo-12.293%20Itens%20Indexados-darkgreen)](https://github.com/ONeithan/Nexus-Nomad)
 
 </div>
 
 ---
 
-Project NOMAD is a self-contained, offline-first knowledge and education server packed with critical tools, knowledge, and AI to keep you informed and empowered — anytime, anywhere.
+O **Nexus Project NOMAD** é um servidor de conhecimento, sobrevivência e educação autossuficiente, projetado para operar **100% offline** e acompanhar uma família ou comunidade por gerações.
 
-## Installation & Quickstart
-Project NOMAD can be installed on any Debian-based operating system (we recommend Ubuntu 26.04 LTS; 24.04 LTS and Debian 12 are also supported). Installation is completely terminal-based, and all tools and resources are designed to be accessed through the browser, so there's no need for a desktop environment if you'd rather setup NOMAD as a "server" and access it through other clients.
+Em um cenário de interrupção prolongada de internet, rede elétrica pública, abastecimento de água ou serviços urbanos, o sistema provê todas as ferramentas práticas, científicas, médicas, agrícolas e culturais necessárias para manter condições dignas de vida e preservar a civilização.
 
-**Before you start:** NOMAD itself needs about **5 GB of disk and under 1 GB of RAM**. The offline content you add afterwards is what actually fills a drive, and the AI Assistant is what drives the memory requirement up. See [Device Requirements](#device-requirements) for both, and the [FAQ](https://www.projectnomad.us/docs/faq) for individual content sizes.
+---
 
-*Note: sudo/root privileges are required to run the install script*
+## 🎯 Pilares Centrais
 
-### Quick Install (Debian-based OS Only)
-```bash
-sudo apt-get update && \
-sudo apt-get install -y curl && \
-curl -fsSL https://raw.githubusercontent.com/Crosstalk-Solutions/project-nomad/refs/heads/main/install/install_nomad.sh \
-  -o install_nomad.sh && \
-sudo bash install_nomad.sh
-```
+1. **Prioridade Absoluta em Português Brasileiro (PT-BR):**
+   - Interface completa, menus, configurações, categorias e documentação em português nativo.
+   - Pesquisa aprofundada prioritariamente em órgãos públicos brasileiros (**Embrapa, Fiocruz, Ministério da Saúde, Funasa, Rede e-Tec Brasil/MEC, Domínio Público, Defesa Civil e Bombeiros**).
+2. **Preservação de Acervo Histórico e Monumental:**
+   - Integração completa do patrimônio documental do **Nexus-Odyssey**: mais de 12.290 itens e 12 GB de dados estruturados em SQLite.
+   - Preservação da digitalização integral monumental da **Bíblia de Gutenberg de 1454 (6,58 GB)**, fac-símiles de alta definição, Bíblias de estudo clássicas e os 19 volumes temáticos da **Biblioteca Mestre**.
+3. **Autonomia de Infraestrutura:**
+   - Otimizado para rodar 24/7 em um notebook dedicado com **auto power-on na BIOS** (reinício automático após retorno de energia).
+   - Suporte a arquitetura híbrida de discos: **SSD NVMe** (SO, IA, Docker e alta velocidade) + **HDD** (grandes acervos de PDFs e ZIMs) + expansão de rede com **Pool TrueNAS via NFS**.
 
-Project NOMAD is now installed on your device! Open a browser and navigate to `http://localhost:8080` (or `http://DEVICE_IP:8080`) to start exploring!
+---
 
-For a complete step-by-step walkthrough (including Ubuntu installation), see the [Installation Guide](https://www.projectnomad.us/install). For Windows users, see the [WSL2 install guide](https://www.projectnomad.us/install/wsl2) — community-supported path covering native Docker and Docker Desktop install routes.
+## 🚀 Guia de Instalação e Inicialização
 
-### Advanced Installation
-For more control over the installation process, copy and paste the [Docker Compose template](https://raw.githubusercontent.com/Crosstalk-Solutions/project-nomad/refs/heads/main/install/management_compose.yaml) into a `docker-compose.yml` file and customize it to your liking (be sure to replace any placeholders with your actual values). Then, run `docker compose up -d` to start the Command Center and its dependencies. Note: this method is recommended for advanced users only, as it requires familiarity with Docker and manual configuration before starting.
+O sistema foi preparado para ser instalado de forma simples em qualquer distribuição baseada em Debian (recomendamos **Debian 12 Bookworm** ou **Ubuntu 24.04/26.04 LTS Server**).
 
-## How It Works
-NOMAD is a management UI ("Command Center") and API that orchestrates a collection of containerized tools and resources via [Docker](https://www.docker.com/). It handles installation, configuration, and updates for everything — so you don't have to.
+### Passo 1: Preparação do Sistema Operacional no Notebook
+1. Baixe a imagem ISO oficial do **Debian 12** (versão Netinst ou Standard).
+2. Grave a imagem em um pendrive utilizando o **Rufus** (selecione partição GPT e modo UEFI).
+3. Conecte o notebook na tomada, insira o pendrive e acesse a **BIOS/UEFI** (teclas `F2`, `F12` ou `Del`):
+   - Em **Power Management**, ative a opção **"Restore on AC Power Loss"** para **Power On** (isso garante que o notebook ligue sozinho sempre que a energia voltar).
+   - Defina o pendrive como primeira opção de boot e instale o Debian.
+4. Conecte o notebook ao cabo de rede local e habilite o serviço SSH:
+   ```bash
+   sudo apt update && sudo apt install -y openssh-server curl
+   ```
 
-**Built-in capabilities include:**
-- **AI Chat with Knowledge Base** — local AI chat powered by [Ollama](https://ollama.com/) or you can use OpenAI API compatible software such as LM Studio or llama.cpp, with document upload and semantic search (RAG via [Qdrant](https://qdrant.tech/))
-- **Information Library** — offline Wikipedia, medical references, ebooks, and more via [Kiwix](https://kiwix.org/)
-- **Education Platform** — Khan Academy courses with progress tracking via [Kolibri](https://learningequality.org/kolibri/)
-- **Offline Maps** — downloadable regional maps via [ProtoMaps](https://protomaps.com)
-- **Data Tools** — encryption, encoding, and analysis via [CyberChef](https://gchq.github.io/CyberChef/)
-- **Notes** — local note-taking via [FlatNotes](https://github.com/dullage/flatnotes)
-- **System Benchmark** — hardware scoring with a [community leaderboard](https://benchmark.projectnomad.us)
-- **Supply Depot** — a one-click app catalog (PDF tools, file browser, e-book library, password manager, and more) plus the ability to run your own custom Docker containers
-- **Automatic Updates** — opt-in, hands-off updates for the core software, installed apps, and offline content, on a schedule you control
-- **Easy Setup Wizard** — guided first-time configuration with curated content collections
-
-NOMAD also includes built-in tools like a Wikipedia content selector, ZIM library manager, and content explorer.
-
-## What's Included
-
-| Capability | Powered By | What You Get |
-|-----------|-----------|-------------|
-| Information Library | Kiwix | Offline Wikipedia, medical references, survival guides, ebooks |
-| AI Assistant | Ollama + Qdrant | Built-in chat with document upload and semantic search |
-| Education Platform | Kolibri | Khan Academy courses, progress tracking, multi-user support |
-| Offline Maps | ProtoMaps | Downloadable regional maps for offline viewing and search |
-| Data Tools | CyberChef | Encryption, encoding, hashing, and data analysis |
-| Notes | FlatNotes | Local note-taking with markdown support |
-| System Benchmark | Built-in | Hardware scoring, Builder Tags, and community leaderboard |
-| Supply Depot | Built-in | One-click app catalog + bring-your-own custom Docker containers |
-
-## Device Requirements
-While many similar offline survival computers are designed to be run on bare-minimum, lightweight hardware, Project NOMAD is quite the opposite. To install and run the
-available AI tools, we highly encourage the use of a beefy, GPU-backed device to make the most of your install.
-
-At its core, however, NOMAD is still very lightweight. For a barebones installation of the management application itself, the following minimal specs are required:
-
-*Note: Project NOMAD is not sponsored by any hardware manufacturer and is designed to be as hardware-agnostic as possible. The hardware listed below is for example/comparison use only*
-
-#### Minimum Specs
-- Processor: 2 GHz dual-core processor or better
-- RAM: 4GB system memory (the whole stack without AI runs in under 1 GB)
-- Storage: At least 5 GB free disk space (plan for 10 GB to install comfortably)
-- OS: Debian-based (Ubuntu 26.04 LTS recommended)
-- Stable internet connection (required during install only)
-
-Adding the AI Assistant brings the install to roughly **25 GB**, because Ollama and a general-purpose model are both large, and a model needs about its download size in memory while it answers. That memory comes from VRAM if you have a discrete GPU and from system RAM if you do not, which is the single biggest reason the figures below are so much higher.
-
-To run LLMs and other included AI tools:
-
-#### Optimal Specs
-- Processor: AMD Ryzen 7 or Intel Core i7 or better
-- RAM: 32 GB system memory
-- Graphics: NVIDIA RTX 3060 or AMD equivalent or better (more VRAM = run larger models)
-- Storage: At least 250 GB free disk space (preferably on SSD)
-- OS: Debian-based (Ubuntu 26.04 LTS recommended)
-- Stable internet connection (required during install only)
-
-**For detailed build recommendations at three price points ($150–$1,000+), see the [Hardware Guide](https://www.projectnomad.us/hardware).**
-
-Again, Project NOMAD itself is quite lightweight — it's the tools and resources you choose to install with NOMAD that will determine the specs required for your unique deployment
-
-#### Running AI models on a different host
-By default, NOMAD's installer will attempt to setup Ollama on the host when the AI Assistant is installed. However, if you would like to run the AI model on a different host, you can go to the settings of the AI assistant and input a URL for either an ollama or OpenAI-compatible API server (such as LM Studio).  
-Note that if you use Ollama on a different host, you must start the server with this option: `OLLAMA_HOST=0.0.0.0`.  
-Ollama is the preferred way to use the AI assistant, as it has features such as model download that OpenAI API does not support. So when using LM Studio, for example, you will have to use LM Studio to download models.
-You are responsible for the setup of Ollama/OpenAI server on the other host.
-
-## Frequently Asked Questions (FAQ)
-For answers to common questions about Project NOMAD, please see our [FAQ](FAQ.md) page.
-
-## About Internet Usage & Privacy
-Project NOMAD is designed for offline usage. An internet connection is only required during the initial installation (to download dependencies) and if you (the user) decide to download additional tools and resources at a later time. Otherwise, NOMAD does not require an internet connection and has ZERO built-in telemetry.
-
-To test internet connectivity, NOMAD first attempts to make a request to Cloudflare's utility endpoint, `https://1.1.1.1/cdn-cgi/trace`. If that endpoint is unreachable (for example, because your network blocks `1.1.1.1`), it falls back to other endpoints the application already contacts (the GitHub API and the Project NOMAD API) and considers the connection online if any of them respond.
-
-You can override the endpoint used for this check in two ways. The connectivity test URL can be configured from the UI under **Settings → Advanced** (stored locally on your instance), or you can set the `INTERNET_STATUS_TEST_URL` environment variable. When set, the environment variable always takes precedence over the UI-configured value. If neither is set, the built-in defaults above are used.
-
-## About Security
-By design, Project NOMAD is intended to be open and available without hurdles — it includes no authentication. If you decide to connect your device to a local network after install (e.g. for allowing other devices to access its resources), you can block/open ports to control which services are exposed.
-
-**Will authentication be added in the future?** Maybe. It's not currently a priority, but if there's enough demand for it, we may consider building in an optional authentication layer in a future release to support use cases where multiple users need access to the same instance but with different permission levels (e.g. family use with parental controls, classroom use with teacher/admin accounts, etc.). We have a suggestion for this on our public roadmap, so if this is something you'd like to see, please upvote it here: https://roadmap.projectnomad.us/posts/1/user-authentication-please-build-in-user-auth-with-admin-user-roles
-
-For now, we recommend using network-level controls to manage access if you're planning to expose your NOMAD instance to other devices on a local network. NOMAD is not designed to be exposed directly to the internet, and we strongly advise against doing so unless you really know what you're doing, have taken appropriate security measures, and understand the risks involved.
-
-## Contributing
-Contributions are welcome and appreciated! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines on how to contribute to the project.
-
-### Testing Auto-Updates (Dry Run)
-
-The Command Center can automatically install **minor/patch** updates of itself during a configurable window, after a cool-off period, and only when pre-flight checks pass (sufficient disk for the new image, no downloads or app installs in progress). Major versions always require a manual update.
-
-Because exercising this logic with real version bumps is impractical, an Ace command runs the **entire decision pipeline without ever triggering an update**. Run it from the `admin/` directory:
+### Passo 2: Instalação Automática do Nexus NOMAD (Comando de 1 Linha)
+A partir do seu computador principal, conecte via SSH ao notebook e execute o instalador do fork:
 
 ```bash
-# 1) Deterministic scenario suite — no network, DB, or Docker required.
-#    Proves every branch (major-only, cool-off, prerelease/draft, window wrap, …)
-#    and exits non-zero on failure, so it's safe to wire into CI.
-node ace auto-update:dry-run --scenarios
-
-# 2) Simulate "what would happen if I were running 1.32.0 right now?"
-#    against the LIVE GitHub releases feed and real pre-flight checks:
-node ace auto-update:dry-run --current=1.32.0 --force-enabled
-
-# 3) Fully offline simulation with a canned release list and a fixed clock:
-node ace auto-update:dry-run --current=1.32.0 --force-enabled \
-  --releases-file=./fixtures/releases.json --now=2026-06-04T21:00:00Z \
-  --window-start=20:00 --window-end=23:00 --cooloff=72 --skip-preflight
+curl -fsSL https://raw.githubusercontent.com/ONeithan/Nexus-Nomad/main/install/install_nomad.sh -o install_nomad.sh && sudo bash install_nomad.sh
 ```
 
-It prints the resolved decision — current version, whether the clock is inside the window, the eligible target (if any), and pre-flight blockers — ending in a clear verdict such as `WOULD UPDATE → v1.33.2` or `WOULD NOT UPDATE (outside-window): …`. **No real update is ever requested.**
+O instalador interativo em português configurará o Docker, os bancos de dados e os serviços automaticamente.
 
-| Flag | Description |
-|------|-------------|
-| `--scenarios` | Run the built-in deterministic scenario suite and exit |
-| `--current=<version>` | Simulate this currently-running version (e.g. `1.32.0`) |
-| `--force-enabled` | Treat auto-update as enabled, ignoring the saved setting |
-| `--cooloff=<hours>` | Override the cool-off period |
-| `--window-start=<HH:MM>` / `--window-end=<HH:MM>` | Override the update window |
-| `--now=<ISO timestamp>` | Simulate the clock at a specific time |
-| `--releases-file=<path>` | Use a local JSON releases array instead of fetching GitHub (offline) |
-| `--skip-preflight` | Bypass the Docker/disk/queue pre-flight checks |
-
-## Community & Resources
-
-- **Website:** [www.projectnomad.us](https://www.projectnomad.us) - Learn more about the project
-- **Discord:** [Join the Community](https://discord.com/invite/crosstalksolutions) - Get help, share your builds, and connect with other NOMAD users
-- **Benchmark Leaderboard:** [benchmark.projectnomad.us](https://benchmark.projectnomad.us) - See how your hardware stacks up against other NOMAD builds
-- **FAQ:** [FAQ.md](FAQ.md) - Find answers to frequently asked questions
-- **Community Add-Ons:** [admin/docs/community-add-ons.md](admin/docs/community-add-ons.md) - Third-party content packs built by the community
-
-## License
-
-Project NOMAD is licensed under the [Apache License 2.0](LICENSE).
-
-## Helper Scripts
-Once installed, Project NOMAD has a few helper scripts should you ever need to troubleshoot issues or perform maintenance that can't be done through the Command Center. All of these scripts are found in Project NOMAD's install directory, `/opt/project-nomad`
-
-###
-
-###### Start Script - Starts all installed project containers
-```bash
-sudo bash /opt/project-nomad/start_nomad.sh
+Ao finalizar, acesse o painel pelo navegador em:
 ```
-###
-
-###### Stop Script - Stops all installed project containers
-```bash
-sudo bash /opt/project-nomad/stop_nomad.sh
+http://IP_DO_NOTEBOOK:8080
 ```
-###
+*(Ou `http://localhost:8080` caso esteja executando localmente).*
 
-###### Update Script - Attempts to pull the latest images for the Command Center and its dependencies (i.e. mysql) and recreate the containers. Note: this *only* updates the Command Center containers. It does not update the installable application containers - that should be done through the Command Center UI
-```bash
-sudo bash /opt/project-nomad/update_nomad.sh
+---
+
+## 📦 O que Está Incluído no Centro de Comando
+
+| Capacidade | Motor / Tecnologia | O que Você Tem em Mãos |
+| :--- | :--- | :--- |
+| **Biblioteca Offline** | Kiwix Server | Wikipédia PT completa, Wikilivros PT, Wikisource, MDWiki Medicina PT e e-books em ZIM. |
+| **Assistente IA Local** | Ollama + Qdrant RAG | Chat inteligente em português com busca semântica no acervo de manuais técnicos. |
+| **Escola & Universidade** | Kolibri Platform | Cursos do Khan Academy em português, alfabetização, matemática e ciências com progresso. |
+| **Cartografia & Navegação** | ProtoMaps | Mapas vetoriais do Brasil e continentes para consulta sem internet e sem GPS. |
+| **Guia de Medicamentos** | Módulo Nativo PT-BR | Bulário offline, posologias, busca por sintomas e primeiros socorros em isolamento. |
+| **Caderno de Notas** | FlatNotes | Anotações diárias, diários agrícolas e documentação familiar em Markdown. |
+| **Laboratório Cripto** | CyberChef | Canivete suíço de criptografia, codificação e proteção de dados sigilosos. |
+| **Depósito de Suprimentos** | Docker App Store | Instalação em 1 clique de Stirling PDF, Kavita (e-books), File Browser e Vaultwarden. |
+| **Acervo Histórico** | SQLite Catalogo Mestre | 12.293 itens indexados via SHA-256: Gutenberg 1454 (6.58 GB), Bíblias e 19 Volumes Mestre. |
+
+---
+
+## 💾 Arquitetura Híbrida de Armazenamento
+
+Para balancear máxima velocidade e grande capacidade de retenção:
+
+```
+[ Notebook Servidor Nexus NOMAD ]
+├── ⚡ SSD NVMe 1 TB (Primário Rápido)
+│   ├── Sistema Operacional Debian 12
+│   ├── Contêineres Docker (Admin, MySQL, Redis, Qdrant)
+│   └── Modelos de Inteligência Artificial (Ollama)
+│
+├── 📦 HDD 500 GB (Secundário para Arquivos Volumosos)
+│   ├── Acervo Nexus-Odyssey (Gutenberg Bible 6.58 GB, Fac-símiles JPGs)
+│   ├── ZIMs da Wikipédia em Português
+│   └── Mapas Regionais do Brasil
+│
+└── 🌐 Expansão de Rede: TrueNAS via NFS
+    └── Montagem em /mnt/truenas-nomad para expansão ilimitada de livros e mídias.
 ```
 
-###### Uninstall Script - Need to start fresh? Use the uninstall script to make your life easy. Note: this cannot be undone!
-```bash
-curl -fsSL https://raw.githubusercontent.com/Crosstalk-Solutions/project-nomad/refs/heads/main/install/uninstall_nomad.sh -o uninstall_nomad.sh && sudo bash uninstall_nomad.sh
-```
+---
+
+## 🛠️ Teste e Simulação em Localhost (Windows Dev)
+
+Para testar a interface, temas e traduções no seu computador antes de enviar ao notebook:
+
+1. Acesse a pasta `preview/` na raiz do projeto:
+   ```bash
+   cd "e:\Projetos\Nexus N.O.M.A.D\preview"
+   node server.js
+   ```
+2. Abra o navegador em:
+   ```
+   http://localhost:8080
+   ```
+A simulação completa do **Centro de Comando** rodará instantaneamente em português, permitindo testar o Modo Escuro/Deserto, o Assistente de Configuração, o Guia de Medicamentos e o Chat de IA.
+
+---
+
+## ⚖️ Licença e Governança
+
+- **Projeto Base:** Project NOMAD (Apache-2.0 License).
+- **Customização e Tradução:** Nexus N.O.M.A.D (100% PT-BR por Nathan).
+- **Sem Telemetria:** ZERO envio de dados ou rastreamento.

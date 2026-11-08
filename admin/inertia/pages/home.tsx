@@ -30,10 +30,10 @@ import { linkTileColor } from '../../constants/link_tile_colors'
 
 // Maps is a Core Capability (display_order: 4)
 const MAPS_ITEM = {
-  label: 'Maps',
+  label: 'Mapas Offline',
   to: '/maps',
   target: '',
-  description: 'View offline maps',
+  description: 'Navegação e visualização de mapas vetoriais sem internet',
   icon: <IconMapRoute size={48} />,
   installed: true,
   displayOrder: 4,
@@ -41,13 +41,11 @@ const MAPS_ITEM = {
 }
 
 // Drug Reference + "When to use what" — offline medical reference tiles.
-// icon and displayOrder here are a reasonable default; both are open for the
-// maintainer to re-pick to fit the dashboard's ordering conventions.
 const DRUG_REFERENCE_ITEM = {
-  label: 'Drug Reference',
+  label: 'Guia de Medicamentos',
   to: '/drug-reference',
   target: '',
-  description: 'Offline FDA drug labels. Search by drug name or by symptom',
+  description: 'Consulta offline de bulas, posologias e busca por sintomas de emergência',
   icon: <IconPill size={48} />,
   installed: true,
   displayOrder: 5,
@@ -57,41 +55,41 @@ const DRUG_REFERENCE_ITEM = {
 // System items shown after all apps
 const SYSTEM_ITEMS = [
   {
-    label: 'Easy Setup',
+    label: 'Configuração Rápida',
     to: '/easy-setup',
     target: '',
     description:
-      'Not sure where to start? Use the setup wizard to quickly configure your NOMAD!',
+      'Assistente passo a passo para selecionar e instalar seus módulos offline no Nexus N.O.M.A.D!',
     icon: <IconBolt size={48} />,
     installed: true,
     displayOrder: 50,
     poweredBy: null,
   },
   {
-    label: 'Supply Depot',
+    label: 'Depósito de Suprimentos',
     to: '/supply-depot',
     target: '',
-    description: 'Browse and install curated apps, or add your own Docker container',
+    description: 'Catálogo de aplicativos e contêineres Docker em 1 clique',
     icon: <IconBox size={48} />,
     installed: true,
     displayOrder: 51,
     poweredBy: null,
   },
   {
-    label: 'Docs',
+    label: 'Manuais & Documentação',
     to: '/docs/home',
     target: '',
-    description: 'Read Project NOMAD manuals and guides',
+    description: 'Manuais de sobrevivência, civilização e guias práticos em português',
     icon: <IconHelp size={48} />,
     installed: true,
     displayOrder: 52,
     poweredBy: null,
   },
   {
-    label: 'Settings',
+    label: 'Configurações',
     to: '/settings/system',
     target: '',
-    description: 'Configure your NOMAD settings',
+    description: 'Ajustes de sistema, armazenamento híbrido (NVMe/HDD/NFS) e rede',
     icon: <IconSettings size={48} />,
     installed: true,
     displayOrder: 53,

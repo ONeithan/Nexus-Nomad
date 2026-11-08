@@ -28,19 +28,22 @@ GREEN='\033[1;32m' # Light Green.
 #                                                                                                                                                                                                 #
 ###################################################################################################################################################################################################
 
-WHIPTAIL_TITLE="Project NOMAD Installation"
+WHIPTAIL_TITLE="Instalação do Nexus Project NOMAD"
 NOMAD_DIR="/opt/project-nomad"
-MANAGEMENT_COMPOSE_FILE_URL="https://raw.githubusercontent.com/Crosstalk-Solutions/project-nomad/refs/heads/main/install/management_compose.yaml"
-START_SCRIPT_URL="https://raw.githubusercontent.com/Crosstalk-Solutions/project-nomad/refs/heads/main/install/start_nomad.sh"
-STOP_SCRIPT_URL="https://raw.githubusercontent.com/Crosstalk-Solutions/project-nomad/refs/heads/main/install/stop_nomad.sh"
-UPDATE_SCRIPT_URL="https://raw.githubusercontent.com/Crosstalk-Solutions/project-nomad/refs/heads/main/install/update_nomad.sh"
+GITHUB_USER="${GITHUB_USER:-ONeithan}"
+GITHUB_REPO="${GITHUB_REPO:-Nexus-Nomad}"
+GITHUB_BRANCH="${GITHUB_BRANCH:-main}"
+MANAGEMENT_COMPOSE_FILE_URL="https://raw.githubusercontent.com/${GITHUB_USER}/${GITHUB_REPO}/refs/heads/${GITHUB_BRANCH}/install/management_compose.yaml"
+START_SCRIPT_URL="https://raw.githubusercontent.com/${GITHUB_USER}/${GITHUB_REPO}/refs/heads/${GITHUB_BRANCH}/install/start_nomad.sh"
+STOP_SCRIPT_URL="https://raw.githubusercontent.com/${GITHUB_USER}/${GITHUB_REPO}/refs/heads/${GITHUB_BRANCH}/install/stop_nomad.sh"
+UPDATE_SCRIPT_URL="https://raw.githubusercontent.com/${GITHUB_USER}/${GITHUB_REPO}/refs/heads/${GITHUB_BRANCH}/install/update_nomad.sh"
 script_option_debug='true'
 accepted_terms='false'
 local_ip_address=''
 
 ###################################################################################################################################################################################################
 #                                                                                                                                                                                                 #
-#                                                                                           Functions                                                                                             #
+#                                                                                           Funções                                                                                               #
 #                                                                                                                                                                                                 #
 ###################################################################################################################################################################################################
 
@@ -58,16 +61,21 @@ banner() {
   echo ""
   echo -e "${GREEN}"
   cat <<'NOMAD_ART'
-                             P R O J E C T
-                    _   _  ___  __  __    _    ____
-                   | \ | |/ _ \|  \/  |  / \  |  _ \
-                   |  \| | | | | |\/| | / _ \ | | | |
-                   | |\  | |_| | |  | |/ ___ \| |_| |
-                   |_| \_|\___/|_|  |_/_/   \_\____/
+               _   _ _______  ___   _ ____  
+              | \ | | ____\ \/ / | | / ___| 
+              |  \| |  _|  \  /| | | \___ \ 
+              | |\  | |___ /  \| |_| |___) |
+              |_| \_|_____/_/\_\\___/|____/ 
+                     P R O J E C T
+            _   _  ___  __  __    _    ____
+           | \ | |/ _ \|  \/  |  / \  |  _ \
+           |  \| | | | | |\/| | / _ \ | | | |
+           | |\  | |_| | |  | |/ ___ \| |_| |
+           |_| \_|\___/|_|  |_/_/   \_\____/
 NOMAD_ART
   echo -e "${RESET}"
-  echo -e "${WHITE_R}                 Offline knowledge and education server${RESET}\n"
-  echo -e "${GREEN}#########################################################################${RESET}\n"
+  echo -e "${WHITE_R}       Servidor Civilizatório de Conhecimento e Educação Offline (PT-BR)${RESET}\\n"
+  echo -e "${GREEN}#########################################################################${RESET}\\n"
 }
 
 check_has_sudo() {

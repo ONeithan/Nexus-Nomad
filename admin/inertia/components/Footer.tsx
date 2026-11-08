@@ -13,7 +13,7 @@ export default function Footer() {
     <footer>
       <div className="flex items-center justify-center gap-3 border-t border-border-subtle py-4">
         <p className="text-sm/6 text-text-secondary">
-          Project NOMAD&trade; Command Center v{appVersion}
+          Nexus Project NOMAD&trade; Centro de Comando v{appVersion}
         </p>
         <span className="text-gray-300">|</span>
         <button
@@ -21,7 +21,7 @@ export default function Footer() {
           className="text-sm/6 text-gray-500 hover:text-desert-green flex items-center gap-1 cursor-pointer"
         >
           <IconBug className="size-3.5" />
-          Debug Info
+          Diagnóstico do Sistema
         </button>
         <ThemeToggle />
       </div>
