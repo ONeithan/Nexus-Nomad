@@ -1,38 +1,29 @@
 #!/bin/bash
 
-# Project NOMAD Installation Script
+# Nexus Project NOMAD — Script Oficial de Instalação (PT-BR)
 
 ###################################################################################################################################################################################################
-
-# Script                | Project NOMAD Installation Script
-# Version               | 1.0.0
-# Author                | Crosstalk Solutions, LLC
-# Website               | https://crosstalksolutions.com
-
-###################################################################################################################################################################################################
-#                                                                                                                                                                                                 #
-#                                                                                           Color Codes                                                                                           #
-#                                                                                                                                                                                                 #
+# Script                | Instalador Nexus Project NOMAD (PT-BR)
+# Versão                | 1.0.0-nexus
+# Repositório           | https://github.com/ONeithan/Nexus-Nomad
 ###################################################################################################################################################################################################
 
 RESET='\033[0m'
 YELLOW='\033[1;33m'
-WHITE_R='\033[39m' # Same as GRAY_R for terminals with white background.
+WHITE_R='\033[39m'
 GRAY_R='\033[39m'
-RED='\033[1;31m' # Light Red.
-GREEN='\033[1;32m' # Light Green.
-
-###################################################################################################################################################################################################
-#                                                                                                                                                                                                 #
-#                                                                                  Constants & Variables                                                                                          #
-#                                                                                                                                                                                                 #
-###################################################################################################################################################################################################
+RED='\033[1;31m'
+GREEN='\033[1;32m'
 
 WHIPTAIL_TITLE="Instalação do Nexus Project NOMAD"
 NOMAD_DIR="/opt/project-nomad"
+STORAGE_TARGET_DIR="/opt/project-nomad/storage"
 GITHUB_USER="${GITHUB_USER:-ONeithan}"
 GITHUB_REPO="${GITHUB_REPO:-Nexus-Nomad}"
 GITHUB_BRANCH="${GITHUB_BRANCH:-main}"
+GITHUB_USER_LC=$(echo "${GITHUB_USER}" | tr '[:upper:]' '[:lower:]')
+GITHUB_REPO_LC=$(echo "${GITHUB_REPO}" | tr '[:upper:]' '[:lower:]')
+NOMAD_ADMIN_IMAGE="ghcr.io/${GITHUB_USER_LC}/${GITHUB_REPO_LC}:latest"
 MANAGEMENT_COMPOSE_FILE_URL="https://raw.githubusercontent.com/${GITHUB_USER}/${GITHUB_REPO}/refs/heads/${GITHUB_BRANCH}/install/management_compose.yaml"
 START_SCRIPT_URL="https://raw.githubusercontent.com/${GITHUB_USER}/${GITHUB_REPO}/refs/heads/${GITHUB_BRANCH}/install/start_nomad.sh"
 STOP_SCRIPT_URL="https://raw.githubusercontent.com/${GITHUB_USER}/${GITHUB_REPO}/refs/heads/${GITHUB_BRANCH}/install/stop_nomad.sh"
@@ -41,20 +32,14 @@ script_option_debug='true'
 accepted_terms='false'
 local_ip_address=''
 
-###################################################################################################################################################################################################
-#                                                                                                                                                                                                 #
-#                                                                                           Funções                                                                                               #
-#                                                                                                                                                                                                 #
-###################################################################################################################################################################################################
-
 header() {
   if [[ "${script_option_debug}" != 'true' ]]; then clear; clear; fi
-  echo -e "${GREEN}#########################################################################${RESET}\\n"
+  echo -e "${GREEN}#########################################################################${RESET}\n"
 }
 
 header_red() {
   if [[ "${script_option_debug}" != 'true' ]]; then clear; clear; fi
-  echo -e "${RED}#########################################################################${RESET}\\n"
+  echo -e "${RED}#########################################################################${RESET}\n"
 }
 
 banner() {
@@ -74,18 +59,16 @@ banner() {
            |_| \_|\___/|_|  |_/_/   \_\____/
 NOMAD_ART
   echo -e "${RESET}"
-  echo -e "${WHITE_R}       Servidor Civilizatório de Conhecimento e Educação Offline (PT-BR)${RESET}\\n"
-  echo -e "${GREEN}#########################################################################${RESET}\\n"
+  echo -e "${WHITE_R}       Servidor Civilizatório de Conhecimento e Educação Offline (PT-BR)${RESET}\n"
+  echo -e "${GREEN}#########################################################################${RESET}\n"
 }
 
 check_has_sudo() {
-  if sudo -n true 2>/dev/null; then
-    echo -e "${GREEN}#${RESET} User has sudo permissions.\\n"
+  if sudo -v; then
+    echo -e "${GREEN}#${RESET} Permissão sudo confirmada.\n"
   else
-    echo "User does not have sudo permissions"
     header_red
-    echo -e "${RED}#${RESET} This script requires sudo permissions to run. Please run the script with sudo.\\n"
-    echo -e "${RED}#${RESET} For example: sudo bash $(basename "$0")"
+    echo -e "${RED}#${RESET} Este instalador exige permissões sudo. Execute com: sudo bash $(basename "$0")\n"
     exit 1
   fi
 }
@@ -93,377 +76,259 @@ check_has_sudo() {
 check_is_bash() {
   if [[ -z "$BASH_VERSION" ]]; then
     header_red
-    echo -e "${RED}#${RESET} This script requires bash to run. Please run the script using bash.\\n"
-    echo -e "${RED}#${RESET} For example: bash $(basename "$0")"
+    echo -e "${RED}#${RESET} Execute este script utilizando o bash: sudo bash $(basename "$0")\n"
     exit 1
   fi
-    echo -e "${GREEN}#${RESET} This script is running in bash.\\n"
+  echo -e "${GREEN}#${RESET} Ambiente Bash verificado.\n"
 }
 
 check_is_debian_based() {
   if [[ ! -f /etc/debian_version ]]; then
     header_red
-    echo -e "${RED}#${RESET} This script is designed to run on Debian-based systems only.\\n"
-    echo -e "${RED}#${RESET} Please run this script on a Debian-based system and try again."
+    echo -e "${RED}#${RESET} Este instalador é projetado para sistemas baseados em Debian (Debian / Ubuntu).\n"
     exit 1
   fi
-    echo -e "${GREEN}#${RESET} This script is running on a Debian-based system.\\n"
+  echo -e "${GREEN}#${RESET} Sistema Debian detectado ($(cat /etc/debian_version)).\n"
 }
 
 check_is_x86_64() {
   local arch
   arch="$(uname -m)"
   if [[ "${arch}" != "x86_64" && "${arch}" != "amd64" ]]; then
-    echo -e "${YELLOW}#${RESET} WARNING: Detected architecture '${arch}'. NOMAD officially supports x86_64 only.\\n"
-    echo -e "${YELLOW}#${RESET} ARM64/aarch64 support is tracked in PR #419 and is not yet ready.\\n"
-    echo -e "${YELLOW}#${RESET} Continuing on an unsupported architecture will likely fail and may leave\\n"
-    echo -e "${YELLOW}#${RESET} partial Docker images and files behind that you'll need to clean up manually.\\n"
-    echo -e "${YELLOW}#${RESET} Continuing in 10 seconds... press Ctrl+C now to abort.\\n"
+    echo -e "${YELLOW}#${RESET} AVISO: Arquitetura detectada '${arch}'. O NOMAD suporta oficialmente x86_64.\n"
+    echo -e "${YELLOW}#${RESET} Continuando em 10 segundos... pressione Ctrl+C para cancelar.\n"
     sleep 10
     return
   fi
-  echo -e "${GREEN}#${RESET} Architecture check passed (${arch}).\\n"
+  echo -e "${GREEN}#${RESET} Arquitetura x86_64 verificada (${arch}).\n"
 }
 
 ensure_dependencies_installed() {
   local missing_deps=()
 
-  # Check for curl
   if ! command -v curl &> /dev/null; then
     missing_deps+=("curl")
   fi
-
-  # Check for gpg (required for NVIDIA container toolkit keyring)
   if ! command -v gpg &> /dev/null; then
     missing_deps+=("gpg")
   fi
-
-  # Check for whiptail (used for dialogs, though not currently active)
-  # if ! command -v whiptail &> /dev/null; then
-  #   missing_deps+=("whiptail")
-  # fi
+  if ! command -v git &> /dev/null; then
+    missing_deps+=("git")
+  fi
+  if ! command -v lspci &> /dev/null; then
+    missing_deps+=("pciutils")
+  fi
 
   if [[ ${#missing_deps[@]} -gt 0 ]]; then
-    echo -e "${YELLOW}#${RESET} Installing required dependencies: ${missing_deps[*]}...\\n"
+    echo -e "${YELLOW}#${RESET} Instalando dependências necessárias: ${missing_deps[*]}...\n"
     sudo apt-get update
     sudo apt-get install -y "${missing_deps[@]}"
 
-    # Verify installation
-    for dep in "${missing_deps[@]}"; do
+    for dep in curl gpg git; do
       if ! command -v "$dep" &> /dev/null; then
-        echo -e "${RED}#${RESET} Failed to install $dep. Please install it manually and try again."
+        echo -e "${RED}#${RESET} Falha ao instalar '$dep'. Instale manualmente e tente novamente."
         exit 1
       fi
     done
-    echo -e "${GREEN}#${RESET} Dependencies installed successfully.\\n"
+    echo -e "${GREEN}#${RESET} Dependências básicas instaladas com sucesso.\n"
   else
-    echo -e "${GREEN}#${RESET} All required dependencies are already installed.\\n"
+    echo -e "${GREEN}#${RESET} Todas as dependências básicas já estão instaladas.\n"
   fi
 }
 
-check_is_debug_mode(){
-  # Check if the script is being run in debug mode
+check_is_debug_mode() {
   if [[ "${script_option_debug}" == 'true' ]]; then
-    echo -e "${YELLOW}#${RESET} Debug mode is enabled, the script will not clear the screen...\\n"
+    echo -e "${YELLOW}#${RESET} Modo detalhado ativo (log visível na tela)...\n"
   else
     clear; clear
   fi
 }
 
 generateRandomPass() {
-  local length="${1:-32}"  # Default to 32
+  local length="${1:-32}"
   local password
-  
-  # Generate random password using /dev/urandom
   password=$(tr -dc 'A-Za-z0-9' < /dev/urandom | head -c "$length")
-  
   echo "$password"
 }
 
 ensure_docker_installed() {
   if ! command -v docker &> /dev/null; then
-    echo -e "${YELLOW}#${RESET} Docker not found. Installing Docker...\\n"
-    
-    # Update package database
+    echo -e "${YELLOW}#${RESET} Docker não encontrado. Instalando Docker Engine oficial...\n"
     sudo apt-get update
-    
-    # Install prerequisites
     sudo apt-get install -y ca-certificates curl
-    
-    # Create directory for keyrings
-    # sudo install -m 0755 -d /etc/apt/keyrings
-    
-    # # Download Docker's official GPG key
-    # sudo curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc
-    # sudo chmod a+r /etc/apt/keyrings/docker.asc
+    curl -fsSL https://get.docker.com -o /tmp/get-docker.sh
+    sudo sh /tmp/get-docker.sh
+    rm -f /tmp/get-docker.sh
 
-    # # Add the repository to Apt sources
-    # echo \
-    #   "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian \
-    #   $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
-    #   sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
-
-    # # Update the package database with the Docker packages from the newly added repo
-    # sudo apt-get update
-
-    # # Install Docker packages
-    # sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-
-    # Download the Docker convenience script
-    curl -fsSL https://get.docker.com -o get-docker.sh
-
-    # Run the Docker installation script
-    sudo sh get-docker.sh
-
-    # Check if Docker was installed successfully
     if ! command -v docker &> /dev/null; then
-      echo -e "${RED}#${RESET} Docker installation failed. Please check the logs and try again."
+      echo -e "${RED}#${RESET} Falha na instalação do Docker. Verifique sua conexão e tente novamente."
       exit 1
     fi
-    
-    echo -e "${GREEN}#${RESET} Docker installation completed.\\n"
+    sudo systemctl enable --now docker
+    echo -e "${GREEN}#${RESET} Docker instalado e ativado com sucesso.\n"
   else
-    echo -e "${GREEN}#${RESET} Docker is already installed.\\n"
-    
-    # Check if Docker service is running
+    echo -e "${GREEN}#${RESET} Docker já está instalado.\n"
     if ! systemctl is-active --quiet docker; then
-      echo -e "${YELLOW}#${RESET} Docker is installed but not running. Attempting to start Docker...\\n"
-      sudo systemctl start docker
+      echo -e "${YELLOW}#${RESET} Iniciando o serviço Docker...\n"
+      sudo systemctl enable --now docker
       if ! systemctl is-active --quiet docker; then
-        echo -e "${RED}#${RESET} Failed to start Docker. Please check the Docker service status and try again."
+        echo -e "${RED}#${RESET} Falha ao iniciar o serviço Docker."
         exit 1
-      else
-        echo -e "${GREEN}#${RESET} Docker service started successfully.\\n"
       fi
-    else
-      echo -e "${GREEN}#${RESET} Docker service is already running.\\n"
     fi
+    echo -e "${GREEN}#${RESET} Serviço Docker em execução.\n"
   fi
 }
 
 check_docker_compose() {
-  # Check if 'docker compose' (v2 plugin) is available
-  if ! docker compose version &>/dev/null; then
-    echo -e "${RED}#${RESET} Docker Compose v2 is not installed or not available as a Docker plugin."
-    echo -e "${YELLOW}#${RESET} This script requires 'docker compose' (v2), not 'docker-compose' (v1)."
-    echo -e "${YELLOW}#${RESET} Please read the Docker documentation at https://docs.docker.com/compose/install/ for instructions on how to install Docker Compose v2."
-    exit 1
+  if ! sudo docker compose version &>/dev/null; then
+    echo -e "${RED}#${RESET} Plugin Docker Compose v2 ('docker compose') não encontrado."
+    echo -e "${YELLOW}#${RESET} Tentando instalar docker-compose-plugin via apt..."
+    sudo apt-get update && sudo apt-get install -y docker-compose-plugin
+    if ! sudo docker compose version &>/dev/null; then
+      echo -e "${RED}#${RESET} Não foi possível instalar o Docker Compose v2."
+      exit 1
+    fi
   fi
 }
 
 setup_nvidia_container_toolkit() {
-  # This function attempts to set up NVIDIA GPU support but is non-blocking
-  # Any failures will result in warnings but will NOT stop the installation process
-  
-  echo -e "${YELLOW}#${RESET} Checking for NVIDIA GPU...\\n"
-  
-  # Safely detect NVIDIA GPU
+  echo -e "${YELLOW}#${RESET} Verificando presença de GPU dedicada NVIDIA...\n"
   local has_nvidia_gpu=false
   if command -v lspci &> /dev/null; then
     if lspci 2>/dev/null | grep -i nvidia &> /dev/null; then
       has_nvidia_gpu=true
-      echo -e "${GREEN}#${RESET} NVIDIA GPU detected.\\n"
     fi
   fi
-  
-  # Also check for nvidia-smi
   if ! $has_nvidia_gpu && command -v nvidia-smi &> /dev/null; then
     if nvidia-smi &> /dev/null; then
       has_nvidia_gpu=true
-      echo -e "${GREEN}#${RESET} NVIDIA GPU detected via nvidia-smi.\\n"
     fi
   fi
-  
+
   if ! $has_nvidia_gpu; then
-    echo -e "${YELLOW}#${RESET} No NVIDIA GPU detected. Skipping NVIDIA container toolkit installation.\\n"
+    echo -e "${YELLOW}#${RESET} Nenhuma GPU NVIDIA dedicada detectada (normal no Acer TravelMate P449 / Intel HD). Continuando...\n"
     return 0
   fi
-  
-  # Check if nvidia-container-toolkit is already installed
+
   if command -v nvidia-ctk &> /dev/null; then
-    echo -e "${GREEN}#${RESET} NVIDIA container toolkit is already installed.\\n"
+    echo -e "${GREEN}#${RESET} NVIDIA Container Toolkit já instalado.\n"
     return 0
   fi
-  
-  echo -e "${YELLOW}#${RESET} Installing NVIDIA container toolkit...\\n"
-  
-  # Install dependencies per https://docs.ollama.com/docker - wrapped in error handling
-  if ! curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey 2>/dev/null | sudo gpg --batch --yes --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg 2>/dev/null; then
-    echo -e "${YELLOW}#${RESET} Warning: Failed to add NVIDIA container toolkit GPG key. Continuing anyway...\\n"
-    return 0
-  fi
-  
-  if ! curl -fsSL https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list 2>/dev/null \
-      | sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' \
-      | sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list > /dev/null 2>&1; then
-    echo -e "${YELLOW}#${RESET} Warning: Failed to add NVIDIA container toolkit repository. Continuing anyway...\\n"
-    return 0
-  fi
-  
-  if ! sudo apt-get update 2>/dev/null; then
-    echo -e "${YELLOW}#${RESET} Warning: Failed to update package list. Continuing anyway...\\n"
-    return 0
-  fi
-  
-  if ! sudo apt-get install -y nvidia-container-toolkit 2>/dev/null; then
-    echo -e "${YELLOW}#${RESET} Warning: Failed to install NVIDIA container toolkit. Continuing anyway...\\n"
-    return 0
-  fi
-  
-  echo -e "${GREEN}#${RESET} NVIDIA container toolkit installed successfully.\\n"
-  
-  # Configure Docker to use NVIDIA runtime
-  echo -e "${YELLOW}#${RESET} Configuring Docker to use NVIDIA runtime...\\n"
-  
-  if ! sudo nvidia-ctk runtime configure --runtime=docker 2>/dev/null; then
-    echo -e "${YELLOW}#${RESET} nvidia-ctk configure failed, attempting manual configuration...\\n"
-    
-    # Fallback: Manually configure daemon.json
-    local daemon_json="/etc/docker/daemon.json"
-    local config_success=false
-    
-    if [[ -f "$daemon_json" ]]; then
-      # Backup existing config (best effort)
-      sudo cp "$daemon_json" "${daemon_json}.backup" 2>/dev/null || true
-      
-      # Check if nvidia runtime already exists
-      if ! grep -q '"nvidia"' "$daemon_json" 2>/dev/null; then
-        # Add nvidia runtime to existing config using jq if available
-        if command -v jq &> /dev/null; then
-          if sudo jq '. + {"runtimes": {"nvidia": {"path": "nvidia-container-runtime", "runtimeArgs": []}}}' "$daemon_json" > /tmp/daemon.json.tmp 2>/dev/null; then
-            if sudo mv /tmp/daemon.json.tmp "$daemon_json" 2>/dev/null; then
-              config_success=true
-            fi
-          fi
-          # Clean up temp file if move failed
-          sudo rm -f /tmp/daemon.json.tmp 2>/dev/null || true
-        else
-          echo -e "${YELLOW}#${RESET} jq not available, skipping manual daemon.json configuration...\\n"
-        fi
-      else
-        config_success=true  # Already configured
-      fi
-    else
-      # Create new daemon.json with nvidia runtime (best effort)
-      if echo '{"runtimes":{"nvidia":{"path":"nvidia-container-runtime","runtimeArgs":[]}}}' | sudo tee "$daemon_json" > /dev/null 2>&1; then
-        config_success=true
-      fi
-    fi
-    
-    if ! $config_success; then
-      echo -e "${YELLOW}#${RESET} Manual daemon.json configuration unsuccessful. GPU support may require manual setup.\\n"
-    fi
-  fi
-  
-  # Restart Docker service
-  echo -e "${YELLOW}#${RESET} Restarting Docker service...\\n"
-  if ! sudo systemctl restart docker 2>/dev/null; then
-    echo -e "${YELLOW}#${RESET} Warning: Failed to restart Docker service. You may need to restart it manually.\\n"
-    return 0
-  fi
-  
-  # Verify NVIDIA runtime is available
-  echo -e "${YELLOW}#${RESET} Verifying NVIDIA runtime configuration...\\n"
-  sleep 2  # Give Docker a moment to fully restart
-  
-  if docker info 2>/dev/null | grep -q "nvidia"; then
-    echo -e "${GREEN}#${RESET} NVIDIA runtime successfully configured and verified.\\n"
-  else
-    echo -e "${YELLOW}#${RESET} Warning: NVIDIA runtime not detected in Docker info. GPU acceleration may not work.\\n"
-    echo -e "${YELLOW}#${RESET} You may need to manually configure /etc/docker/daemon.json and restart Docker.\\n"
-  fi
-  
-  echo -e "${GREEN}#${RESET} NVIDIA container toolkit configuration completed.\\n"
+
+  echo -e "${YELLOW}#${RESET} Instalando NVIDIA Container Toolkit...\n"
+  curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey 2>/dev/null | sudo gpg --batch --yes --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg 2>/dev/null || return 0
+  curl -fsSL https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list 2>/dev/null \
+    | sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' \
+    | sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list > /dev/null 2>&1 || return 0
+  sudo apt-get update 2>/dev/null && sudo apt-get install -y nvidia-container-toolkit 2>/dev/null || return 0
+  sudo nvidia-ctk runtime configure --runtime=docker 2>/dev/null || true
+  sudo systemctl restart docker 2>/dev/null || true
 }
 
-get_install_confirmation(){
-  echo -e "${YELLOW}#${RESET} This script will install Project NOMAD and its dependencies on your machine."
-  echo -e "${YELLOW}#${RESET} If you already have Project NOMAD installed with customized config or data, please be aware that running this installation script may overwrite existing files and configurations. It is highly recommended to back up any important data/configs before proceeding."
-  read -p "Are you sure you want to continue? (y/N): " choice
+get_install_confirmation() {
+  echo -e "${YELLOW}#${RESET} Este assistente instalará o ${GREEN}Nexus Project NOMAD (PT-BR)${RESET} a partir de ${WHITE_R}${GITHUB_USER}/${GITHUB_REPO}${RESET}."
+  echo -e "${YELLOW}#${RESET} Sistema e banco de dados ficarão em ${WHITE_R}/opt/project-nomad${RESET} (disco primário NVMe)."
+  if mountpoint -q /mnt/nomad_storage 2>/dev/null; then
+    echo -e "${GREEN}#${RESET} Disco secundário detectado em ${WHITE_R}/mnt/nomad_storage${RESET}! Todo o acervo pesado (ZIMs, PDFs, Mapas, Livros) será gravado nele automaticamente."
+  fi
+  read -p "Deseja continuar com a instalação? (s/N): " choice
   case "$choice" in
-    y|Y )
-      echo -e "${GREEN}#${RESET} User chose to continue with the installation."
+    s|S|y|Y )
+      echo -e "${GREEN}#${RESET} Instalação confirmada pelo usuário.\n"
       ;;
     * )
-      echo "User chose not to continue with the installation."
+      echo "Instalação cancelada."
       exit 0
       ;;
   esac
 }
 
 accept_terms() {
-  printf "\n\n"
-  echo "License Agreement & Terms of Use"
-  echo "__________________________"
-  printf "\n\n"
-  echo "Project NOMAD is licensed under the Apache License 2.0. The full license can be found at https://www.apache.org/licenses/LICENSE-2.0 or in the LICENSE file of this repository."
   printf "\n"
-  echo "By accepting this agreement, you acknowledge that you have read and understood the terms and conditions of the Apache License 2.0 and agree to be bound by them while using Project NOMAD"
-  echo -e "\n\n"
-  read -p "I have read and accept License Agreement & Terms of Use (y/N)? " choice
+  echo "Termos de Licença (Apache License 2.0)"
+  echo "______________________________________"
+  echo "O Nexus Project NOMAD é baseado no Project NOMAD sob licença Apache 2.0."
+  echo "Consulte os termos completos no arquivo LICENSE do repositório."
+  printf "\n"
+  read -p "Li e aceito os termos da licença Apache 2.0 (s/N): " choice
   case "$choice" in
-    y|Y )
+    s|S|y|Y )
       accepted_terms='true'
       ;;
     * )
-      echo "License Agreement & Terms of Use not accepted. Installation cannot continue."
+      echo "Termos não aceitos. Encerrando instalação."
       exit 1
       ;;
   esac
 }
 
-create_nomad_directory(){
-  # Ensure the main installation directory exists
+detect_and_create_directories() {
   if [[ ! -d "$NOMAD_DIR" ]]; then
-    echo -e "${YELLOW}#${RESET} Creating directory for Project NOMAD at $NOMAD_DIR...\\n"
+    echo -e "${YELLOW}#${RESET} Criando diretório principal em $NOMAD_DIR...\n"
     sudo mkdir -p "$NOMAD_DIR"
     sudo chown "$(whoami):$(whoami)" "$NOMAD_DIR"
-
-    echo -e "${GREEN}#${RESET} Directory created successfully.\\n"
-  else
-    echo -e "${GREEN}#${RESET} Directory $NOMAD_DIR already exists.\\n"
   fi
 
-  # Also ensure the directory has a /storage/logs/ subdirectory
-  sudo mkdir -p "${NOMAD_DIR}/storage/logs"
+  # Detecta automaticamente se o HD secundário de 1 TB está montado em /mnt/nomad_storage
+  if [[ -n "${NOMAD_STORAGE_OVERRIDE:-}" ]]; then
+    STORAGE_TARGET_DIR="${NOMAD_STORAGE_OVERRIDE}"
+  elif mountpoint -q /mnt/nomad_storage 2>/dev/null; then
+    STORAGE_TARGET_DIR="/mnt/nomad_storage"
+    echo -e "${GREEN}#${RESET} Disco secundário montado em /mnt/nomad_storage detectado! Configurando pool de armazenamento nele.\n"
+  else
+    STORAGE_TARGET_DIR="${NOMAD_DIR}/storage"
+    echo -e "${YELLOW}#${RESET} /mnt/nomad_storage não está montado; usando armazenamento padrão em ${STORAGE_TARGET_DIR}.\n"
+  fi
 
-  # Create a admin.log file in the logs directory
-  sudo touch "${NOMAD_DIR}/storage/logs/admin.log"
+  sudo mkdir -p \
+    "${STORAGE_TARGET_DIR}/logs" \
+    "${STORAGE_TARGET_DIR}/zim" \
+    "${STORAGE_TARGET_DIR}/books" \
+    "${STORAGE_TARGET_DIR}/maps" \
+    "${STORAGE_TARGET_DIR}/media" \
+    "${STORAGE_TARGET_DIR}/kb_uploads" \
+    "${STORAGE_TARGET_DIR}/acervo_odyssey"
+
+  sudo touch "${STORAGE_TARGET_DIR}/logs/admin.log"
 }
 
 download_management_compose_file() {
   local compose_file_path="${NOMAD_DIR}/compose.yml"
 
-  echo -e "${YELLOW}#${RESET} Downloading docker-compose file for management...\\n"
+  echo -e "${YELLOW}#${RESET} Baixando configuração Docker Compose de ${GITHUB_USER}/${GITHUB_REPO}...\n"
   if ! curl -fsSL "$MANAGEMENT_COMPOSE_FILE_URL" -o "$compose_file_path"; then
-    echo -e "${RED}#${RESET} Failed to download the docker compose file. Please check the URL and try again."
+    echo -e "${RED}#${RESET} Falha ao baixar management_compose.yaml. Verifique sua conexão e se o push foi feito no GitHub."
     exit 1
   fi
-  echo -e "${GREEN}#${RESET} Docker compose file downloaded successfully to $compose_file_path.\\n"
 
-  local app_key=$(generateRandomPass)
-  local db_root_password=$(generateRandomPass)
-  local db_user_password=$(generateRandomPass)
+  local app_key
+  local db_root_password
+  local db_user_password
+  app_key=$(generateRandomPass)
+  db_root_password=$(generateRandomPass)
+  db_user_password=$(generateRandomPass)
 
-  # If MySQL data directory exists from a previous install attempt, remove it.
-  # MySQL only initializes credentials on first startup when the data dir is empty.
-  # If stale data exists, MySQL ignores the new passwords above and uses the old ones,
-  # causing "Access denied" errors when the admin container tries to connect.
   if [[ -d "${NOMAD_DIR}/mysql" ]]; then
-    echo -e "${YELLOW}#${RESET} Removing existing MySQL data directory to ensure credentials match...\\n"
+    echo -e "${YELLOW}#${RESET} Limpando diretório MySQL de tentativa anterior para sincronizar credenciais...\n"
     sudo rm -rf "${NOMAD_DIR}/mysql"
   fi
 
-  # Inject dynamic env values into the compose file
-  echo -e "${YELLOW}#${RESET} Configuring docker-compose file env variables...\\n"
+  echo -e "${YELLOW}#${RESET} Configurando variáveis de ambiente e caminhos de armazenamento...\n"
+  sed -i "s|ghcr.io/oneithan/nexus-nomad:latest|${NOMAD_ADMIN_IMAGE}|g" "$compose_file_path"
   sed -i "s|URL=replaceme|URL=http://${local_ip_address}:8080|g" "$compose_file_path"
   sed -i "s|APP_KEY=replaceme|APP_KEY=${app_key}|g" "$compose_file_path"
-  
   sed -i "s|DB_PASSWORD=replaceme|DB_PASSWORD=${db_user_password}|g" "$compose_file_path"
   sed -i "s|MYSQL_ROOT_PASSWORD=replaceme|MYSQL_ROOT_PASSWORD=${db_root_password}|g" "$compose_file_path"
   sed -i "s|MYSQL_PASSWORD=replaceme|MYSQL_PASSWORD=${db_user_password}|g" "$compose_file_path"
-  
-  echo -e "${GREEN}#${RESET} Docker compose file configured successfully.\\n"
+
+  if [[ "${STORAGE_TARGET_DIR}" != "/opt/project-nomad/storage" ]]; then
+    sed -i "s|/opt/project-nomad/storage:/app/storage|${STORAGE_TARGET_DIR}:/app/storage|g" "$compose_file_path"
+    sed -i "s|NOMAD_STORAGE_PATH=/opt/project-nomad/storage|NOMAD_STORAGE_PATH=${STORAGE_TARGET_DIR}|g" "$compose_file_path"
+    sed -i "s|/opt/project-nomad/storage:/storage|${STORAGE_TARGET_DIR}:/storage|g" "$compose_file_path"
+  fi
+
+  echo -e "${GREEN}#${RESET} Arquivo compose.yml configurado com sucesso (Storage: ${STORAGE_TARGET_DIR}).\n"
 }
 
 download_helper_scripts() {
@@ -471,125 +336,78 @@ download_helper_scripts() {
   local stop_script_path="${NOMAD_DIR}/stop_nomad.sh"
   local update_script_path="${NOMAD_DIR}/update_nomad.sh"
 
-  echo -e "${YELLOW}#${RESET} Downloading helper scripts...\\n"
-  if ! curl -fsSL --retry 5 --retry-delay 3 "$START_SCRIPT_URL" -o "$start_script_path"; then
-    echo -e "${RED}#${RESET} Failed to download the start script. Please check the URL and try again."
+  echo -e "${YELLOW}#${RESET} Baixando scripts auxiliares (start, stop, update)...\n"
+  curl -fsSL --retry 5 --retry-delay 3 "$START_SCRIPT_URL" -o "$start_script_path" && chmod +x "$start_script_path"
+  curl -fsSL --retry 5 --retry-delay 3 "$STOP_SCRIPT_URL" -o "$stop_script_path" && chmod +x "$stop_script_path"
+  curl -fsSL --retry 5 --retry-delay 3 "$UPDATE_SCRIPT_URL" -o "$update_script_path" && chmod +x "$update_script_path"
+  echo -e "${GREEN}#${RESET} Scripts auxiliares instalados em ${NOMAD_DIR}.\n"
+}
+
+prepare_nomad_admin_image() {
+  echo -e "${YELLOW}#${RESET} Obtendo imagem do Nexus Project NOMAD (${NOMAD_ADMIN_IMAGE})...\n"
+  if sudo docker pull "${NOMAD_ADMIN_IMAGE}"; then
+    echo -e "${GREEN}#${RESET} Imagem pré-compilada baixada com sucesso do GitHub Container Registry!\n"
+    return 0
+  fi
+
+  echo -e "${YELLOW}#${RESET} A imagem ainda não está pública no GHCR (ou o GitHub Actions ainda está compilando)."
+  echo -e "${YELLOW}#${RESET} Ativando compilação local automática direto do repositório https://github.com/${GITHUB_USER}/${GITHUB_REPO}.git ...\n"
+
+  local src_dir="${NOMAD_DIR}/src"
+  if [[ -d "${src_dir}/.git" ]]; then
+    sudo git -C "${src_dir}" fetch origin "${GITHUB_BRANCH}"
+    sudo git -C "${src_dir}" reset --hard "origin/${GITHUB_BRANCH}"
+  else
+    sudo rm -rf "${src_dir}"
+    if ! sudo git clone --depth 1 --branch "${GITHUB_BRANCH}" "https://github.com/${GITHUB_USER}/${GITHUB_REPO}.git" "${src_dir}"; then
+      echo -e "${RED}#${RESET} Falha ao clonar https://github.com/${GITHUB_USER}/${GITHUB_REPO}.git. Verifique se o repositório está acessível."
+      exit 1
+    fi
+  fi
+
+  local short_sha
+  short_sha=$(sudo git -C "${src_dir}" rev-parse --short HEAD 2>/dev/null || echo "local")
+
+  echo -e "${YELLOW}#${RESET} Compilando imagem Docker localmente (pode levar de 3 a 8 minutos na primeira vez)...\n"
+  if ! sudo docker build \
+      --build-arg VERSION="1.0.0-nexus" \
+      --build-arg BUILD_DATE="$(date -u +"%Y-%m-%dT%H:%M:%SZ")" \
+      --build-arg VCS_REF="${short_sha}" \
+      -t "${NOMAD_ADMIN_IMAGE}" \
+      "${src_dir}"; then
+    echo -e "${RED}#${RESET} Falha ao compilar a imagem Docker do Nexus NOMAD."
     exit 1
   fi
-  chmod +x "$start_script_path"
-
-  if ! curl -fsSL --retry 5 --retry-delay 3 "$STOP_SCRIPT_URL" -o "$stop_script_path"; then
-    echo -e "${RED}#${RESET} Failed to download the stop script. Please check the URL and try again."
-    exit 1
-  fi
-  chmod +x "$stop_script_path"
-
-  if ! curl -fsSL --retry 5 --retry-delay 3 "$UPDATE_SCRIPT_URL" -o "$update_script_path"; then
-    echo -e "${RED}#${RESET} Failed to download the update script. Please check the URL and try again."
-    exit 1
-  fi
-  chmod +x "$update_script_path"
-
-  echo -e "${GREEN}#${RESET} Helper scripts downloaded successfully to $start_script_path, $stop_script_path, and $update_script_path.\\n"
+  echo -e "${GREEN}#${RESET} Imagem ${NOMAD_ADMIN_IMAGE} compilada localmente com sucesso!\n"
 }
 
 start_management_containers() {
-  echo -e "${YELLOW}#${RESET} Starting management containers using docker compose...\\n"
+  echo -e "${YELLOW}#${RESET} Subindo os contêineres do Centro de Comando via Docker Compose...\n"
   if ! sudo docker compose -p project-nomad -f "${NOMAD_DIR}/compose.yml" up -d; then
-    echo -e "${RED}#${RESET} Failed to start management containers. Please check the logs and try again."
+    echo -e "${RED}#${RESET} Falha ao iniciar os contêineres. Verifique os logs com: sudo docker compose -p project-nomad -f ${NOMAD_DIR}/compose.yml logs"
     exit 1
   fi
-  echo -e "${GREEN}#${RESET} Management containers started successfully.\\n"
+  echo -e "${GREEN}#${RESET} Contêineres do Nexus Project NOMAD iniciados com sucesso!\n"
 }
 
 get_local_ip() {
   local_ip_address=$(hostname -I | awk '{print $1}')
   if [[ -z "$local_ip_address" ]]; then
-    echo -e "${RED}#${RESET} Unable to determine local IP address. Please check your network configuration."
+    echo -e "${RED}#${RESET} Não foi possível detectar o IP local. Verifique o cabo de rede ou Wi-Fi."
     exit 1
   fi
 }
+
 verify_gpu_setup() {
-  # This function only displays GPU setup status and is completely non-blocking
-  # It never exits or returns error codes - purely informational
-  
-  echo -e "\\n${YELLOW}#${RESET} GPU Setup Verification\\n"
-  echo -e "${YELLOW}===========================================${RESET}\\n"
-  
-  # Check if NVIDIA GPU is present
-  if command -v nvidia-smi &> /dev/null; then
-    echo -e "${GREEN}✓${RESET} NVIDIA GPU detected:"
-    nvidia-smi --query-gpu=name,memory.total --format=csv,noheader 2>/dev/null | while read -r line; do
-      echo -e "  ${WHITE_R}$line${RESET}"
-    done
-    echo ""
-  else
-    echo -e "${YELLOW}○${RESET} No NVIDIA GPU detected (nvidia-smi not available)\\n"
-  fi
-  
-  # Check if NVIDIA Container Toolkit is installed
-  if command -v nvidia-ctk &> /dev/null; then
-    echo -e "${GREEN}✓${RESET} NVIDIA Container Toolkit installed: $(nvidia-ctk --version 2>/dev/null | head -n1)\\n"
-  else
-    echo -e "${YELLOW}○${RESET} NVIDIA Container Toolkit not installed\\n"
-  fi
-  
-  # Check if Docker has NVIDIA runtime
-  if docker info 2>/dev/null | grep -q "nvidia"; then
-    echo -e "${GREEN}✓${RESET} Docker NVIDIA runtime configured\\n"
-  else
-    echo -e "${YELLOW}○${RESET} Docker NVIDIA runtime not detected\\n"
-  fi
-  
-  # Check for AMD GPU — restrict to display controller classes to avoid false positives
-  # from AMD CPU host bridges, PCI bridges, and chipset devices.
   local has_amd_gpu='false'
   local amd_gfx_version=''
   if command -v lspci &> /dev/null; then
     if lspci 2>/dev/null | grep -iE "VGA|3D controller|Display" | grep -iE "amd|radeon" &> /dev/null; then
       has_amd_gpu='true'
-      echo -e "${GREEN}✓${RESET} AMD GPU detected — ROCm acceleration will be configured automatically when AI Assistant is installed.\\n"
-
-      # Map AMD codename → gfx version so the admin can pick the right HSA_OVERRIDE_GFX_VERSION.
-      # gfx1030/1100/1101/1102 are on AMD's official ROCm allowlist and need NO override —
-      # forcing one (e.g. 11.0.0) breaks GPU discovery on these. Other variants do need it.
-      local amd_devices
-      amd_devices=$(lspci -vmm 2>/dev/null | awk -F'\t' '/^Class:.*(VGA|3D|Display)/{c=1} c && /^Device:/{print $2; c=0}')
-      if echo "${amd_devices}" | grep -iq 'Navi 21'; then
-        amd_gfx_version='gfx1030'
-      elif echo "${amd_devices}" | grep -iq 'Navi 22'; then
-        amd_gfx_version='gfx1031'
-      elif echo "${amd_devices}" | grep -iq 'Navi 23'; then
-        amd_gfx_version='gfx1032'
-      elif echo "${amd_devices}" | grep -iq 'Navi 24'; then
-        amd_gfx_version='gfx1034'
-      elif echo "${amd_devices}" | grep -iq 'Rembrandt'; then
-        amd_gfx_version='gfx1035'
-      elif echo "${amd_devices}" | grep -iEq 'Phoenix[0-9]?|Hawk ?Point ?[0-9]?|Radeon (780M|760M)'; then
-        # Phoenix (Ryzen 7040) / Hawk Point (Ryzen 8040) — 780M & 760M are both gfx1103.
-        # lspci device strings vary (Phoenix1/Phoenix2/Phoenix3, "Hawk Point", "HawkPoint1", or the bare
-        # "Radeon 780M Graphics" marketing name), so match all of them or the marker goes
-        # missing and the 780M silently drops to CPU. Kept before the Strix branches so a
-        # "Radeon 780M" string can't be miscaught. See gfx1103 regression.
-        amd_gfx_version='gfx1103'
-      elif echo "${amd_devices}" | grep -iEq 'Strix Halo'; then
-        amd_gfx_version='gfx1151'
-      elif echo "${amd_devices}" | grep -iEq 'Strix( Point)?'; then
-        amd_gfx_version='gfx1150'
-      elif echo "${amd_devices}" | grep -iq 'Navi 31'; then
-        amd_gfx_version='gfx1100'
-      elif echo "${amd_devices}" | grep -iq 'Navi 32'; then
-        amd_gfx_version='gfx1101'
-      elif echo "${amd_devices}" | grep -iq 'Navi 33'; then
-        amd_gfx_version='gfx1102'
-      fi
     fi
   fi
 
-  # Write detected GPU type to a marker file the admin container can read. The admin
-  # container lacks lspci and AMD GPUs don't register a Docker runtime, so this is the
-  # only reliable way for the admin to know an AMD GPU is present at install time.
-  local gpu_marker_path="${NOMAD_DIR}/storage/.nomad-gpu-type"
+  local gpu_marker_path="${STORAGE_TARGET_DIR}/.nomad-gpu-type"
   if command -v nvidia-smi &> /dev/null; then
     echo 'nvidia' | sudo tee "${gpu_marker_path}" > /dev/null 2>&1 || true
   elif [[ "${has_amd_gpu}" == 'true' ]]; then
@@ -598,45 +416,27 @@ verify_gpu_setup() {
     sudo rm -f "${gpu_marker_path}" 2>/dev/null || true
   fi
 
-  # Companion marker used by the admin to pick the right HSA_OVERRIDE_GFX_VERSION for
-  # the detected card. Absence of this file means "unknown gfx" — the admin falls back
-  # to its built-in default. Always rewrite (or remove) on install to keep state fresh.
-  local amd_gfx_marker_path="${NOMAD_DIR}/storage/.nomad-amd-gfx"
+  local amd_gfx_marker_path="${STORAGE_TARGET_DIR}/.nomad-amd-gfx"
   if [[ -n "${amd_gfx_version}" ]]; then
     echo "${amd_gfx_version}" | sudo tee "${amd_gfx_marker_path}" > /dev/null 2>&1 || true
   else
     sudo rm -f "${amd_gfx_marker_path}" 2>/dev/null || true
   fi
-
-  echo -e "${YELLOW}===========================================${RESET}\\n"
-
-  # Summary
-  if command -v nvidia-smi &> /dev/null && docker info 2>/dev/null | grep -q "nvidia"; then
-    echo -e "${GREEN}#${RESET} GPU acceleration is properly configured! The AI Assistant will use your GPU.\\n"
-  elif [[ "${has_amd_gpu}" == 'true' ]]; then
-    echo -e "${GREEN}#${RESET} GPU acceleration will be enabled (AMD/ROCm) when AI Assistant is installed from the dashboard.\\n"
-  else
-    echo -e "${YELLOW}#${RESET} GPU acceleration not detected. The AI Assistant will run in CPU-only mode.\\n"
-    if command -v nvidia-smi &> /dev/null && ! docker info 2>/dev/null | grep -q "nvidia"; then
-      echo -e "${YELLOW}#${RESET} Tip: Your GPU is detected but Docker runtime is not configured.\\n"
-      echo -e "${YELLOW}#${RESET} Try restarting Docker: ${WHITE_R}sudo systemctl restart docker${RESET}\\n"
-    fi
-  fi
 }
 
 success_message() {
-  echo -e "${GREEN}#${RESET} Project NOMAD installation completed successfully!\\n"
-  echo -e "${GREEN}#${RESET} Installation files are located at /opt/project-nomad\\n\n"
-  echo -e "${GREEN}#${RESET} Project NOMAD's Command Center should automatically start whenever your device reboots. However, if you need to start it manually, you can always do so by running: ${WHITE_R}${NOMAD_DIR}/start_nomad.sh${RESET}\\n"
-  echo -e "${GREEN}#${RESET} You can now access the management interface at http://localhost:8080 or http://${local_ip_address}:8080\\n"
-  echo -e "${GREEN}#${RESET} Thank you for supporting Project NOMAD!\\n"
+  echo -e "${GREEN}#########################################################################${RESET}"
+  echo -e "${GREEN}#${RESET} Instalação do ${GREEN}Nexus Project NOMAD (PT-BR)${RESET} concluída com sucesso!"
+  echo -e "${GREEN}#${RESET} Sistema / Banco de Dados (NVMe): ${WHITE_R}${NOMAD_DIR}${RESET}"
+  echo -e "${GREEN}#${RESET} Armazenamento do Acervo:         ${WHITE_R}${STORAGE_TARGET_DIR}${RESET}"
+  echo -e "${GREEN}#${RESET}"
+  echo -e "${GREEN}#${RESET} Acesse o Centro de Comando pelo navegador de qualquer PC da rede:"
+  echo -e "${GREEN}#${RESET}   -> ${WHITE_R}http://${local_ip_address}:8080${RESET}"
+  echo -e "${GREEN}#${RESET}"
+  echo -e "${GREEN}#${RESET} Dica para IA Remota (sem pesar neste notebook):"
+  echo -e "${GREEN}#${RESET}   Abra Configurações -> Modelos & IA Remota e conecte o IP do seu servidor Ollama na LAN."
+  echo -e "${GREEN}#########################################################################${RESET}\n"
 }
-
-###################################################################################################################################################################################################
-#                                                                                                                                                                                                 #
-#                                                                                           Main Script                                                                                           #
-#                                                                                                                                                                                                 #
-###################################################################################################################################################################################################
 
 # Pre-flight checks
 check_is_debian_based
@@ -654,41 +454,10 @@ ensure_docker_installed
 check_docker_compose
 setup_nvidia_container_toolkit
 get_local_ip
-create_nomad_directory
+detect_and_create_directories
 download_helper_scripts
 download_management_compose_file
+prepare_nomad_admin_image
 start_management_containers
 verify_gpu_setup
 success_message
-
-# free_space_check() {
-#   if [[ "$(df -B1 / | awk 'NR==2{print $4}')" -le '5368709120' ]]; then
-#     header_red
-#     echo -e "${YELLOW}#${RESET} You only have $(df -B1 / | awk 'NR==2{print $4}' | awk '{ split( "B KB MB GB TB PB EB ZB YB" , v ); s=1; while( $1>1024 && s<9 ){ $1/=1024; s++ } printf "%.1f %s", $1, v[s] }') of disk space available on \"/\"... \\n"
-#     while true; do
-#       read -rp $'\033[39m#\033[0m Do you want to proceed with running the script? (y/N) ' yes_no
-#       case "$yes_no" in
-#          [Nn]*|"")
-#             free_space_check_response="Cancel script"
-#             free_space_check_date="$(date +%s)"
-#             echo -e "${YELLOW}#${RESET} OK... Please free up disk space before running the script again..."
-#             cancel_script
-#             break;;
-#          [Yy]*)
-#             free_space_check_response="Proceed at own risk"
-#             free_space_check_date="$(date +%s)"
-#             echo -e "${YELLOW}#${RESET} OK... Proceeding with the script.. please note that failures may occur due to not enough disk space... \\n"; sleep 10
-#             break;;
-#          *) echo -e "\\n${RED}#${RESET} Invalid input, please answer Yes or No (y/n)...\\n"; sleep 3;;
-#       esac
-#     done
-#     if [[ -n "$(command -v jq)" ]]; then
-#       if [[ "$(dpkg-query --showformat='${version}' --show jq 2> /dev/null | sed -e 's/.*://' -e 's/-.*//g' -e 's/[^0-9.]//g' -e 's/\.//g' | sort -V | tail -n1)" -ge "16" && -e "${eus_dir}/db/db.json" ]]; then
-#         jq '.scripts."'"${script_name}"'" += {"warnings": {"low-free-disk-space": {"response": "'"${free_space_check_response}"'", "detected-date": "'"${free_space_check_date}"'"}}}' "${eus_dir}/db/db.json" > "${eus_dir}/db/db.json.tmp" 2>> "${eus_dir}/logs/eus-database-management.log"
-#       else
-#         jq '.scripts."'"${script_name}"'" = (.scripts."'"${script_name}"'" | . + {"warnings": {"low-free-disk-space": {"response": "'"${free_space_check_response}"'", "detected-date": "'"${free_space_check_date}"'"}}})' "${eus_dir}/db/db.json" > "${eus_dir}/db/db.json.tmp" 2>> "${eus_dir}/logs/eus-database-management.log"
-#       fi
-#       eus_database_move
-#     fi
-#   fi
-# }

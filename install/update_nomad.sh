@@ -1,167 +1,109 @@
 #!/bin/bash
 
-# Project NOMAD Update Script
-
-###################################################################################################################################################################################################
-
-# Script                | Project NOMAD Update Script
-# Version               | 1.0.1
-# Author                | Crosstalk Solutions, LLC
-# Website               | https://crosstalksolutions.com
-
-###################################################################################################################################################################################################
-#                                                                                                                                                                                                 #
-#                                                                                           Color Codes                                                                                           #
-#                                                                                                                                                                                                 #
-###################################################################################################################################################################################################
+# Nexus Project NOMAD — Script de Atualização (PT-BR)
 
 RESET='\033[0m'
 YELLOW='\033[1;33m'
-WHITE_R='\033[39m' # Same as GRAY_R for terminals with white background.
-GRAY_R='\033[39m'
-RED='\033[1;31m' # Light Red.
-GREEN='\033[1;32m' # Light Green.
+WHITE_R='\033[39m'
+RED='\033[1;31m'
+GREEN='\033[1;32m'
 
-###################################################################################################################################################################################################
-#                                                                                                                                                                                                 #
-#                                                                                           Functions                                                                                             #
-#                                                                                                                                                                                                 #
-###################################################################################################################################################################################################
-
-header_red() {
-  if [[ "${script_option_debug}" != 'true' ]]; then clear; clear; fi
-  echo -e "${RED}#########################################################################${RESET}\\n"
-}
+NOMAD_DIR="/opt/project-nomad"
+GITHUB_USER="${GITHUB_USER:-ONeithan}"
+GITHUB_REPO="${GITHUB_REPO:-Nexus-Nomad}"
+GITHUB_BRANCH="${GITHUB_BRANCH:-main}"
+GITHUB_USER_LC=$(echo "${GITHUB_USER}" | tr '[:upper:]' '[:lower:]')
+GITHUB_REPO_LC=$(echo "${GITHUB_REPO}" | tr '[:upper:]' '[:lower:]')
+NOMAD_ADMIN_IMAGE="ghcr.io/${GITHUB_USER_LC}/${GITHUB_REPO_LC}:latest"
+local_ip_address=''
 
 check_has_sudo() {
-  if sudo -n true 2>/dev/null; then
-    echo -e "${GREEN}#${RESET} User has sudo permissions.\\n"
-  else
-    echo "User does not have sudo permissions"
-    header_red
-    echo -e "${RED}#${RESET} This script requires sudo permissions to run. Please run the script with sudo.\\n"
-    echo -e "${RED}#${RESET} For example: sudo bash $(basename "$0")"
+  if ! sudo -v; then
+    echo -e "${RED}#${RESET} Execute este script com sudo: sudo bash $(basename "$0")\n"
     exit 1
   fi
 }
 
 check_is_bash() {
   if [[ -z "$BASH_VERSION" ]]; then
-    header_red
-    echo -e "${RED}#${RESET} This script requires bash to run. Please run the script using bash.\\n"
-    echo -e "${RED}#${RESET} For example: bash $(basename "$0")"
+    echo -e "${RED}#${RESET} Execute este script com bash: sudo bash $(basename "$0")\n"
     exit 1
   fi
-    echo -e "${GREEN}#${RESET} This script is running in bash.\\n"
 }
 
 check_is_debian_based() {
   if [[ ! -f /etc/debian_version ]]; then
-    header_red
-    echo -e "${RED}#${RESET} This script is designed to run on Debian-based systems only.\\n"
-    echo -e "${RED}#${RESET} Please run this script on a Debian-based system and try again."
+    echo -e "${RED}#${RESET} Este script suporta apenas sistemas baseados em Debian.\n"
     exit 1
   fi
-    echo -e "${GREEN}#${RESET} This script is running on a Debian-based system.\\n"
 }
 
-get_update_confirmation(){
-  read -p "This script will update Project NOMAD and its dependencies on your machine. No data loss is expected, but you should always back up your data before proceeding. Are you sure you want to continue? (y/n): " choice
+get_update_confirmation() {
+  read -p "Deseja atualizar o Nexus Project NOMAD a partir do GitHub (${GITHUB_USER}/${GITHUB_REPO})? Nenhum dado será apagado. (s/N): " choice
   case "$choice" in
-    y|Y )
-      echo -e "${GREEN}#${RESET} User chose to continue with the update."
-      ;;
-    n|N )
-      echo -e "${RED}#${RESET} User chose not to continue with the update."
-      exit 0
+    s|S|y|Y )
+      echo -e "${GREEN}#${RESET} Iniciando atualização...\n"
       ;;
     * )
-      echo "Invalid Response"
-      echo "User chose not to continue with the update."
+      echo "Atualização cancelada."
       exit 0
       ;;
   esac
 }
 
-ensure_docker_installed_and_running() {
+ensure_docker_ready() {
   if ! command -v docker &> /dev/null; then
-    echo -e "${RED}#${RESET} Docker is not installed. This is unexpected, as Project NOMAD requires Docker to run. Did you mean to use the install script instead of the update script?"
+    echo -e "${RED}#${RESET} Docker não está instalado. Use o script install_nomad.sh primeiro."
     exit 1
   fi
-
   if ! systemctl is-active --quiet docker; then
-    echo -e "${RED}#${RESET} Docker is not running. Attempting to start Docker..."
     sudo systemctl start docker
-    if ! systemctl is-active --quiet docker; then
-      echo -e "${RED}#${RESET} Failed to start Docker. Please start Docker and try again."
-      exit 1
+  fi
+  if [ ! -f "${NOMAD_DIR}/compose.yml" ]; then
+    echo -e "${RED}#${RESET} Arquivo ${NOMAD_DIR}/compose.yml não encontrado."
+    exit 1
+  fi
+}
+
+update_and_recreate() {
+  echo -e "${YELLOW}#${RESET} Buscando imagem mais recente (${NOMAD_ADMIN_IMAGE})..."
+  if ! sudo docker pull "${NOMAD_ADMIN_IMAGE}"; then
+    echo -e "${YELLOW}#${RESET} GHCR indisponível ou privado; recompilando direto do GitHub (${GITHUB_USER}/${GITHUB_REPO})..."
+    local src_dir="${NOMAD_DIR}/src"
+    if [[ -d "${src_dir}/.git" ]]; then
+      sudo git -C "${src_dir}" fetch origin "${GITHUB_BRANCH}"
+      sudo git -C "${src_dir}" reset --hard "origin/${GITHUB_BRANCH}"
+    else
+      sudo rm -rf "${src_dir}"
+      sudo git clone --depth 1 --branch "${GITHUB_BRANCH}" "https://github.com/${GITHUB_USER}/${GITHUB_REPO}.git" "${src_dir}"
     fi
+    sudo docker build --build-arg VERSION="1.0.0-nexus" -t "${NOMAD_ADMIN_IMAGE}" "${src_dir}"
   fi
-}
 
-check_docker_compose() {
-  # Check if 'docker compose' (v2 plugin) is available
-  if ! docker compose version &>/dev/null; then
-    echo -e "${RED}#${RESET} Docker Compose v2 is not installed or not available as a Docker plugin."
-    echo -e "${YELLOW}#${RESET} This script requires 'docker compose' (v2), not 'docker-compose' (v1)."
-    echo -e "${YELLOW}#${RESET} Please read the Docker documentation at https://docs.docker.com/compose/install/ for instructions on how to install Docker Compose v2."
-    exit 1
-  fi
-}
+  echo -e "${YELLOW}#${RESET} Atualizando contêineres auxiliares..."
+  sudo docker compose -p project-nomad -f "${NOMAD_DIR}/compose.yml" pull --ignore-pull-failures || true
 
-ensure_docker_compose_file_exists() {
-  if [ ! -f "/opt/project-nomad/compose.yml" ]; then
-    echo -e "${RED}#${RESET} compose.yml file not found. Please ensure it exists at /opt/project-nomad/compose.yml."
-    exit 1
-  fi
-}
-
-force_recreate() {
-  echo -e "${YELLOW}#${RESET} Pulling the latest Docker images..."
-  if ! docker compose -p project-nomad -f /opt/project-nomad/compose.yml pull; then
-    echo -e "${RED}#${RESET} Failed to pull the latest Docker images. Please check your network connection and the Docker registry status, then try again."
-    exit 1
-  fi
-  
-  echo -e "${YELLOW}#${RESET} Forcing recreation of containers..."
-  if ! docker compose -p project-nomad -f /opt/project-nomad/compose.yml up -d --force-recreate; then
-    echo -e "${RED}#${RESET} Failed to recreate containers. Please check the Docker logs for more details."
+  echo -e "${YELLOW}#${RESET} Recriando contêineres..."
+  if ! sudo docker compose -p project-nomad -f "${NOMAD_DIR}/compose.yml" up -d --force-recreate; then
+    echo -e "${RED}#${RESET} Falha ao recriar os contêineres."
     exit 1
   fi
 }
 
 get_local_ip() {
   local_ip_address=$(hostname -I | awk '{print $1}')
-  if [[ -z "$local_ip_address" ]]; then
-    echo -e "${RED}#${RESET} Unable to determine local IP address. Please check your network configuration."
-    # Don't exit if we can't determine the local IP address, it's not critical for the installation
-  fi
 }
 
 success_message() {
-  echo -e "${GREEN}#${RESET} Project NOMAD update completed successfully!\\n"
-  echo -e "${GREEN}#${RESET} Installation files are located at /opt/project-nomad\\n\n"
-  echo -e "${GREEN}#${RESET} Project NOMAD's Command Center should automatically start whenever your device reboots. However, if you need to start it manually, you can always do so by running: ${WHITE_R}${nomad_dir}/start_nomad.sh${RESET}\\n"
-  echo -e "${GREEN}#${RESET} You can now access the management interface at http://localhost:8080 or http://${local_ip_address}:8080\\n"
-  echo -e "${GREEN}#${RESET} Thank you for supporting Project NOMAD!\\n"
+  echo -e "${GREEN}#${RESET} Nexus Project NOMAD atualizado com sucesso!\n"
+  echo -e "${GREEN}#${RESET} Painel disponível em: http://${local_ip_address}:8080\n"
 }
 
-###################################################################################################################################################################################################
-#                                                                                                                                                                                                 #
-#                                                                                           Main Script                                                                                           #
-#                                                                                                                                                                                                 #
-###################################################################################################################################################################################################
-
-# Pre-flight checks
 check_is_debian_based
 check_is_bash
 check_has_sudo
-
-# Main update
 get_update_confirmation
-ensure_docker_installed_and_running
-check_docker_compose
-ensure_docker_compose_file_exists
-force_recreate
+ensure_docker_ready
+update_and_recreate
 get_local_ip
 success_message

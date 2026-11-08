@@ -273,21 +273,75 @@ export default function ModelsPage(props: {
 
   return (
     <SettingsLayout>
-      <Head title={`${aiAssistantName} Settings | Project NOMAD`} />
+      <Head title="Modelos & IA Remota | Nexus NOMAD" />
       <div className="xl:pl-72 w-full">
-        <main className="px-12 py-6">
-          <h1 className="text-4xl font-semibold mb-4">{aiAssistantName}</h1>
-          <p className="text-text-muted mb-4">
-            Easily manage the {aiAssistantName}'s settings and installed models. We recommend
-            starting with smaller models first to see how they perform on your system before moving
-            on to larger ones.
+        <main className="px-6 lg:px-12 py-6">
+          <h1 className="text-4xl font-semibold text-desert-green mb-3">
+            Modelos &amp; Conexão de IA Remota
+          </h1>
+          <p className="text-text-muted mb-6">
+            Conecte o Nexus NOMAD a um servidor Ollama ou OpenAI-compatível rodando em outra máquina
+            da sua rede local (sem consumir CPU ou RAM deste servidor), ou gerencie os ajustes de RAG
+            e respostas do Assistente.
           </p>
-          {!isInstalled && (
+
+          <StyledSectionHeader title="Conexão de IA Remota na Rede Local (Recomendado)" className="mt-4 mb-4" />
+          <div className="bg-surface-primary rounded-lg border-2 border-desert-green p-6 mb-8 shadow-sm">
+            <p className="text-sm text-text-secondary mb-4">
+              Aponte para o Ollama ou servidor compatível com OpenAI rodando em outro computador do
+              seu homelab (ex: Dell OptiPlex ou PC principal). No servidor remoto onde o Ollama roda,
+              certifique-se de iniciá-lo com{' '}
+              <code className="bg-surface-secondary px-1.5 py-0.5 rounded font-mono">
+                OLLAMA_HOST=0.0.0.0
+              </code>
+              . Ao clicar em <strong>Salvar e Testar</strong>, o Assistente de IA e a busca semântica
+              (Qdrant) serão ativados automaticamente sem rodar modelos pesados localmente!
+            </p>
+            <div className="flex flex-col sm:flex-row sm:items-end gap-3">
+              <div className="flex-1">
+                <Input
+                  name="remoteOllamaUrl"
+                  label="URL do Servidor Remoto Ollama / OpenAI na LAN"
+                  placeholder="http://192.168.1.100:11434  (ou :1234 para LM Studio / API OpenAI)"
+                  value={remoteOllamaUrl}
+                  onChange={(e) => {
+                    setRemoteOllamaUrl(e.target.value)
+                    setRemoteOllamaError(null)
+                  }}
+                />
+                {remoteOllamaError && (
+                  <p className="text-sm text-red-600 mt-1">{remoteOllamaError}</p>
+                )}
+              </div>
+              <StyledButton
+                variant="primary"
+                onClick={handleSaveRemoteOllama}
+                loading={remoteOllamaSaving}
+                disabled={remoteOllamaSaving || !remoteOllamaUrl}
+                className="mb-0.5"
+              >
+                Salvar e Testar
+              </StyledButton>
+              {props.models.settings.remoteOllamaUrl && (
+                <StyledButton
+                  variant="danger"
+                  onClick={handleClearRemoteOllama}
+                  loading={remoteOllamaSaving}
+                  disabled={remoteOllamaSaving}
+                  className="mb-0.5"
+                >
+                  Desconectar
+                </StyledButton>
+              )}
+            </div>
+          </div>
+
+          {!isInstalled && !props.models.settings.remoteOllamaUrl && (
             <Alert
-              title={`${aiAssistantName}'s dependencies are not installed. Please install them to manage AI models.`}
+              title="Nenhum servidor de IA conectado ainda. Informe acima a URL do seu Ollama remoto na LAN e clique em 'Salvar e Testar'."
               type="warning"
               variant="solid"
-              className="!mt-6"
+              className="!mt-2 !mb-6"
             />
           )}
           {isInstalled && (
@@ -298,7 +352,7 @@ export default function ModelsPage(props: {
             />
           )}
 
-          <StyledSectionHeader title="Settings" className="mt-8 mb-4" />
+          <StyledSectionHeader title="Ajustes do Assistente e Base de Conhecimento (RAG)" className="mt-8 mb-4" />
           <div className="bg-surface-primary rounded-lg border-2 border-border-subtle p-6">
             <div className="space-y-4">
               <Switch
@@ -473,51 +527,6 @@ export default function ModelsPage(props: {
                 </tbody>
               </table>
             )}
-          </div>
-
-          <StyledSectionHeader title="Remote Connection" className="mt-8 mb-4" />
-          <div className="bg-surface-primary rounded-lg border-2 border-border-subtle p-6">
-            <p className="text-sm text-text-secondary mb-4">
-              Connect to any OpenAI-compatible API server — Ollama, LM Studio, llama.cpp, and others are all supported.
-              For remote Ollama instances, the host must be started with <code className="bg-surface-secondary px-1 rounded">OLLAMA_HOST=0.0.0.0</code>.
-            </p>
-            <div className="flex items-end gap-3">
-              <div className="flex-1">
-                <Input
-                  name="remoteOllamaUrl"
-                  label="Remote Ollama/OpenAI API URL"
-                  placeholder="http://192.168.1.100:11434  (or :1234 for OpenAI API Compatible Apps)"
-                  value={remoteOllamaUrl}
-                  onChange={(e) => {
-                    setRemoteOllamaUrl(e.target.value)
-                    setRemoteOllamaError(null)
-                  }}
-                />
-                {remoteOllamaError && (
-                  <p className="text-sm text-red-600 mt-1">{remoteOllamaError}</p>
-                )}
-              </div>
-              <StyledButton
-                variant="primary"
-                onClick={handleSaveRemoteOllama}
-                loading={remoteOllamaSaving}
-                disabled={remoteOllamaSaving || !remoteOllamaUrl}
-                className="mb-0.5"
-              >
-                Save &amp; Test
-              </StyledButton>
-              {props.models.settings.remoteOllamaUrl && (
-                <StyledButton
-                  variant="danger"
-                  onClick={handleClearRemoteOllama}
-                  loading={remoteOllamaSaving}
-                  disabled={remoteOllamaSaving}
-                  className="mb-0.5"
-                >
-                  Clear
-                </StyledButton>
-              )}
-            </div>
           </div>
 
           <ActiveModelDownloads withHeader />

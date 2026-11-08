@@ -38,11 +38,11 @@ export default class ServiceSeeder extends BaseSeeder {
     // ── Core / original services ──────────────────────────────────────────────
     {
       service_name: SERVICE_NAMES.KIWIX,
-      friendly_name: 'Information Library',
+      friendly_name: 'Biblioteca Offline (Kiwix)',
       powered_by: 'Kiwix',
       display_order: 1,
       description:
-        'Offline access to Wikipedia, medical references, how-to guides, and encyclopedias',
+        'Acesso offline à Wikipédia em português, guias médicos, manuais técnicos e enciclopédias',
       icon: 'IconBooks',
       container_image: 'ghcr.io/kiwix/kiwix-serve:3.8.1',
       source_repo: 'https://github.com/kiwix/kiwix-tools',
@@ -65,10 +65,10 @@ export default class ServiceSeeder extends BaseSeeder {
     },
     {
       service_name: SERVICE_NAMES.QDRANT,
-      friendly_name: 'Qdrant Vector Database',
+      friendly_name: 'Banco Vetorial Qdrant',
       powered_by: null,
       display_order: 100,
-      description: 'Vector database for storing and searching embeddings',
+      description: 'Banco de dados vetorial para busca semântica de documentos (RAG)',
       icon: 'IconRobot',
       container_image: 'qdrant/qdrant:v1.16',
       source_repo: 'https://github.com/qdrant/qdrant',
@@ -93,10 +93,10 @@ export default class ServiceSeeder extends BaseSeeder {
     },
     {
       service_name: SERVICE_NAMES.OLLAMA,
-      friendly_name: 'AI Assistant',
+      friendly_name: 'Assistente de IA',
       powered_by: 'Ollama',
       display_order: 3,
-      description: 'Local AI chat that runs entirely on your hardware - no internet required',
+      description: 'Chat de Inteligência Artificial integrado à sua rede local (suporta conexão de IA Remota via LAN)',
       icon: 'IconWand',
       container_image: 'ollama/ollama:0.33.3',
       source_repo: 'https://github.com/ollama/ollama',
@@ -119,10 +119,10 @@ export default class ServiceSeeder extends BaseSeeder {
     },
     {
       service_name: SERVICE_NAMES.CYBERCHEF,
-      friendly_name: 'Data Tools',
+      friendly_name: 'Ferramentas de Dados',
       powered_by: 'CyberChef',
       display_order: 11,
-      description: 'Swiss Army knife for data encoding, encryption, and analysis',
+      description: 'Canivete suíço offline para codificação, criptografia, hashes e análise de dados',
       icon: 'IconChefHat',
       container_image: 'ghcr.io/gchq/cyberchef:10.24.0',
       source_repo: 'https://github.com/gchq/CyberChef',
@@ -144,10 +144,10 @@ export default class ServiceSeeder extends BaseSeeder {
     },
     {
       service_name: SERVICE_NAMES.FLATNOTES,
-      friendly_name: 'Notes',
+      friendly_name: 'Bloco de Notas',
       powered_by: 'FlatNotes',
       display_order: 10,
-      description: 'Simple note-taking app with local storage',
+      description: 'Caderno de anotações rápidas em Markdown salvo diretamente no armazenamento local',
       icon: 'IconNotes',
       container_image: 'dullage/flatnotes:v5.5.4',
       source_repo: 'https://github.com/dullage/flatnotes',
@@ -177,10 +177,10 @@ export default class ServiceSeeder extends BaseSeeder {
       // schema. Existing 0.12.8 installs are sunset via the deprecate-legacy-kolibri migration and
       // keep running on 8300 until uninstalled; content is re-imported into the fresh Gen 2 install.
       service_name: SERVICE_NAMES.KOLIBRI_GEN2,
-      friendly_name: 'Education Platform (Gen 2)',
+      friendly_name: 'Plataforma Educacional (Kolibri)',
       powered_by: 'Kolibri',
       display_order: 2,
-      description: 'Interactive learning platform with video courses and exercises',
+      description: 'Escola interativa offline com cursos em vídeo, Khan Academy em português e exercícios',
       icon: 'IconSchool',
       container_image: 'learningequality/kolibri:0.19.4',
       source_repo: 'https://github.com/learningequality/kolibri',
@@ -217,7 +217,7 @@ export default class ServiceSeeder extends BaseSeeder {
       friendly_name: 'Stirling PDF',
       powered_by: 'Stirling-Tools',
       display_order: 20,
-      description: 'Locally-hosted PDF manipulation tool — merge, split, compress, convert, and more',
+      description: 'Estúdio completo de PDF offline — juntar, dividir, comprimir, converter e OCR',
       icon: 'IconFileDescription',
       container_image: 'ghcr.io/stirling-tools/s-pdf:2.13.1',
       source_repo: 'https://github.com/Stirling-Tools/Stirling-PDF',
@@ -236,7 +236,7 @@ export default class ServiceSeeder extends BaseSeeder {
         // `security.enableLogin: true` in settings.yml, so it boots behind a login wall.
         // For a single-user offline appliance we open it straight to the tools. Users who
         // want a login can flip this to `true` via Manage > Edit (env overrides settings.yml).
-        Env: ['SECURITY_ENABLELOGIN=false', 'LANGS=en_GB'],
+        Env: ['SECURITY_ENABLELOGIN=false', 'LANGS=pt_BR'],
       }),
       ui_location: '8400',
       installed: false,
@@ -248,10 +248,10 @@ export default class ServiceSeeder extends BaseSeeder {
     },
     {
       service_name: SERVICE_NAMES.FILEBROWSER,
-      friendly_name: 'File Browser',
+      friendly_name: 'Gerenciador de Arquivos',
       powered_by: 'FileBrowser',
       display_order: 21,
-      description: 'Web-based file manager — browse, upload, download, and organize files on your device',
+      description: 'Gerenciador de arquivos via web — envie, baixe e organize livros, PDFs e ZIMs diretamente nos discos',
       icon: 'IconFolderOpen',
       container_image: 'filebrowser/filebrowser:v2',
       source_repo: 'https://github.com/filebrowser/filebrowser',
@@ -305,10 +305,10 @@ export default class ServiceSeeder extends BaseSeeder {
     },
     {
       service_name: SERVICE_NAMES.CALIBREWEB,
-      friendly_name: 'Calibre Web',
+      friendly_name: 'Biblioteca de Livros (Calibre Web)',
       powered_by: 'Calibre-Web',
       display_order: 22,
-      description: 'Web-based e-book reader and library manager for your Calibre collection',
+      description: 'Leitor e organizador de e-books e PDFs no navegador para sua coleção literária e técnica',
       icon: 'IconBook',
       container_image: 'linuxserver/calibre-web:0.6.26-ls386',
       source_repo: 'https://github.com/janeczku/calibre-web',
@@ -336,10 +336,10 @@ export default class ServiceSeeder extends BaseSeeder {
     },
     {
       service_name: SERVICE_NAMES.IT_TOOLS,
-      friendly_name: 'IT Tools',
+      friendly_name: 'Ferramentas de TI',
       powered_by: 'IT-Tools',
       display_order: 23,
-      description: 'Collection of handy utilities for developers — UUID, hash, encoding, formatters, and more',
+      description: 'Coleção de utilitários técnicos offline — conversores, rede, hashes, geradores e formatação',
       icon: 'IconTool',
       container_image: 'ghcr.io/corentinth/it-tools:2024.10.22-7ca5933',
       source_repo: 'https://github.com/CorentinTh/it-tools',
@@ -361,10 +361,10 @@ export default class ServiceSeeder extends BaseSeeder {
     },
     {
       service_name: SERVICE_NAMES.EXCALIDRAW,
-      friendly_name: 'Excalidraw',
+      friendly_name: 'Quadro Branco (Excalidraw)',
       powered_by: 'Excalidraw',
       display_order: 24,
-      description: 'Virtual whiteboard for sketching hand-drawn-style diagrams — works fully offline',
+      description: 'Quadro visual offline para desenhar plantas, esquemas elétricos, projetos hidráulicos e diagramas',
       icon: 'IconPencil',
       container_image: 'excalidraw/excalidraw:sha-4bfc5bb',
       source_repo: 'https://github.com/excalidraw/excalidraw',
@@ -386,10 +386,10 @@ export default class ServiceSeeder extends BaseSeeder {
     },
     {
       service_name: SERVICE_NAMES.MESHTASTIC_WEB,
-      friendly_name: 'Meshtastic Web',
+      friendly_name: 'Rádio Mesh (Meshtastic)',
       powered_by: 'Meshtastic',
       display_order: 30,
-      description: 'Browser-based client for managing Meshtastic mesh radio devices',
+      description: 'Painel web offline para configurar e operar rádios comunicadores LoRa Meshtastic',
       icon: 'IconWifi',
       container_image: 'ghcr.io/meshtastic/web:2.7.1',
       source_repo: 'https://github.com/meshtastic/web',
@@ -412,10 +412,10 @@ export default class ServiceSeeder extends BaseSeeder {
     },
     {
       service_name: SERVICE_NAMES.MESHCORE_WEB,
-      friendly_name: 'MeshCore Web',
+      friendly_name: 'Rádio Mesh (MeshCore)',
       powered_by: 'MeshCore',
       display_order: 32,
-      description: 'Browser-based client for MeshCore mesh radio devices',
+      description: 'Cliente web offline para comunicação via rádios LoRa MeshCore',
       icon: 'IconAntenna',
       // aXistem's prebuilt image of Liam Cottle's MeshCore web client (MeshCore is a sibling LoRa
       // mesh project to Meshtastic).
@@ -449,10 +449,10 @@ export default class ServiceSeeder extends BaseSeeder {
     },
     {
       service_name: SERVICE_NAMES.HOMEBOX,
-      friendly_name: 'Homebox',
+      friendly_name: 'Inventário Doméstico (Homebox)',
       powered_by: 'Homebox',
       display_order: 25,
-      description: 'Home inventory and asset management — track everything you own',
+      description: 'Controle de estoque familiar — cadastre ferramentas, sementes, remédios, peças e suprimentos',
       icon: 'IconBox',
       // Maintained fork. The original hay-kot/homebox was archived June 2024;
       // sysadminsmedia is the official continuation (drop-in: same 7745 port + /data volume,
@@ -478,10 +478,10 @@ export default class ServiceSeeder extends BaseSeeder {
     },
     {
       service_name: SERVICE_NAMES.VAULTWARDEN,
-      friendly_name: 'Vaultwarden',
+      friendly_name: 'Cofre de Senhas (Vaultwarden)',
       powered_by: 'Vaultwarden',
       display_order: 26,
-      description: 'Lightweight Bitwarden-compatible password manager server — secure your credentials offline',
+      description: 'Servidor de senhas criptografado compatível com Bitwarden — proteja suas credenciais offline',
       icon: 'IconShieldLock',
       container_image: 'vaultwarden/server:1.36.0',
       source_repo: 'https://github.com/dani-garcia/vaultwarden',
@@ -513,10 +513,10 @@ export default class ServiceSeeder extends BaseSeeder {
     },
     {
       service_name: SERVICE_NAMES.JELLYFIN,
-      friendly_name: 'Jellyfin',
+      friendly_name: 'Servidor de Mídia (Jellyfin)',
       powered_by: 'Jellyfin',
       display_order: 27,
-      description: 'Open-source media server — stream your video, music, and photo libraries',
+      description: 'Streaming local de vídeo-aulas, documentários, filmes e músicas na rede doméstica',
       icon: 'IconMovie',
       container_image: 'jellyfin/jellyfin:10.11.11',
       source_repo: 'https://github.com/jellyfin/jellyfin',
@@ -544,11 +544,11 @@ export default class ServiceSeeder extends BaseSeeder {
     },
     {
       service_name: SERVICE_NAMES.TRANSLATE,
-      friendly_name: 'Translated Library',
+      friendly_name: 'Tradutor Offline da Biblioteca',
       powered_by: 'Bergamot',
       display_order: 28,
       description:
-        'Read the Information Library in another language. Machine translation that works offline, on CPU',
+        'Tradução neural offline na CPU para ler enciclopédias em língua estrangeira da Biblioteca Kiwix',
       icon: 'IconWorld',
       container_image: 'ghcr.io/crosstalk-solutions/project-nomad-translate:0.1.1',
       source_repo: 'https://github.com/browsermt/bergamot-translator',
@@ -642,6 +642,8 @@ export default class ServiceSeeder extends BaseSeeder {
           : service.ui_location
 
         await Service.query().where('service_name', service.service_name).update({
+          friendly_name: service.friendly_name,
+          description: service.description,
           container_config: containerConfig,
           container_command: service.container_command ?? null,
           metadata: (service as any).metadata ?? null,

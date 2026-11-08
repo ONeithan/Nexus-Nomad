@@ -33,19 +33,19 @@ const MAPS_ITEM = {
   label: 'Mapas Offline',
   to: '/maps',
   target: '',
-  description: 'Navegação e visualização de mapas vetoriais sem internet',
+  description: 'Navegação e visualização de mapas vetoriais regionais sem internet',
   icon: <IconMapRoute size={48} />,
   installed: true,
   displayOrder: 4,
   poweredBy: null,
 }
 
-// Drug Reference + "When to use what" — offline medical reference tiles.
+// Drug Reference — offline medical reference tile
 const DRUG_REFERENCE_ITEM = {
   label: 'Guia de Medicamentos',
   to: '/drug-reference',
   target: '',
-  description: 'Consulta offline de bulas, posologias e busca por sintomas de emergência',
+  description: 'Consulta offline de bulas, posologias, interações e busca por sintomas',
   icon: <IconPill size={48} />,
   installed: true,
   displayOrder: 5,
@@ -59,7 +59,7 @@ const SYSTEM_ITEMS = [
     to: '/easy-setup',
     target: '',
     description:
-      'Assistente passo a passo para selecionar e instalar seus módulos offline no Nexus N.O.M.A.D!',
+      'Assistente passo a passo para selecionar pacotes offline, Wikipédia PT, mapas e IA!',
     icon: <IconBolt size={48} />,
     installed: true,
     displayOrder: 50,
@@ -69,7 +69,7 @@ const SYSTEM_ITEMS = [
     label: 'Depósito de Suprimentos',
     to: '/supply-depot',
     target: '',
-    description: 'Catálogo de aplicativos e contêineres Docker em 1 clique',
+    description: 'Catálogo de aplicativos e contêineres Docker instaláveis em 1 clique',
     icon: <IconBox size={48} />,
     installed: true,
     displayOrder: 51,
@@ -79,17 +79,17 @@ const SYSTEM_ITEMS = [
     label: 'Manuais & Documentação',
     to: '/docs/home',
     target: '',
-    description: 'Manuais de sobrevivência, civilização e guias práticos em português',
+    description: 'Guias práticos de sobrevivência, água, bioconstrução, medicina e autossuficiência',
     icon: <IconHelp size={48} />,
     installed: true,
     displayOrder: 52,
     poweredBy: null,
   },
   {
-    label: 'Configurações',
-    to: '/settings/system',
+    label: 'Discos & Configurações',
+    to: '/settings/system#discos',
     target: '',
-    description: 'Ajustes de sistema, armazenamento híbrido (NVMe/HDD/NFS) e rede',
+    description: 'Topologia de discos conectados, uso de hardware, IA remota na LAN e atualizações',
     icon: <IconSettings size={48} />,
     installed: true,
     displayOrder: 53,
@@ -114,22 +114,16 @@ export default function Home(props: {
   system: {
     services: ServiceSlim[]
   }
-  // Server-computed: true when the offline FDA drug dataset is installed or
-  // installing (curated Medicine tier). Gates the two medical-reference tiles
-  // below so they only appear once the data exists.
   drugReferenceInstalled: boolean
 }) {
   const items: DashboardItem[] = []
-  const updateInfo = useUpdateAvailable();
+  const updateInfo = useUpdateAvailable()
   const rerunBanner = useBenchmarkRerunBanner()
   const queryClient = useQueryClient()
   const { aiAssistantName } = usePage<{ aiAssistantName: string }>().props
 
-  // Link tile management. `editingTile` null with the modal open means "create".
   const [linkModalOpen, setLinkModalOpen] = useState(false)
   const [editingTile, setEditingTile] = useState<ServiceSlim | null>(null)
-  // Deleting a tile is not undoable and the tiles are user-entered, so the trash
-  // icon arms a confirm rather than deleting on the first click.
   const [pendingDelete, setPendingDelete] = useState<string | null>(null)
   const [linkError, setLinkError] = useState<string | null>(null)
 
@@ -139,12 +133,11 @@ export default function Home(props: {
     const result = await api.deleteLinkTile(serviceName)
     setPendingDelete(null)
     if (!result?.success) {
-      setLinkError('Failed to remove this link.')
+      setLinkError('Não foi possível remover este atalho.')
       return
     }
     refreshServices()
   }
-
 
   const handleDismissRerunBanner = async () => {
     await api.updateSetting('benchmark.rerunBannerDismissed', true)
@@ -153,22 +146,28 @@ export default function Home(props: {
 
   // Check if user has visited Easy Setup
   const { data: easySetupVisited } = useSystemSetting({
-    key: 'ui.hasVisitedEasySetup'
+    key: 'ui.hasVisitedEasySetup',
   })
-  const shouldHighlightEasySetup = easySetupVisited?.value ? String(easySetupVisited.value) !== 'true' : false
+  const shouldHighlightEasySetup = easySetupVisited?.value
+    ? String(easySetupVisited.value) !== 'true'
+    : false
 
-  // Add installed services (non-dependency services only). Link tiles are user-added
-  // shortcuts with no container behind them, so they are collected separately below
-  // and rendered with their own treatment.
   props.system.services
     .filter(
       (service) =>
         service.installed && (service.ui_location || service.custom_url) && !service.is_link_tile
     )
     .forEach((service) => {
+      const resolvedAiName =
+        aiAssistantName && aiAssistantName !== 'AI Assistant'
+          ? aiAssistantName
+          : service.friendly_name || 'Assistente de IA'
+
       items.push({
-        // Inject custom AI Assistant name if this is the chat service
-        label: service.service_name === SERVICE_NAMES.OLLAMA && aiAssistantName ? aiAssistantName : (service.friendly_name || service.service_name),
+        label:
+          service.service_name === SERVICE_NAMES.OLLAMA
+            ? resolvedAiName
+            : service.friendly_name || service.service_name,
         to:
           service.ui_location || service.custom_url
             ? getServiceLink(service.ui_location || '', service.custom_url)
@@ -176,7 +175,7 @@ export default function Home(props: {
         target: '_blank',
         description:
           service.description ||
-          `Access the ${service.friendly_name || service.service_name} application`,
+          `Acessar o módulo ${service.friendly_name || service.service_name}`,
         icon: service.icon ? (
           <DynamicIcon icon={service.icon as DynamicIconName} className="!size-12" />
         ) : (
@@ -196,7 +195,7 @@ export default function Home(props: {
         label: service.friendly_name || service.service_name,
         to: getServiceLink('', service.custom_url),
         target: '_blank',
-        description: service.description || 'Opens in a new tab',
+        description: service.description || 'Abre em uma nova guia',
         icon: <DynamicIcon icon={service.icon as DynamicIconName} className="!size-12" />,
         installed: true,
         displayOrder: service.display_order ?? 90,
@@ -205,79 +204,62 @@ export default function Home(props: {
       })
     })
 
-  // Add Maps as a Core Capability
   items.push(MAPS_ITEM)
 
-  // Add the offline medical-reference tiles only once the FDA drug dataset is
-  // installed (or installing) via the curated Medicine tier. Both tiles read the
-  // same drug_labels table, so they gate together off one server-computed flag.
   if (props.drugReferenceInstalled) {
     items.push(DRUG_REFERENCE_ITEM)
   }
 
-  // Add system items
   items.push(...SYSTEM_ITEMS)
-
-  // Sort all items by display order
   items.sort((a, b) => a.displayOrder - b.displayOrder)
 
   return (
     <AppLayout>
-      <Head title="Command Center" />
-      {
-        updateInfo?.updateAvailable && (
-          <div className='flex justify-center items-center p-4 w-full'>
-            <Alert
-              title="An update is available for Project NOMAD!"
-              type="info-inverted"
-              variant="solid"
-              className="w-full"
-              buttonProps={{
-                variant: 'primary',
-                children: 'Go to Settings',
-                icon: 'IconSettings',
-                onClick: () => router.visit('/settings/update'),
-              }}
-            />
-          </div>
-        )
-      }
+      <Head title="Centro de Comando" />
+      {updateInfo?.updateAvailable && (
+        <div className="flex justify-center items-center p-4 w-full">
+          <Alert
+            title="Uma nova atualização está disponível!"
+            type="info-inverted"
+            variant="solid"
+            className="w-full"
+            buttonProps={{
+              variant: 'primary',
+              children: 'Ver Atualizações',
+              icon: 'IconSettings',
+              onClick: () => router.visit('/settings/update'),
+            }}
+          />
+        </div>
+      )}
       <WhatsNewBanner />
-      {
-        rerunBanner?.show && (
-          <div className='flex justify-center items-center px-4 pt-4 w-full'>
-            <Alert
-              title="Your benchmark can be re-scored with Score v2"
-              message="We've upgraded the benchmark scoring system. Re-run your benchmark to get an updated Score v2 result on the community leaderboard."
-              type="info-inverted"
-              variant="solid"
-              className="w-full"
-              dismissible
-              onDismiss={handleDismissRerunBanner}
-              buttonProps={{
-                variant: 'primary',
-                children: 'Re-run benchmark',
-                icon: 'IconRefresh',
-                onClick: () => router.visit('/settings/benchmark'),
-              }}
-            />
-          </div>
-        )
-      }
+      {rerunBanner?.show && (
+        <div className="flex justify-center items-center px-4 pt-4 w-full">
+          <Alert
+            title="Seu benchmark pode ser recalculado com o Score v2"
+            message="O sistema de pontuação de hardware foi atualizado. Execute novamente quando desejar."
+            type="info-inverted"
+            variant="solid"
+            className="w-full"
+            dismissible
+            onDismiss={handleDismissRerunBanner}
+            buttonProps={{
+              variant: 'primary',
+              children: 'Executar Benchmark',
+              icon: 'IconRefresh',
+              onClick: () => router.visit('/settings/benchmark'),
+            }}
+          />
+        </div>
+      )}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 p-4">
         {items.map((item) => {
-          const isEasySetup = item.label === 'Easy Setup'
+          const isEasySetup = item.to === '/easy-setup'
           const shouldHighlight = isEasySetup && shouldHighlightEasySetup
 
           const isLinkTile = Boolean(item.linkTile)
-          // A flat surface color read as a stark white card next to the filled
-          // app tiles. Tint from the brand palette instead, user-chosen.
           const tileColor = linkTileColor(item.linkTile?.link_color)
 
-          // Link tiles are deliberately not styled like managed apps: outlined
-          // rather than filled, with an external-link marker. If they looked the
-          // same, users would expect Start/Stop/Update and file bugs when those
-          // controls are not there.
           const tileContent = (
             <div
               className={
@@ -289,7 +271,7 @@ export default function Home(props: {
               {isLinkTile && (
                 <span
                   className={`absolute top-2 left-2 ${tileColor.marker}`}
-                  title="A shortcut you added. NOMAD does not manage this."
+                  title="Atalho externo adicionado por você na rede local."
                 >
                   <IconExternalLink size={16} />
                 </span>
@@ -297,17 +279,19 @@ export default function Home(props: {
               {shouldHighlight && (
                 <span className="absolute top-2 right-2 flex items-center justify-center">
                   <span
-                    className="animate-ping absolute inline-flex w-16 h-6 rounded-full bg-desert-orange-light opacity-75"
+                    className="animate-ping absolute inline-flex w-20 h-6 rounded-full bg-desert-orange-light opacity-75"
                     style={{ animationDuration: '1.5s' }}
                   ></span>
                   <span className="relative inline-flex items-center rounded-full px-2.5 py-1 bg-desert-orange-light text-xs font-semibold text-white shadow-sm">
-                    Start here!
+                    Comece aqui!
                   </span>
                 </span>
               )}
               <div className="flex items-center justify-center mb-2">{item.icon}</div>
               <h3 className="font-bold text-2xl">{item.label}</h3>
-              {item.poweredBy && <p className="text-sm opacity-80">Powered by {item.poweredBy}</p>}
+              {item.poweredBy && (
+                <p className="text-sm opacity-80">Motor: {item.poweredBy}</p>
+              )}
               <p className="xl:text-lg mt-2">{item.description}</p>
             </div>
           )
@@ -329,14 +313,14 @@ export default function Home(props: {
                       onClick={() => handleDeleteTile(tile.service_name)}
                       className="rounded bg-desert-red px-2 py-1 text-xs font-medium text-white hover:brightness-110"
                     >
-                      Remove
+                      Remover
                     </button>
                     <button
                       type="button"
                       onClick={() => setPendingDelete(null)}
                       className="rounded border border-border-default bg-surface-primary px-2 py-1 text-xs text-text-secondary hover:bg-surface-secondary"
                     >
-                      Cancel
+                      Cancelar
                     </button>
                   </div>
                 ) : (
@@ -347,8 +331,8 @@ export default function Home(props: {
                         setEditingTile(tile)
                         setLinkModalOpen(true)
                       }}
-                      title="Edit this link"
-                      aria-label="Edit this link"
+                      title="Editar este atalho"
+                      aria-label="Editar este atalho"
                       className="rounded p-1 text-text-muted hover:bg-surface-secondary hover:text-text-primary"
                     >
                       <IconPencil size={16} />
@@ -356,8 +340,8 @@ export default function Home(props: {
                     <button
                       type="button"
                       onClick={() => setPendingDelete(tile.service_name)}
-                      title="Remove this link"
-                      aria-label="Remove this link"
+                      title="Remover este atalho"
+                      aria-label="Remover este atalho"
                       className="rounded p-1 text-text-muted hover:bg-surface-secondary hover:text-desert-red"
                     >
                       <IconTrash size={16} />
@@ -379,7 +363,7 @@ export default function Home(props: {
           )
         })}
 
-        {/* Add-a-link affordance, last in the grid so it never displaces an app. */}
+        {/* Add-a-link affordance */}
         <button
           type="button"
           onClick={() => {
@@ -389,8 +373,10 @@ export default function Home(props: {
           className="rounded border-2 border-dashed border-border-default bg-transparent text-text-muted hover:border-desert-green hover:text-text-primary transition-colors h-48 flex flex-col items-center justify-center cursor-pointer text-center px-4"
         >
           <IconPlus size={40} />
-          <h3 className="font-bold text-xl mt-2">Add a Link</h3>
-          <p className="text-sm mt-1">A shortcut to something else on your network</p>
+          <h3 className="font-bold text-xl mt-2">Adicionar Atalho da Rede</h3>
+          <p className="text-sm mt-1">
+            Atalho rápido para outro serviço da sua rede (TrueNAS, Portainer, Roteador)
+          </p>
         </button>
       </div>
 

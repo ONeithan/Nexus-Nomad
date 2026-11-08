@@ -1,32 +1,20 @@
 name: Build Primary Docker Image
 
 on:
+  push:
+    branches:
+      - main
   workflow_dispatch:
     inputs:
       version:
-        description: 'Semantic version to label the Docker image under (no "v" prefix, e.g. "1.2.3")'
-        required: true
-        type: string
-      tag_latest:
-        description: 'Also tag this image as :latest? (Keep false for RC and beta releases)'
+        description: 'Versão para marcar a imagem Docker (sem prefixo "v", ex: "1.0.0-nexus")'
         required: false
-        type: boolean
-        default: false
+        default: '1.0.0-nexus'
+        type: string
 
 jobs:
-  check_authorization:
-    name: Check authorization to publish new Docker image
-    runs-on: ubuntu-latest
-    outputs:
-      isAuthorized: ${{ steps.check-auth.outputs.is_authorized }}
-    steps:
-      - name: check-auth
-        id: check-auth
-        run: echo "is_authorized=${{ contains(secrets.DEPLOYMENT_AUTHORIZED_USERS, github.triggering_actor) }}" >> $GITHUB_OUTPUT      
   build:
-    name: Build Docker image
-    needs: check_authorization
-    if: needs.check_authorization.outputs.isAuthorized == 'true'
+    name: Compilar e publicar imagem Nexus NOMAD (GHCR)
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -34,22 +22,36 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
+
+      - name: Preparar metadados da imagem
+        id: meta
+        run: |
+          REPO_LC=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+          VERSION="${{ inputs.version || '1.0.0-nexus' }}"
+          BUILD_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          echo "repo_lc=${REPO_LC}" >> "$GITHUB_OUTPUT"
+          echo "short_sha=${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "build_date=${BUILD_DATE}" >> "$GITHUB_OUTPUT"
+
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Build and push
+
+      - name: Build and push Docker image
         uses: docker/build-push-action@v7
         with:
+          context: .
           push: true
           tags: |
-            ghcr.io/crosstalk-solutions/project-nomad:${{ inputs.version }}
-            ghcr.io/crosstalk-solutions/project-nomad:v${{ inputs.version }}
-            ${{ inputs.tag_latest && 'ghcr.io/crosstalk-solutions/project-nomad:latest' || '' }}
+            ghcr.io/${{ steps.meta.outputs.repo_lc }}:latest
+            ghcr.io/${{ steps.meta.outputs.repo_lc }}:${{ steps.meta.outputs.version }}
+            ghcr.io/${{ steps.meta.outputs.repo_lc }}:sha-${{ steps.meta.outputs.short_sha }}
           build-args: |
-            VERSION=${{ inputs.version }}
-            BUILD_DATE=${{ github.event.workflow_run.created_at }}
+            VERSION=${{ steps.meta.outputs.version }}
+            BUILD_DATE=${{ steps.meta.outputs.build_date }}
             VCS_REF=${{ github.sha }}
-            CREATOR_PACKS_APP_KEY=${{ secrets.CREATOR_PACKS_APP_KEY }}

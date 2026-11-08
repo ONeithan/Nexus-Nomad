@@ -13,115 +13,62 @@
 
 ---
 
-O **Nexus Project NOMAD** é um servidor de conhecimento, sobrevivência e educação autossuficiente, projetado para operar **100% offline** e acompanhar uma família ou comunidade por gerações.
+O **Nexus Project NOMAD** é um servidor dedicado de conhecimento civilizatório, sobrevivência, ciência e educação autossuficiente em **Português Brasileiro (PT-BR)**, projetado para operar **100% offline** na rede local.
 
-Em um cenário de interrupção prolongada de internet, rede elétrica pública, abastecimento de água ou serviços urbanos, o sistema provê todas as ferramentas práticas, científicas, médicas, agrícolas e culturais necessárias para manter condições dignas de vida e preservar a civilização.
-
----
-
-## 🎯 Pilares Centrais
-
-1. **Prioridade Absoluta em Português Brasileiro (PT-BR):**
-   - Interface completa, menus, configurações, categorias e documentação em português nativo.
-   - Pesquisa aprofundada prioritariamente em órgãos públicos brasileiros (**Embrapa, Fiocruz, Ministério da Saúde, Funasa, Rede e-Tec Brasil/MEC, Domínio Público, Defesa Civil e Bombeiros**).
-2. **Preservação de Acervo Histórico e Monumental:**
-   - Integração completa do patrimônio documental do **Nexus-Odyssey**: mais de 12.290 itens e 12 GB de dados estruturados em SQLite.
-   - Preservação da digitalização integral monumental da **Bíblia de Gutenberg de 1454 (6,58 GB)**, fac-símiles de alta definição, Bíblias de estudo clássicas e os 19 volumes temáticos da **Biblioteca Mestre**.
-3. **Autonomia de Infraestrutura:**
-   - Otimizado para rodar 24/7 em um notebook dedicado com **auto power-on na BIOS** (reinício automático após retorno de energia).
-   - Suporte a arquitetura híbrida de discos: **SSD NVMe** (SO, IA, Docker e alta velocidade) + **HDD** (grandes acervos de PDFs e ZIMs) + expansão de rede com **Pool TrueNAS via NFS**.
+Em cenários de indisponibilidade prolongada de internet, concessionárias de energia ou abastecimento urbano, o servidor provê enciclopédias completas, manuais de engenharia rural, tratamento de água, bioconstrução, primeiros socorros, cartografia vetorial e acervo histórico para toda a família.
 
 ---
 
-## 🚀 Guia de Instalação e Inicialização
+## 🎯 Arquitetura Oficial do Homelab (Acer TravelMate P449)
 
-O sistema foi preparado para ser instalado de forma simples em qualquer distribuição baseada em Debian (recomendamos **Debian 12 Bookworm** ou **Ubuntu 24.04/26.04 LTS Server**).
+Este fork foi dimensionado sob medida para operar como servidor headless 24/7 no **Acer TravelMate P449**:
 
-### Passo 1: Preparação do Sistema Operacional no Notebook
-1. Baixe a imagem ISO oficial do **Debian 12** (versão Netinst ou Standard).
-2. Grave a imagem em um pendrive utilizando o **Rufus** (selecione partição GPT e modo UEFI).
-3. Conecte o notebook na tomada, insira o pendrive e acesse a **BIOS/UEFI** (teclas `F2`, `F12` ou `Del`):
-   - Em **Power Management**, ative a opção **"Restore on AC Power Loss"** para **Power On** (isso garante que o notebook ligue sozinho sempre que a energia voltar).
-   - Defina o pendrive como primeira opção de boot e instale o Debian.
-4. Conecte o notebook ao cabo de rede local e habilite o serviço SSH:
-   ```bash
-   sudo apt update && sudo apt install -y openssh-server curl
-   ```
+- **Processador & Memória:** Intel Core i5 (7ª Geração) • 16 GB RAM.
+- **Disco Primário (M.2 NVMe — 1 TB):** Sistema operacional **Debian Stable (Netinst sem interface gráfica)**, Docker Engine, MySQL 8 e Redis com baixa latência.
+- **Disco Secundário (HDD SATA 2,5" — 1 TB em `/mnt/nomad_storage`):** Pool principal detectado automaticamente pelo instalador para armazenar os arquivos ZIM do Kiwix (Wikipédia PT, MDWiki), mapas regionais, livros PDF/EPUB e o acervo histórico recuperado do **Nexus-Odyssey** (incluindo `The Gutemberg Bible 1454.pdf` de 6,58 GB e os 19 volumes da *Biblioteca Mestre*).
+- **Proteção contra Queda de Energia (Bateria Danificada):** Sistemas de arquivos `ext4` mantidos com *journaling* completo ativo, montagem secundária com flag `nofail` no `/etc/fstab` (evitando travamento em *emergency mode* no boot) e políticas Docker `restart: unless-stopped`.
+- **Inteligência Artificial 100% Remota via LAN (Zero Peso Local):** O Acer TravelMate P449 **não executa LLMs locais**. O módulo de IA conecta-se via rede local (`ai.remoteOllamaUrl`) ao Ollama rodando em outra máquina mais potente do homelab (ex: Dell OptiPlex Micro 7000 `i5-14500T` com 32 GB DDR5 ou PC principal).
+- **Integração Opcional com TrueNAS Scale (`NEXUS-STORAGE`):** Suporte a montagem de dataset NFS dedicado e isolado para expansão futura, sem tocar em pools ou serviços existentes.
 
-### Passo 2: Instalação Automática do Nexus NOMAD (Comando de 1 Linha)
-A partir do seu computador principal, conecte via SSH ao notebook e execute o instalador do fork:
+---
+
+## 🚀 Instalação Automática no Servidor Debian (1 Comando)
+
+Com o Debian instalado no NVMe e o HD de 1 TB montado em `/mnt/nomad_storage`, conecte via SSH e execute:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/ONeithan/Nexus-Nomad/main/install/install_nomad.sh -o install_nomad.sh && sudo bash install_nomad.sh
 ```
 
-O instalador interativo em português configurará o Docker, os bancos de dados e os serviços automaticamente.
+O instalador em português:
+1. Instala o Docker Engine e o Docker Compose v2 automaticamente;
+2. Detecta `/mnt/nomad_storage` (HD de 1 TB) e aponta todo o armazenamento pesado de aplicativos para ele;
+3. Baixa a imagem `ghcr.io/oneithan/nexus-nomad:latest` (ou compila automaticamente direto do código-fonte deste repositório caso o pacote GHCR esteja privado ou em construção);
+4. Inicia o Centro de Comando na porta `8080`.
 
-Ao finalizar, acesse o painel pelo navegador em:
+Acesse de qualquer computador ou celular na mesma rede:
+```text
+http://IP_DO_ACER:8080
 ```
-http://IP_DO_NOTEBOOK:8080
-```
-*(Ou `http://localhost:8080` caso esteja executando localmente).*
 
 ---
 
-## 📦 O que Está Incluído no Centro de Comando
+## 📦 Módulos Disponíveis no Centro de Comando
 
-| Capacidade | Motor / Tecnologia | O que Você Tem em Mãos |
+| Módulo | Tecnologia | Função no Servidor |
 | :--- | :--- | :--- |
-| **Biblioteca Offline** | Kiwix Server | Wikipédia PT completa, Wikilivros PT, Wikisource, MDWiki Medicina PT e e-books em ZIM. |
-| **Assistente IA Local** | Ollama + Qdrant RAG | Chat inteligente em português com busca semântica no acervo de manuais técnicos. |
-| **Escola & Universidade** | Kolibri Platform | Cursos do Khan Academy em português, alfabetização, matemática e ciências com progresso. |
-| **Cartografia & Navegação** | ProtoMaps | Mapas vetoriais do Brasil e continentes para consulta sem internet e sem GPS. |
-| **Guia de Medicamentos** | Módulo Nativo PT-BR | Bulário offline, posologias, busca por sintomas e primeiros socorros em isolamento. |
-| **Caderno de Notas** | FlatNotes | Anotações diárias, diários agrícolas e documentação familiar em Markdown. |
-| **Laboratório Cripto** | CyberChef | Canivete suíço de criptografia, codificação e proteção de dados sigilosos. |
-| **Depósito de Suprimentos** | Docker App Store | Instalação em 1 clique de Stirling PDF, Kavita (e-books), File Browser e Vaultwarden. |
-| **Acervo Histórico** | SQLite Catalogo Mestre | 12.293 itens indexados via SHA-256: Gutenberg 1454 (6.58 GB), Bíblias e 19 Volumes Mestre. |
+| **Biblioteca Offline** | Kiwix (`:8090`) | Wikipédia em Português, Wikilivros, MDWiki Medicina e pacotes ZIM offline. |
+| **Manuais Civilizatórios** | Markdoc Nativo | 28 guias técnicos em PT-BR integrados direto em `/docs/home` (água, horta, solar, forja, saúde). |
+| **Gerenciador de Arquivos** | FileBrowser (`:8410`) | Upload e organização via navegador das pastas `zim`, `books`, `maps` e `media` no HD de 1 TB. |
+| **Biblioteca de Livros** | Calibre Web (`:8420`) | Leitura e catalogação de PDFs e EPUBs no navegador. |
+| **Plataforma Educacional** | Kolibri Gen 2 (`:8310`) | Cursos interativos, matemática, ciências e Khan Academy em português. |
+| **Mapas Offline** | ProtoMaps | Mapas vetoriais offline do Brasil e do mundo sem depender de internet. |
+| **Assistente de IA (LAN)** | Ollama Remoto + Qdrant | Chat com RAG nos documentos locais usando processamento de outro PC da rede. |
+| **Sistema & Discos** | Disk Collector | Painel estilo TrueNAS exibindo em tempo real os discos físicos conectados (`lsblk`), modelo, barramento NVMe/SATA e partições. |
 
 ---
 
-## 💾 Arquitetura Híbrida de Armazenamento
+## ⚖️ Licença
 
-Para balancear máxima velocidade e grande capacidade de retenção:
-
-```
-[ Notebook Servidor Nexus NOMAD ]
-├── ⚡ SSD NVMe 1 TB (Primário Rápido)
-│   ├── Sistema Operacional Debian 12
-│   ├── Contêineres Docker (Admin, MySQL, Redis, Qdrant)
-│   └── Modelos de Inteligência Artificial (Ollama)
-│
-├── 📦 HDD 500 GB (Secundário para Arquivos Volumosos)
-│   ├── Acervo Nexus-Odyssey (Gutenberg Bible 6.58 GB, Fac-símiles JPGs)
-│   ├── ZIMs da Wikipédia em Português
-│   └── Mapas Regionais do Brasil
-│
-└── 🌐 Expansão de Rede: TrueNAS via NFS
-    └── Montagem em /mnt/truenas-nomad para expansão ilimitada de livros e mídias.
-```
-
----
-
-## 🛠️ Teste e Simulação em Localhost (Windows Dev)
-
-Para testar a interface, temas e traduções no seu computador antes de enviar ao notebook:
-
-1. Acesse a pasta `preview/` na raiz do projeto:
-   ```bash
-   cd "e:\Projetos\Nexus N.O.M.A.D\preview"
-   node server.js
-   ```
-2. Abra o navegador em:
-   ```
-   http://localhost:8080
-   ```
-A simulação completa do **Centro de Comando** rodará instantaneamente em português, permitindo testar o Modo Escuro/Deserto, o Assistente de Configuração, o Guia de Medicamentos e o Chat de IA.
-
----
-
-## ⚖️ Licença e Governança
-
-- **Projeto Base:** Project NOMAD (Apache-2.0 License).
-- **Customização e Tradução:** Nexus N.O.M.A.D (100% PT-BR por Nathan).
-- **Sem Telemetria:** ZERO envio de dados ou rastreamento.
+- **Base:** Project NOMAD (Apache License 2.0).
+- **Customização, Acervo Civilizatório & Tradução PT-BR:** [ONeithan/Nexus-Nomad](https://github.com/ONeithan/Nexus-Nomad).
