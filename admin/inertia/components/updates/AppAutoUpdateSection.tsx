@@ -28,30 +28,30 @@ export default function AppAutoUpdateSection() {
 
   return (
     <>
-      <StyledSectionHeader title="Automatic App Updates" className="mt-8" />
+      <StyledSectionHeader title="Atualização Automática de Aplicativos" className="mt-8" />
       <div className="bg-surface-primary rounded-lg border shadow-md overflow-hidden mt-6 p-6">
         <Switch
           checked={enabled}
           onChange={(value) => toggleMutation.mutate(value)}
           disabled={toggleMutation.isPending || isLoading}
-          label="Enable Automatic App Updates"
-          description="Automatically install minor and patch updates for apps you've opted in (toggle each app in Supply Depot). Major versions always require a manual update. Uses the same update window and cool-off period as the core schedule above."
+          label="Ativar Atualizações Automáticas de Aplicativos"
+          description="Instala automaticamente atualizações de versão menor e correções dos aplicativos selecionados (ative individualmente em cada app na Central de Aplicativos). Versões maiores sempre exigem atualização manual."
         />
 
         {enabled && status && (
           <div className="mt-6 pt-4 border-t border-desert-stone-light text-sm">
             <p className="text-desert-stone mb-3">
-              <span className="font-medium">Update window: </span>
+              <span className="font-medium">Janela de atualização: </span>
               {status.windowStart}–{status.windowEnd} (
-              {status.withinWindow ? 'currently inside' : 'currently outside'}); cool-off{' '}
+              {status.withinWindow ? 'dentro da janela' : 'fora da janela'}); intervalo de resfriamento{' '}
               {status.cooloffHours}h.
               {status.lastResult && (
                 <>
                   {' '}
-                  <span className="font-medium">Last run: </span>
+                  <span className="font-medium">Última execução: </span>
                   {status.lastResult}
                   {status.lastAttemptAt
-                    ? ` (${new Date(status.lastAttemptAt).toLocaleString()})`
+                    ? ` (${new Date(status.lastAttemptAt).toLocaleString('pt-BR')})`
                     : ''}
                 </>
               )}
@@ -59,7 +59,7 @@ export default function AppAutoUpdateSection() {
 
             {status.apps.length === 0 ? (
               <p className="text-desert-stone-dark">
-                No apps are opted in yet. Enable auto-update on individual apps from the Supply Depot.
+                Nenhum aplicativo ativado ainda. Ative a atualização automática individualmente nos apps na Central de Aplicativos.
               </p>
             ) : (
               <ul className="space-y-2">

@@ -90,9 +90,9 @@ const WikipediaSelector: React.FC<WikipediaSelectorProps> = ({
                   ? 'opacity-60 cursor-not-allowed'
                   : 'cursor-pointer hover:shadow-md',
                 isInstalled
-                  ? 'border-desert-green bg-desert-green/10'
+                  ? 'border-desert-green bg-desert-green/15'
                   : isSelected
-                    ? 'border-lime-500 bg-lime-50'
+                    ? 'border-lime-500 bg-lime-500/15 shadow-md ring-1 ring-lime-500/50'
                     : 'border-border-subtle bg-surface-primary hover:border-border-default'
               )}
             >

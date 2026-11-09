@@ -837,7 +837,7 @@ export default function EasySetupWizard(props: {
                   </h3>
                   <p className="text-sm text-text-secondary">
                     Notas, ferramentas de dados e o catálogo completo de aplicativos extras estão
-                    disponíveis a qualquer momento no Depósito de Suprimentos.
+                    disponíveis a qualquer momento na Central de Aplicativos.
                   </p>
                 </div>
                 <StyledButton
@@ -845,7 +845,7 @@ export default function EasySetupWizard(props: {
                   onClick={() => router.visit('/supply-depot')}
                   className="flex-shrink-0"
                 >
-                  Abrir Depósito de Suprimentos
+                  Abrir Central de Aplicativos
                 </StyledButton>
               </div>
             </div>

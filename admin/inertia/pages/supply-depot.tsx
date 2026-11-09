@@ -375,7 +375,7 @@ export default function SupplyDepotPage(props: { system: { services: ServiceSlim
 
   return (
     <AppLayout>
-      <Head title="Depósito de Suprimentos" />
+      <Head title="Central de Aplicativos" />
 
       {loading && !modal && <LoadingSpinner fullscreen text="Processando..." />}
 
@@ -414,11 +414,10 @@ export default function SupplyDepotPage(props: { system: { services: ServiceSlim
               <IconBox className="text-white opacity-90 flex-shrink-0" size={28} />
               <div>
                 <h1 className="text-2xl font-bold text-white uppercase tracking-wide leading-tight">
-                  Depósito de Suprimentos
+                  Central de Aplicativos
                 </h1>
                 <p className="text-sm text-white/70 mt-1 max-w-xl">
-                  Instale módulos offline curados em 1 clique ou adicione seus próprios contêineres
-                  Docker personalizados.
+                  Instale e gerencie módulos offline em 1 clique ou adicione seus próprios contêineres Docker personalizados.
                 </p>
               </div>
             </div>

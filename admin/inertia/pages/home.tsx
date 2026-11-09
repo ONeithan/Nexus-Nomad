@@ -66,7 +66,7 @@ const SYSTEM_ITEMS = [
     poweredBy: null,
   },
   {
-    label: 'Depósito de Suprimentos',
+    label: 'Central de Aplicativos',
     to: '/supply-depot',
     target: '',
     description: 'Catálogo de aplicativos e contêineres Docker instaláveis em 1 clique',

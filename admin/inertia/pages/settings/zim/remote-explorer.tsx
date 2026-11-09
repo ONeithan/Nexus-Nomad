@@ -29,6 +29,9 @@ import {
   IconPlus,
   IconTrash,
   IconLibrary,
+  IconArrowUp,
+  IconArrowDown,
+  IconArrowsSort,
 } from '@tabler/icons-react'
 import useDebounce from '~/hooks/useDebounce'
 import CategoryCard from '~/components/CategoryCard'
@@ -97,6 +100,12 @@ export default function ZimRemoteExplorer() {
   const [manageModalOpen, setManageModalOpen] = useState(false)
   const [newLibraryName, setNewLibraryName] = useState('')
   const [newLibraryUrl, setNewLibraryUrl] = useState('')
+
+  // Catalog sorting and size filtering
+  type RemoteSortKey = 'title' | 'author' | 'updated' | 'size_bytes'
+  const [sortKey, setSortKey] = useState<RemoteSortKey>('updated')
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc')
+  const [sizeFilter, setSizeFilter] = useState<string>('all')
 
   const debouncedSetQuery = debounce((val: string) => {
     setQuery(val)
@@ -190,7 +199,7 @@ export default function ZimRemoteExplorer() {
   const flatData = useMemo(() => {
     const mapped = data?.pages.flatMap((page) => page.items) || []
     const localNames = new Set(localFiles?.map((f) => f.name) ?? [])
-    return mapped.filter((item) => {
+    let filtered = mapped.filter((item) => {
       const isDownloading = downloads?.some((download) => {
         const filename = item.download_url.split('/').pop()
         return filename && download.filepath.endsWith(filename)
@@ -198,7 +207,34 @@ export default function ZimRemoteExplorer() {
       const isPresent = localNames.has(item.file_name)
       return !isDownloading && !isPresent
     })
-  }, [data, downloads, localFiles])
+
+    if (sizeFilter !== 'all') {
+      filtered = filtered.filter((item) => {
+        const bytes = item.size_bytes || 0
+        if (sizeFilter === 'under_500mb') return bytes < 500 * 1024 * 1024
+        if (sizeFilter === '500mb_to_2gb') return bytes >= 500 * 1024 * 1024 && bytes < 2 * 1024 * 1024 * 1024
+        if (sizeFilter === '2gb_to_10gb') return bytes >= 2 * 1024 * 1024 * 1024 && bytes < 10 * 1024 * 1024 * 1024
+        if (sizeFilter === 'over_10gb') return bytes >= 10 * 1024 * 1024 * 1024
+        return true
+      })
+    }
+
+    return [...filtered].sort((a, b) => {
+      let comparison = 0
+      if (sortKey === 'size_bytes') {
+        comparison = (a.size_bytes || 0) - (b.size_bytes || 0)
+      } else if (sortKey === 'updated') {
+        const dateA = new Date(a.updated).getTime() || 0
+        const dateB = new Date(b.updated).getTime() || 0
+        comparison = dateA - dateB
+      } else if (sortKey === 'title') {
+        comparison = (a.title || '').localeCompare(b.title || '', 'pt-BR', { sensitivity: 'base' })
+      } else if (sortKey === 'author') {
+        comparison = (a.author || '').localeCompare(b.author || '', 'pt-BR', { sensitivity: 'base' })
+      }
+      return sortDirection === 'asc' ? comparison : -comparison
+    })
+  }, [data, downloads, localFiles, sizeFilter, sortKey, sortDirection])
   const hasMore = useMemo(() => data?.pages[data.pages.length - 1]?.has_more || false, [data])
 
   // When a ZIM download drops off the polled downloads list it has completed (or been
@@ -295,6 +331,28 @@ export default function ZimRemoteExplorer() {
     setBreadcrumbs((prev) => prev.slice(0, index + 1))
   }
 
+  function renderSortHeader(label: string, key: RemoteSortKey) {
+    const active = sortKey === key
+    const Icon = !active ? IconArrowsSort : sortDirection === 'asc' ? IconArrowUp : IconArrowDown
+    return (
+      <button
+        type="button"
+        onClick={() => {
+          if (sortKey === key) {
+            setSortDirection((d) => (d === 'asc' ? 'desc' : 'asc'))
+          } else {
+            setSortKey(key)
+            setSortDirection(key === 'size_bytes' || key === 'updated' ? 'desc' : 'asc')
+          }
+        }}
+        className="inline-flex items-center gap-1 font-semibold text-text-primary hover:text-desert-orange transition-colors group cursor-pointer"
+      >
+        <span>{label}</span>
+        <Icon className={`size-4 ${active ? 'text-desert-orange' : 'text-text-muted opacity-50 group-hover:opacity-100'}`} />
+      </button>
+    )
+  }
+
   async function confirmDownload(record: RemoteZimFileEntry) {
     openModal(
       <StyledModal
@@ -310,10 +368,8 @@ export default function ZimRemoteExplorer() {
         confirmVariant="primary"
       >
         <p className="text-text-primary">
-          Are you sure you want to download{' '}
-          <strong>{record.title}</strong>? It may take some time for it
-          to be available depending on the file size and your internet connection. The Kiwix
-          application will be restarted after the download is complete.
+          Tem certeza de que deseja baixar{' '}
+          <strong>{record.title}</strong>? O tempo de download varia de acordo com o tamanho do arquivo e sua velocidade de conexão. O serviço Kiwix será recarregado automaticamente após a conclusão.
         </p>
       </StyledModal>,
       'confirm-download-file-modal'
@@ -335,10 +391,9 @@ export default function ZimRemoteExplorer() {
         confirmVariant="primary"
       >
         <p className="text-text-primary">
-          Are you sure you want to download{' '}
+          Tem certeza de que deseja baixar{' '}
           <strong>{file.name}</strong>
-          {file.size_bytes ? ` (${formatBytes(file.size_bytes)})` : ''}? The Kiwix
-          application will be restarted after the download is complete.
+          {file.size_bytes ? ` (${formatBytes(file.size_bytes)})` : ''}? O serviço Kiwix será recarregado automaticamente após a conclusão.
         </p>
       </StyledModal>,
       'confirm-download-custom-modal'
@@ -353,9 +408,17 @@ export default function ZimRemoteExplorer() {
         author: record.author,
         size_bytes: record.size_bytes,
       })
+      addNotification({
+        message: `Download de "${record.title}" iniciado com sucesso.`,
+        type: 'success',
+      })
       invalidateDownloads()
     } catch (error) {
       console.error('Error downloading file:', error)
+      addNotification({
+        message: 'Falha ao iniciar o download.',
+        type: 'error',
+      })
     }
   }
 
@@ -366,14 +429,14 @@ export default function ZimRemoteExplorer() {
         size_bytes: file.size_bytes ?? undefined,
       })
       addNotification({
-        message: `Started downloading "${file.name}"`,
+        message: `Download de "${file.name}" iniciado com sucesso.`,
         type: 'success',
       })
       invalidateDownloads()
     } catch (error) {
       console.error('Error downloading file:', error)
       addNotification({
-        message: 'Failed to start download.',
+        message: 'Falha ao iniciar o download.',
         type: 'error',
       })
     }
@@ -515,7 +578,7 @@ export default function ZimRemoteExplorer() {
           )}
           {!isInstalled && (
             <Alert
-              title="O aplicativo Kiwix não está instalado. Instale-o no Depósito de Suprimentos para visualizar os arquivos ZIM baixados."
+              title="O aplicativo Kiwix não está instalado. Instale-o na Central de Aplicativos para visualizar os arquivos ZIM baixados."
               type="warning"
               variant="solid"
               className="!mt-6"
@@ -637,7 +700,7 @@ export default function ZimRemoteExplorer() {
                     setQueryUI(e.target.value)
                     debouncedSetQuery(e.target.value)
                   }}
-                  className="w-1/3"
+                  className="w-1/3 min-w-[240px]"
                   leftIcon={<IconSearch className="w-5 h-5 text-text-muted" />}
                 />
                 {/* Hidden entirely when the catalog list is unavailable (offline), rather
@@ -648,7 +711,7 @@ export default function ZimRemoteExplorer() {
                       htmlFor="zim-language"
                       className="text-sm font-medium text-text-secondary"
                     >
-                      Language:
+                      Idioma:
                     </label>
                     <select
                       id="zim-language"
@@ -665,6 +728,28 @@ export default function ZimRemoteExplorer() {
                     </select>
                   </div>
                 )}
+
+                {/* Filtro de faixa de tamanho */}
+                <div className="flex items-center gap-2">
+                  <label
+                    htmlFor="zim-size-filter"
+                    className="text-sm font-medium text-text-secondary"
+                  >
+                    Tamanho:
+                  </label>
+                  <select
+                    id="zim-size-filter"
+                    value={sizeFilter}
+                    onChange={(e) => setSizeFilter(e.target.value)}
+                    className="rounded-md border border-border-default bg-surface-primary text-text-primary px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-desert-green"
+                  >
+                    <option value="all">Todos os tamanhos</option>
+                    <option value="under_500mb">Leve (até 500 MB)</option>
+                    <option value="500mb_to_2gb">Médio (500 MB a 2 GB)</option>
+                    <option value="2gb_to_10gb">Grande (2 GB a 10 GB)</option>
+                    <option value="over_10gb">Muito Pesado (&gt; 10 GB)</option>
+                  </select>
+                </div>
               </div>
               <StyledTable<RemoteZimFileEntry & { actions?: any }>
                 data={flatData}
@@ -673,11 +758,11 @@ export default function ZimRemoteExplorer() {
                 columns={[
                   {
                     accessor: 'title',
-                    title: 'Título',
+                    title: renderSortHeader('Título', 'title'),
                   },
                   {
                     accessor: 'author',
-                    title: 'Autor',
+                    title: renderSortHeader('Autor', 'author'),
                   },
                   {
                     accessor: 'summary',
@@ -692,7 +777,7 @@ export default function ZimRemoteExplorer() {
                   },
                   {
                     accessor: 'updated',
-                    title: 'Atualizado',
+                    title: renderSortHeader('Atualizado', 'updated'),
                     render(record) {
                       return new Intl.DateTimeFormat('pt-BR', {
                         dateStyle: 'medium',
@@ -701,7 +786,7 @@ export default function ZimRemoteExplorer() {
                   },
                   {
                     accessor: 'size_bytes',
-                    title: 'Tamanho',
+                    title: renderSortHeader('Tamanho', 'size_bytes'),
                     render(record) {
                       return formatBytes(record.size_bytes)
                     },
@@ -775,9 +860,9 @@ export default function ZimRemoteExplorer() {
                           )}
                           {hasValidIssuedDate && (
                             <div>
-                              <span className="text-text-muted">Issued: </span>
+                              <span className="text-text-muted">Publicado: </span>
                               <span className="text-text-primary">
-                                {new Intl.DateTimeFormat('en-US', {
+                                {new Intl.DateTimeFormat('pt-BR', {
                                   dateStyle: 'medium',
                                 }).format(issuedDate!)}
                               </span>
@@ -785,7 +870,7 @@ export default function ZimRemoteExplorer() {
                           )}
                           {record.size_bytes > 0 && (
                             <div>
-                              <span className="text-text-muted">Size: </span>
+                              <span className="text-text-muted">Tamanho: </span>
                               <span className="text-text-primary">{formatBytes(record.size_bytes)}</span>
                             </div>
                           )}
@@ -807,7 +892,7 @@ export default function ZimRemoteExplorer() {
                         )}
                         {record.file_name && (
                           <div className="mt-4">
-                            <span className="text-text-muted text-sm">File: </span>
+                            <span className="text-text-muted text-sm">Arquivo: </span>
                             <code className="text-xs text-text-muted">{record.file_name}</code>
                           </div>
                         )}
@@ -855,8 +940,8 @@ export default function ZimRemoteExplorer() {
 
               {browseError && (
                 <Alert
-                  title="Could not fetch directory listing from this URL."
-                  message="The server may not support directory browsing, or the URL may be incorrect."
+                  title="Não foi possível obter a listagem de diretórios a partir desta URL."
+                  message="O servidor pode não suportar navegação por diretórios ou a URL pode estar incorreta."
                   type="error"
                   variant="solid"
                 />
@@ -866,14 +951,14 @@ export default function ZimRemoteExplorer() {
                 <div className="bg-surface-primary rounded-lg border border-border-subtle overflow-hidden relative" style={{ maxHeight: '600px', overflowY: 'auto' }}>
                   {browseData.directories.length === 0 && browseData.files.length === 0 ? (
                     <p className="text-text-muted p-6 text-center">
-                      No directories or ZIM files found at this location.
+                      Nenhum diretório ou arquivo ZIM encontrado neste local.
                     </p>
                   ) : (
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="border-b border-border-subtle bg-surface-secondary sticky top-0 z-10">
-                          <th className="text-left px-4 py-3 font-medium text-text-secondary">Name</th>
-                          <th className="text-right px-4 py-3 font-medium text-text-secondary w-32">Size</th>
+                          <th className="text-left px-4 py-3 font-medium text-text-secondary">Nome</th>
+                          <th className="text-right px-4 py-3 font-medium text-text-secondary w-32">Tamanho</th>
                           <th className="text-right px-4 py-3 font-medium text-text-secondary w-36"></th>
                         </tr>
                       </thead>

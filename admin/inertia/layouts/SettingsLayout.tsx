@@ -31,7 +31,7 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
   const navigation = [
     { name: 'Sistema & Discos', href: '/settings/system', icon: IconSettings, current: false },
     { name: aiLabel, href: '/settings/models', icon: IconWand, current: false },
-    { name: 'Depósito de Suprimentos', href: '/supply-depot', icon: IconBox, current: false },
+    { name: 'Central de Aplicativos', href: '/supply-depot', icon: IconBox, current: false },
     { name: 'Explorador de Conteúdo ZIM', href: '/settings/zim/remote-explorer', icon: IconZoom, current: false },
     { name: 'Gerenciador de ZIMs', href: '/settings/zim', icon: IconFolder, current: false },
     ...(creatorPacksConfigured ? [{ name: 'Pacotes de Criadores', href: '/settings/creator-packs', icon: IconMovie, current: false }] : []),
