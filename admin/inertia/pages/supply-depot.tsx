@@ -10,6 +10,7 @@ import {
   IconChartBar,
   IconClockBolt,
   IconCloudDownload,
+  IconDeviceDesktop,
   IconFileText,
   IconPackage,
   IconPencil,
@@ -120,6 +121,7 @@ export default function SupplyDepotPage(props: {
 
   const [activeCategory, setActiveCategory] = useState('all')
   const [search, setSearch] = useState('')
+  const [services, setServices] = useState<ServiceSlim[]>(props.system.services || [])
   const [modal, setModal] = useState<Modal>(null)
   const [loading, setLoading] = useState(false)
   const [checkingUpdates, setCheckingUpdates] = useState(false)
@@ -195,8 +197,14 @@ export default function SupplyDepotPage(props: {
       .finally(() => setPreflightLoading(false))
   }, [modal])
 
+  useEffect(() => {
+    if (props.system.services) {
+      setServices(props.system.services)
+    }
+  }, [props.system.services])
+
   // ── Filtering ─────────────────────────────────────────────────────────────
-  const filteredServices = props.system.services.filter((s) => {
+  const filteredServices = services.filter((s) => {
     if (activeCategory === 'installed' && !s.installed) return false
     if (
       activeCategory === 'remote-server' &&
@@ -230,7 +238,7 @@ export default function SupplyDepotPage(props: {
 
   // Whether the new Kolibri (Gen 2) install exists — gates the "Migrate content to Gen 2" action on
   // the legacy Kolibri card. Computed from the full (unfiltered) list so a search filter can't hide it.
-  const educationGen2Installed = props.system.services.some(
+  const educationGen2Installed = services.some(
     (s) => s.service_name === SERVICE_NAMES.KOLIBRI_GEN2 && s.installed
   )
 

@@ -6,6 +6,7 @@ import transmit from '@adonisjs/transmit/services/main'
 import KVStore from '#models/kv_store'
 import Service from '#models/service'
 import type { ServiceSlim } from '../../types/services.js'
+import { BROADCAST_CHANNELS } from '../../constants/broadcast.js'
 
 export interface PortainerContainerInfo {
   id?: string
@@ -504,6 +505,12 @@ export class PortainerService {
     try {
       transmit.broadcast(`services:${serviceName}`, { event, message })
       transmit.broadcast(`services:portainer:${serviceName}`, { event, message })
+      transmit.broadcast(BROADCAST_CHANNELS.SERVICE_INSTALLATION, {
+        service_name: serviceName,
+        timestamp: new Date().toISOString(),
+        status: event,
+        message,
+      })
     } catch (e: any) {
       logger.debug(`Could not broadcast SSE event for ${serviceName}: ${e.message}`)
     }
@@ -618,13 +625,16 @@ export class PortainerService {
             `Baixando imagem ${service.container_image} no servidor Portainer...`
           )
           await client.post(
-            `/api/endpoints/${endpointId}/docker/images/create?fromImage=${encodeURIComponent(service.container_image)}`
+            `/api/endpoints/${endpointId}/docker/images/create?fromImage=${encodeURIComponent(service.container_image)}`,
+            null,
+            { timeout: 300000 }
           )
         } catch (pullErr: any) {
           logger.warn(`Portainer image pull: ${pullErr?.message}`)
         }
 
         // 3. Construct Docker container payload
+        const defaultBinds = config?.HostConfig?.Binds || [`nomad-${serviceName}-data:/data`]
         const containerPayload = {
           Image: service.container_image,
           name: `nomad-${serviceName}`,
@@ -639,25 +649,45 @@ export class PortainerService {
             PortBindings: {
               [`${hostPort}/tcp`]: [{ HostPort: hostPort }],
             },
+            Binds: defaultBinds,
           },
         }
 
         this.broadcast(serviceName, 'creating', `Criando contêiner nomad-${serviceName} no servidor Portainer...`)
 
-        const createResp = await client.post(
-          `/api/endpoints/${endpointId}/docker/containers/create?name=nomad-${serviceName}`,
-          containerPayload
-        )
+        let containerId: string | undefined
+        try {
+          const createResp = await client.post(
+            `/api/endpoints/${endpointId}/docker/containers/create?name=nomad-${serviceName}`,
+            containerPayload,
+            { timeout: 30000 }
+          )
+          containerId = createResp.data?.Id
+        } catch (createErr: any) {
+          if (createErr.response?.status === 409) {
+            logger.info(`Container nomad-${serviceName} already exists on Portainer. Reusing existing.`)
+            try {
+              const listResp = await client.get(`/api/endpoints/${endpointId}/docker/containers/json?all=1`, { timeout: 15000 })
+              const existing = (listResp.data || []).find((c: any) =>
+                c.Names?.some((n: string) => n.includes(`nomad-${serviceName}`))
+              )
+              containerId = existing?.Id
+            } catch {}
+          } else {
+            throw createErr
+          }
+        }
 
-        const containerId = createResp.data?.Id
         if (containerId) {
           this.broadcast(serviceName, 'starting', `Iniciando contêiner no servidor Portainer...`)
-          await client.post(`/api/endpoints/${endpointId}/docker/containers/${containerId}/start`)
+          await client.post(`/api/endpoints/${endpointId}/docker/containers/${containerId}/start`, null, { timeout: 30000 })
         }
       } catch (apiErr: any) {
-        logger.warn(
-          `Direct Portainer API call failed (${apiErr.message}). Falling back to registered service link.`
-        )
+        logger.error(`Direct Portainer API call failed: ${apiErr.message}`)
+        this.broadcast(serviceName, 'error', `Falha ao implantar no Portainer: ${apiErr.message}`)
+        service.installation_status = 'error'
+        await service.save()
+        return
       }
     } else {
       // Simulate/register the deployment when API key is not yet set
