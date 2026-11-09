@@ -105,8 +105,8 @@ export class PortainerService {
     },
     {
       service_name: 'meelo-nexus',
-      friendly_name: 'Meelo (Videoclipes)',
-      description: 'Servidor de gerenciamento e streaming de videoclipes musicais (Servidor Remoto)',
+      friendly_name: 'Meelo (Streaming de Música)',
+      description: 'Servidor de streaming e gerenciamento de músicas e videoclipes musicais (Servidor Remoto)',
       icon: 'IconBrandDocker',
       category: 'media',
       port: 5000,
@@ -141,8 +141,8 @@ export class PortainerService {
     },
     {
       service_name: 'yubal-nexus',
-      friendly_name: 'Yubal (Playlist Sync)',
-      description: 'Sincronizador automático de playlists do Navidrome (Servidor Remoto)',
+      friendly_name: 'Yubal (Download de Músicas)',
+      description: 'Download e gerenciamento de músicas e álbuns para a biblioteca musical (Servidor Remoto)',
       icon: 'IconBrandDocker',
       category: 'utility',
       port: 8050,
@@ -150,8 +150,8 @@ export class PortainerService {
     },
     {
       service_name: 'ignis-nexus',
-      friendly_name: 'Ignis Core (Segundo Cérebro)',
-      description: 'Gestão de notas, ideias e cofres de conhecimento pessoal (Servidor Remoto)',
+      friendly_name: 'Ignis (Obsidian / Notas)',
+      description: 'Obsidian Web / Gestão de notas e segundo cérebro pessoal (Servidor Remoto)',
       icon: 'IconBrandDocker',
       category: 'productivity',
       port: 8180,
@@ -414,15 +414,26 @@ export class PortainerService {
   }
 
   /**
+   * Helper to format a raw stack name (e.g. 'nginx-proxy-manager' or 'uptime_kuma') into a title.
+   */
+  private formatStackTitle(rawName: string): string {
+    const clean = rawName.replace(/^nomad[-_]/, '').replace(/[-_]/g, ' ').trim()
+    return clean
+      .split(' ')
+      .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+      .join(' ')
+  }
+
+  /**
    * Enrich and synchronize catalog services with the remote server inventory.
-   * - Only runs when the user has explicitly enabled/configured the remote node.
-   * - Binds existing services (like Jellyfin on 8096) so NOMAD shows them as Active on the server.
-   * - Adds the other remote services as non-manageable quick-launch tiles.
+   * - Dynamically queries Portainer stacks (/api/stacks) and active containers.
+   * - Shows all 15+ stacks and containers running on the remote host in "Instalados".
+   * - Automatically binds matching catalog apps (e.g. Jellyfin on 8096, Kiwix on 8090).
+   * - Falls back to REMOTE_KNOWN_SERVICES if Portainer API is offline or unauthenticated.
    */
   public async syncWithDellInventory(services: ServiceSlim[]): Promise<ServiceSlim[]> {
     const enabled = await this.isEnabled()
     if (!enabled) {
-      // Do not inject or bind anything until the user configures the IP/enables the node!
       return services
     }
 
@@ -430,30 +441,11 @@ export class PortainerService {
     if (!hostIp) return services
 
     const remoteKnown = PortainerService.REMOTE_KNOWN_SERVICES
-
-    // 1. Check if Jellyfin exists in NOMAD's catalog
-    const jellyfinIndex = services.findIndex((s) => s.service_name.toLowerCase() === 'jellyfin')
-    if (jellyfinIndex !== -1) {
-      const jellyfin = services[jellyfinIndex]
-      // Mark as installed on remote server with direct URL to port 8096
-      services[jellyfinIndex] = {
-        ...jellyfin,
-        installed: true,
-        status: 'running',
-        node: 'portainer',
-        node_label: 'Servidor Portainer',
-        ui_location: `http://${hostIp}:8096`,
-        custom_url: `http://${hostIp}:8096`,
-        is_unmanaged: true, // Cannot stop/uninstall from local device
-        friendly_name: jellyfin.friendly_name || 'Jellyfin Media Server',
-        description:
-          jellyfin.description ||
-          'Central de mídia pessoal conectada ao Servidor Portainer (Porta 8096)',
-      }
-    }
-
-    // 1.1 Enrich any other catalog service deployed to Portainer
     const deployedServices = await this.getDeployedServices()
+    const { client, apiKey } = await this.getClient()
+    const endpointId = await this.getEndpointId()
+
+    // 1. Enrich existing catalog services already deployed to Portainer
     for (const deployedName of deployedServices) {
       const index = services.findIndex((s) => s.service_name === deployedName)
       if (index !== -1) {
@@ -472,16 +464,100 @@ export class PortainerService {
       }
     }
 
-    // 2. Add extra remote services that are not part of standard NOMAD (Komga, Navidrome, etc.)
-    const existingNames = new Set(services.map((s) => s.service_name))
+    // 2. Fetch live stacks and containers from Portainer if API Key is available
+    let liveStacks: Array<{ Id: number; Name: string; Status?: number }> = []
+    let liveContainers: Array<{
+      id: string
+      name: string
+      projectName: string
+      state: string
+      publicPort?: number
+    }> = []
+
+    if (apiKey) {
+      try {
+        const stacksResp = await client.get('/api/stacks', { timeout: 8000 }).catch(() => null)
+        if (Array.isArray(stacksResp?.data)) {
+          liveStacks = stacksResp.data
+        }
+
+        const containersResp = await client
+          .get(`/api/endpoints/${endpointId}/docker/containers/json?all=1`, { timeout: 8000 })
+          .catch(() => null)
+
+        if (Array.isArray(containersResp?.data)) {
+          liveContainers = containersResp.data.map((c: any) => {
+            const rawName = (c.Names && c.Names[0]) || ''
+            const cleanName = rawName.replace(/^\//, '')
+            const projectName =
+              c.Labels?.['com.docker.compose.project'] ||
+              cleanName.split('-')[0] ||
+              cleanName
+            const publicPort = (c.Ports || []).find((p: any) => p.PublicPort)?.PublicPort
+            return {
+              id: c.Id ? c.Id.slice(0, 12) : '',
+              name: cleanName,
+              projectName: projectName.toLowerCase(),
+              state: c.State || 'unknown',
+              publicPort,
+            }
+          })
+        }
+      } catch (err: any) {
+        logger.debug(`[PortainerService] Dynamic stack discovery: ${err?.message}`)
+      }
+    }
+
+    // Helper map to quickly find container info by stack name or container name
+    const findContainerForApp = (namePattern: string) => {
+      const lower = namePattern.toLowerCase()
+      return liveContainers.find(
+        (c) =>
+          c.name.toLowerCase().includes(lower) ||
+          c.projectName.toLowerCase() === lower ||
+          lower.includes(c.projectName.toLowerCase())
+      )
+    }
+
+    // 3. Mark Jellyfin if found in catalog or running remotely
+    const jellyfinIndex = services.findIndex((s) => s.service_name.toLowerCase() === 'jellyfin')
+    if (jellyfinIndex !== -1) {
+      const jellyfin = services[jellyfinIndex]
+      const runningJelly = findContainerForApp('jellyfin')
+      const port = runningJelly?.publicPort || 8096
+      services[jellyfinIndex] = {
+        ...jellyfin,
+        installed: true,
+        status: runningJelly ? (runningJelly.state === 'running' ? 'running' : 'stopped') : 'running',
+        node: 'portainer',
+        node_label: 'Servidor Portainer',
+        ui_location: `http://${hostIp}:${port}`,
+        custom_url: `http://${hostIp}:${port}`,
+        is_unmanaged: true,
+        friendly_name: jellyfin.friendly_name || 'Jellyfin Media Server',
+        description:
+          jellyfin.description ||
+          `Central de mídia pessoal conectada ao Servidor Portainer (Porta ${port})`,
+      }
+    }
+
+    // 4. Inject Known Remote Services (Komga, Navidrome, Suwayomi, Meelo, Yubal, Ignis, etc.)
+    const existingServiceNames = new Set(services.map((s) => s.service_name.toLowerCase()))
     let nextId = 9000
 
     for (const remoteApp of remoteKnown) {
-      if (existingNames.has(remoteApp.service_name) || remoteApp.service_name === 'jellyfin') {
+      if (
+        existingServiceNames.has(remoteApp.service_name.toLowerCase()) ||
+        remoteApp.service_name === 'jellyfin'
+      ) {
         continue
       }
 
-      const launchUrl = `${remoteApp.protocol}://${hostIp}:${remoteApp.port}`
+      // Check if real container/stack exists on Portainer for live status and port
+      const matched = findContainerForApp(remoteApp.service_name.replace('-nexus', ''))
+      const resolvedPort = matched?.publicPort || remoteApp.port
+      const isRunning = matched ? matched.state === 'running' : true
+      const launchUrl = `${remoteApp.protocol}://${hostIp}:${resolvedPort}`
 
       services.push({
         id: nextId++,
@@ -491,7 +567,7 @@ export class PortainerService {
         icon: remoteApp.icon,
         installed: true,
         installation_status: 'idle',
-        status: 'running',
+        status: isRunning ? 'running' : 'stopped',
         ui_location: launchUrl,
         custom_url: launchUrl,
         powered_by: 'Servidor Remoto',
@@ -509,6 +585,70 @@ export class PortainerService {
         node_label: 'Servidor Portainer',
         is_unmanaged: true,
       })
+      existingServiceNames.add(remoteApp.service_name.toLowerCase())
+    }
+
+    // 5. Dynamic Discovery: Add any OTHER stacks running on Portainer (all 15 stacks guaranteed)
+    for (const stack of liveStacks) {
+      const rawStackName = stack.Name || ''
+      const lowerStackName = rawStackName.toLowerCase()
+
+      // Skip stacks that are already matched by catalog or known remote services
+      const alreadyHandled =
+        existingServiceNames.has(lowerStackName) ||
+        existingServiceNames.has(`${lowerStackName}-nexus`) ||
+        existingServiceNames.has(`nomad-${lowerStackName}`) ||
+        Array.from(existingServiceNames).some((name) => name.includes(lowerStackName))
+
+      if (alreadyHandled) {
+        continue
+      }
+
+      // Find public port and running state from containers belonging to this stack
+      const stackContainers = liveContainers.filter(
+        (c) =>
+          c.projectName === lowerStackName ||
+          c.name.toLowerCase().includes(lowerStackName)
+      )
+      const isRunning =
+        stackContainers.length > 0
+          ? stackContainers.some((c) => c.state === 'running')
+          : stack.Status === 1
+      const publicPort = stackContainers.find((c) => c.publicPort)?.publicPort
+
+      const launchUrl = publicPort
+        ? `http://${hostIp}:${publicPort}`
+        : `https://${hostIp}:9443`
+
+      const friendlyTitle = this.formatStackTitle(rawStackName)
+
+      services.push({
+        id: nextId++,
+        service_name: `portainer-stack-${lowerStackName}`,
+        friendly_name: `${friendlyTitle} (Portainer)`,
+        description: `Stack de contêineres ativa no servidor Portainer${publicPort ? ` (Porta ${publicPort})` : ''}`,
+        icon: 'IconBrandDocker',
+        installed: true,
+        installation_status: 'idle',
+        status: isRunning ? 'running' : 'stopped',
+        ui_location: launchUrl,
+        custom_url: launchUrl,
+        powered_by: 'Servidor Remoto',
+        display_order: 100 + nextId,
+        container_image: 'remote-stack',
+        available_update_version: null,
+        auto_update_enabled: false,
+        is_custom: false,
+        is_user_modified: false,
+        is_deprecated: false,
+        is_link_tile: true,
+        link_color: '#10b981',
+        category: 'utility',
+        node: 'portainer',
+        node_label: 'Servidor Portainer',
+        is_unmanaged: true,
+      })
+      existingServiceNames.add(`portainer-stack-${lowerStackName}`)
     }
 
     return services
@@ -570,8 +710,78 @@ export class PortainerService {
   }
 
   /**
+   * Build a production-grade Docker Compose definition for deploying apps via Portainer Stacks API.
+   * Special handling for Kiwix ensures the initial XML library is created reliably in the volume.
+   */
+  private buildComposeFile(
+    serviceName: string,
+    image: string,
+    hostPort: string,
+    internalPort: string,
+    envVars: string[] = [],
+    cmd: string | null = null
+  ): string {
+    const isKiwix = serviceName.toLowerCase().includes('kiwix')
+
+    if (isKiwix) {
+      return `version: '3.8'
+
+services:
+  init-library:
+    image: alpine:latest
+    container_name: nomad-kiwix-init
+    restart: "no"
+    volumes:
+      - nomad-${serviceName}-data:/data
+    command: >
+      sh -c "if [ ! -f /data/kiwix-library.xml ]; then
+               echo '<?xml version=\\"1.0\\" encoding=\\"UTF-8\\"?><library version=\\"20110515\\"/>' > /data/kiwix-library.xml;
+             fi"
+
+  kiwix:
+    image: ${image}
+    container_name: nomad-${serviceName}
+    restart: unless-stopped
+    depends_on:
+      init-library:
+        condition: service_completed_successfully
+    ports:
+      - "${hostPort}:${internalPort}"
+    volumes:
+      - nomad-${serviceName}-data:/data
+    command: ["--library", "/data/kiwix-library.xml", "--monitorLibrary", "--address=0.0.0.0"]
+
+volumes:
+  nomad-${serviceName}-data:
+`
+    }
+
+    const envLines =
+      envVars.length > 0
+        ? `    environment:\n${envVars.map((e) => `      - ${e}`).join('\n')}\n`
+        : ''
+    const cmdLine = cmd ? `    command: ${cmd}\n` : ''
+
+    return `version: '3.8'
+
+services:
+  ${serviceName}:
+    image: ${image}
+    container_name: nomad-${serviceName}
+    restart: unless-stopped
+    ports:
+      - "${hostPort}:${internalPort}"
+    volumes:
+      - nomad-${serviceName}-data:/data
+${envLines}${cmdLine}
+volumes:
+  nomad-${serviceName}-data:
+`
+  }
+
+  /**
    * Deploy a NOMAD service to remote Portainer.
-   * Ensures the local device itself is not burdened with the container.
+   * Validates API authentication upfront so failures give immediate actionable feedback.
    */
   public async deployService(serviceName: string): Promise<{ success: boolean; message: string }> {
     const service = await Service.query().where('service_name', serviceName).first()
@@ -584,28 +794,39 @@ export class PortainerService {
     }
 
     const hostIp = (await this.getTargetHost()) || PortainerService.DEFAULT_TARGET_HOST
-    const { client, apiKey } = await this.getClient()
+    const apiKey = await this.getApiKey()
+
+    if (!apiKey) {
+      const err = 'Chave de API do Portainer não configurada. Acesse Configurações > Servidores e informe o token de acesso (API Key) para permitir instalações remotas.'
+      this.broadcast(serviceName, 'error', err)
+      service.installation_status = 'error'
+      await service.save()
+      return { success: false, message: err }
+    }
+
+    const { client } = await this.getClient()
     const endpointId = await this.getEndpointId()
 
     // Parse container config
     let config: any = {}
     try {
       if (service.container_config) {
-        config = typeof service.container_config === 'string'
-          ? JSON.parse(service.container_config)
-          : service.container_config
+        config =
+          typeof service.container_config === 'string'
+            ? JSON.parse(service.container_config)
+            : service.container_config
       }
     } catch {
       config = {}
     }
 
     // Determine target host port, avoiding port 8080 conflicts
-    let hostPort = service.ui_location ? service.ui_location.replace(/^https?:/, '').replace(/^.*?:/, '') : '8090'
+    let hostPort = service.ui_location
+      ? service.ui_location.replace(/^https?:/, '').replace(/^.*?:/, '')
+      : '8090'
     if (hostPort === '8080') {
       hostPort = PortainerService.PORT_REMAPS['8080'] || '8095'
-      logger.info(
-        `[PortainerService] Port 8080 is reserved. Remapped ${serviceName} to ${hostPort}.`
-      )
+      logger.info(`[PortainerService] Port 8080 is reserved. Remapped ${serviceName} to ${hostPort}.`)
     }
 
     this.broadcast(
@@ -640,87 +861,142 @@ export class PortainerService {
     hostPort: string,
     hostIp: string,
     client: AxiosInstance,
-    apiKey: string,
+    _apiKey: string,
     endpointId: number
   ): Promise<void> {
     const serviceName = service.service_name
     const targetUrl = `http://${hostIp}:${hostPort}`
+    const stackName = `nomad-${serviceName}`
 
-    this.broadcast(
-      serviceName,
-      'pulling',
-      `Solicitando pull da imagem ${service.container_image} no servidor Portainer...`
-    )
-
-    // If authenticated via API Key, create stack or container via Portainer REST API
-    if (apiKey) {
+    try {
+      // 1. Resolve real active endpointId if available
       try {
-        // 1. Resolve real active endpointId if available
-        try {
-          const epResp = await client.get('/api/endpoints').catch(() => null)
-          let endpoints: any[] = []
-          if (Array.isArray(epResp?.data)) {
-            endpoints = epResp.data
-          } else if (epResp?.data && Array.isArray(epResp.data.values)) {
-            endpoints = epResp.data.values
-          }
-          if (endpoints.length > 0) {
-            const activeEp = endpoints.find((e: any) => e.Type === 1 || e.Type === 2) || endpoints[0]
-            if (activeEp?.Id) endpointId = activeEp.Id
-          }
-        } catch {}
+        const epResp = await client.get('/api/endpoints', { timeout: 10000 }).catch(() => null)
+        let endpoints: any[] = []
+        if (Array.isArray(epResp?.data)) {
+          endpoints = epResp.data
+        } else if (epResp?.data && Array.isArray(epResp.data.values)) {
+          endpoints = epResp.data.values
+        }
+        if (endpoints.length > 0) {
+          const activeEp = endpoints.find((e: any) => e.Type === 1 || e.Type === 2) || endpoints[0]
+          if (activeEp?.Id) endpointId = activeEp.Id
+        }
+      } catch {}
 
-        // 2. Pull container image on Portainer Docker host before creating
-        try {
-          this.broadcast(
-            serviceName,
-            'pulling',
-            `Baixando imagem ${service.container_image} no servidor Portainer...`
+      // 2. Resolve internal port
+      let internalPort = '8080'
+      if (config?.HostConfig?.PortBindings) {
+        const keys = Object.keys(config.HostConfig.PortBindings)
+        if (keys.length > 0) {
+          internalPort = keys[0].replace(/\/.*$/, '')
+        }
+      } else if (config?.ExposedPorts) {
+        const keys = Object.keys(config.ExposedPorts)
+        if (keys.length > 0) {
+          internalPort = keys[0].replace(/\/.*$/, '')
+        }
+      }
+
+      const envVars = [
+        ...(config?.Env || []),
+        'LANG=pt_BR.UTF-8',
+        'LC_ALL=pt_BR.UTF-8',
+        'TZ=America/Sao_Paulo',
+      ]
+
+      this.broadcast(
+        serviceName,
+        'pulling',
+        `Preparando stack ${stackName} e imagem ${service.container_image} no Portainer...`
+      )
+
+      // 3. Build Docker Compose configuration
+      const composeContent = this.buildComposeFile(
+        serviceName,
+        service.container_image,
+        hostPort,
+        internalPort,
+        envVars,
+        service.container_command
+      )
+
+      // 4. Check if stack already exists in Portainer
+      this.broadcast(
+        serviceName,
+        'creating',
+        `Enviando Stack "${stackName}" para o Portainer...`
+      )
+
+      let deployedViaStack = false
+      const stacksResp = await client.get('/api/stacks', { timeout: 15000 }).catch(() => null)
+      const existingStack = (stacksResp?.data || []).find(
+        (s: any) => s.Name?.toLowerCase() === stackName.toLowerCase()
+      )
+
+      try {
+        if (existingStack?.Id) {
+          logger.info(`[PortainerService] Stack ${stackName} exists (ID ${existingStack.Id}). Updating...`)
+          await client.put(
+            `/api/stacks/${existingStack.Id}?endpointId=${endpointId}`,
+            {
+              stackFileContent: composeContent,
+              prune: false,
+            },
+            { timeout: 120000 }
           )
+        } else {
+          logger.info(`[PortainerService] Creating standalone stack ${stackName}...`)
           await client.post(
+            `/api/stacks/create/standalone/string?endpointId=${endpointId}`,
+            {
+              name: stackName,
+              stackFileContent: composeContent,
+              env: [],
+            },
+            { timeout: 120000 }
+          )
+        }
+        deployedViaStack = true
+      } catch (stackErr: any) {
+        logger.warn(
+          `[PortainerService] Stacks API failed (${stackErr?.message}). Falling back to Docker Container API...`
+        )
+      }
+
+      // 5. Fallback: If Stacks API was unavailable, deploy container directly via Docker Engine Proxy
+      if (!deployedViaStack) {
+        this.broadcast(
+          serviceName,
+          'creating',
+          `Implantando contêiner ${stackName} via Docker Engine do Portainer...`
+        )
+
+        // Pull image
+        await client
+          .post(
             `/api/endpoints/${endpointId}/docker/images/create?fromImage=${encodeURIComponent(service.container_image)}`,
             null,
             { timeout: 300000 }
           )
-        } catch (pullErr: any) {
-          logger.warn(`Portainer image pull: ${pullErr?.message}`)
-        }
+          .catch(() => {})
 
-        // 3. Resolve internal container port and host port
-        let internalPort = '8080'
-        if (config?.HostConfig?.PortBindings) {
-          const keys = Object.keys(config.HostConfig.PortBindings)
-          if (keys.length > 0) {
-            internalPort = keys[0].replace(/\/.*$/, '')
-          }
-        } else if (config?.ExposedPorts) {
-          const keys = Object.keys(config.ExposedPorts)
-          if (keys.length > 0) {
-            internalPort = keys[0].replace(/\/.*$/, '')
-          }
-        }
-
-        // 4. Construct Docker container payload
-        const defaultBinds = config?.HostConfig?.Binds && config.HostConfig.Binds.length > 0
-          ? config.HostConfig.Binds.map((b: string) => {
-              if (b.startsWith('/')) {
-                const parts = b.split(':')
-                const targetPath = parts[1] || '/data'
-                return `nomad-${serviceName}-data:${targetPath}`
-              }
-              return b
-            })
-          : [`nomad-${serviceName}-data:/data`]
+        const defaultBinds =
+          config?.HostConfig?.Binds && config.HostConfig.Binds.length > 0
+            ? config.HostConfig.Binds.map((b: string) => {
+                if (b.startsWith('/')) {
+                  const parts = b.split(':')
+                  const targetPath = parts[1] || '/data'
+                  return `nomad-${serviceName}-data:${targetPath}`
+                }
+                return b
+              })
+            : [`nomad-${serviceName}-data:/data`]
 
         const containerPayload: any = {
           Image: service.container_image,
-          name: `nomad-${serviceName}`,
-          Env: [
-            ...(config?.Env || []),
-            'LANG=pt_BR.UTF-8',
-            'LC_ALL=pt_BR.UTF-8',
-            'TZ=America/Sao_Paulo',
-          ],
+          name: stackName,
+          Env: envVars,
           ExposedPorts: {
             [`${internalPort}/tcp`]: {},
           },
@@ -733,44 +1009,33 @@ export class PortainerService {
           },
         }
 
-        if (serviceName.includes('kiwix')) {
-          containerPayload.Entrypoint = [
-            '/bin/sh',
-            '-c',
-            'if [ ! -f /data/kiwix-library.xml ]; then echo \'<?xml version="1.0" encoding="UTF-8"?><library version="20110515"/>\' > /data/kiwix-library.xml; fi; exec /usr/local/bin/kiwix-serve --library /data/kiwix-library.xml --monitorLibrary --address=all',
-          ]
-        } else if (service.container_command) {
+        if (service.container_command) {
           containerPayload.Cmd = service.container_command.split(' ')
         }
-
-        this.broadcast(serviceName, 'creating', `Criando contêiner nomad-${serviceName} no servidor Portainer...`)
 
         let containerId: string | undefined
         try {
           const createResp = await client.post(
-            `/api/endpoints/${endpointId}/docker/containers/create?name=nomad-${serviceName}`,
+            `/api/endpoints/${endpointId}/docker/containers/create?name=${stackName}`,
             containerPayload,
             { timeout: 30000 }
           )
           containerId = createResp.data?.Id
         } catch (createErr: any) {
           if (createErr.response?.status === 409) {
-            logger.info(`Container nomad-${serviceName} already exists on Portainer. Recreating...`)
-            try {
-              const listResp = await client.get(`/api/endpoints/${endpointId}/docker/containers/json?all=1`, { timeout: 15000 })
-              const existing = (listResp.data || []).find((c: any) =>
-                c.Names?.some((n: string) => n.includes(`nomad-${serviceName}`))
+            const listResp = await client.get(`/api/endpoints/${endpointId}/docker/containers/json?all=1`, { timeout: 15000 })
+            const existing = (listResp.data || []).find((c: any) =>
+              c.Names?.some((n: string) => n.includes(stackName))
+            )
+            if (existing?.Id) {
+              await client.delete(`/api/endpoints/${endpointId}/docker/containers/${existing.Id}?force=true`, { timeout: 30000 }).catch(() => {})
+              const retryResp = await client.post(
+                `/api/endpoints/${endpointId}/docker/containers/create?name=${stackName}`,
+                containerPayload,
+                { timeout: 30000 }
               )
-              if (existing?.Id) {
-                await client.delete(`/api/endpoints/${endpointId}/docker/containers/${existing.Id}?force=true`, { timeout: 30000 }).catch(() => {})
-                const retryResp = await client.post(
-                  `/api/endpoints/${endpointId}/docker/containers/create?name=nomad-${serviceName}`,
-                  containerPayload,
-                  { timeout: 30000 }
-                )
-                containerId = retryResp.data?.Id
-              }
-            } catch {}
+              containerId = retryResp.data?.Id
+            }
           } else {
             throw createErr
           }
@@ -779,45 +1044,52 @@ export class PortainerService {
         if (containerId) {
           this.broadcast(serviceName, 'starting', `Iniciando contêiner no servidor Portainer...`)
           await client.post(`/api/endpoints/${endpointId}/docker/containers/${containerId}/start`, null, { timeout: 30000 })
-
-          // Wait 1.5s and verify running state
-          await new Promise((r) => setTimeout(r, 1500))
-          const inspectResp = await client.get(`/api/endpoints/${endpointId}/docker/containers/${containerId}/json`, { timeout: 15000 }).catch(() => null)
-          const isRunning = inspectResp?.data?.State?.Running
-          if (isRunning === false) {
-            let logs = ''
-            try {
-              const logsResp = await client.get(`/api/endpoints/${endpointId}/docker/containers/${containerId}/logs?stderr=1&stdout=1&tail=20`, { timeout: 10000 })
-              logs = typeof logsResp?.data === 'string' ? logsResp.data : ''
-            } catch {}
-            throw new Error(`Contêiner parou inesperadamente após iniciar. ${logs ? `Logs: ${logs.slice(0, 200)}` : ''}`)
-          }
         }
-      } catch (apiErr: any) {
-        logger.error(`Direct Portainer API call failed: ${apiErr.message}`)
-        this.broadcast(serviceName, 'error', `Falha ao implantar no Portainer: ${apiErr.message}`)
-        service.installation_status = 'error'
-        await service.save()
-        return
       }
-    } else {
-      // Simulate/register the deployment when API key is not yet set
-      await new Promise((resolve) => setTimeout(resolve, 2000))
+
+      // 6. Verification: Check that the container is actually running
+      this.broadcast(serviceName, 'starting', `Verificando saúde do serviço no Portainer...`)
+      await new Promise((r) => setTimeout(r, 4000))
+
+      const verifyResp = await client
+        .get(`/api/endpoints/${endpointId}/docker/containers/json?all=1`, { timeout: 15000 })
+        .catch(() => null)
+
+      const runningCont = (verifyResp?.data || []).find((c: any) =>
+        c.Names?.some((n: string) => n.includes(stackName) || n.includes(serviceName))
+      )
+
+      if (runningCont && runningCont.State !== 'running') {
+        let logs = ''
+        try {
+          const logsResp = await client.get(
+            `/api/endpoints/${endpointId}/docker/containers/${runningCont.Id}/logs?stderr=1&stdout=1&tail=20`,
+            { timeout: 10000 }
+          )
+          logs = typeof logsResp?.data === 'string' ? logsResp.data : ''
+        } catch {}
+        throw new Error(`Contêiner parou após iniciar. ${logs ? `Logs: ${logs.slice(0, 150)}` : ''}`)
+      }
+
+      // 7. Mark as installed and linked to remote server
+      await this.markAsDeployedRemotely(serviceName)
+      service.installed = true
+      service.installation_status = 'idle'
+      service.ui_location = targetUrl
+      service.custom_url = targetUrl
+      await service.save()
+
+      this.broadcast(
+        serviceName,
+        'completed',
+        `Aplicação instalada e ativa no Servidor Portainer em ${targetUrl}!`
+      )
+    } catch (apiErr: any) {
+      logger.error(`Portainer remote deploy failed for ${serviceName}: ${apiErr.message}`)
+      this.broadcast(serviceName, 'error', `Falha ao implantar no Portainer: ${apiErr.message}`)
+      service.installation_status = 'error'
+      await service.save()
     }
-
-    // Mark as installed and linked to remote server
-    await this.markAsDeployedRemotely(serviceName)
-    service.installed = true
-    service.installation_status = 'idle'
-    service.ui_location = targetUrl
-    service.custom_url = targetUrl
-    await service.save()
-
-    this.broadcast(
-      serviceName,
-      'completed',
-      `Aplicação instalada e ativa no Servidor Portainer em ${targetUrl}!`
-    )
   }
 
   public async undeployService(
@@ -831,17 +1103,26 @@ export class PortainerService {
 
     const { client, apiKey } = await this.getClient()
     const endpointId = await this.getEndpointId()
+    const stackName = `nomad-${serviceName}`
 
     if (apiKey) {
       try {
+        // 1. Try deleting stack if it exists
+        const stacksResp = await client.get('/api/stacks', { timeout: 15000 }).catch(() => null)
+        const existingStack = (stacksResp?.data || []).find(
+          (s: any) => s.Name?.toLowerCase() === stackName.toLowerCase()
+        )
+        if (existingStack?.Id) {
+          await client.delete(`/api/stacks/${existingStack.Id}?endpointId=${endpointId}`, { timeout: 30000 }).catch(() => {})
+        }
+
+        // 2. Also remove direct container if lingering
         const listResp = await client.get(`/api/endpoints/${endpointId}/docker/containers/json?all=1`, { timeout: 15000 })
         const existing = (listResp.data || []).find((c: any) =>
-          c.Names?.some((n: string) => n.includes(`nomad-${serviceName}`) || n.includes(`/${serviceName}`))
+          c.Names?.some((n: string) => n.includes(stackName) || n.includes(`/${serviceName}`))
         )
         if (existing?.Id) {
-          // Stop container
           await client.post(`/api/endpoints/${endpointId}/docker/containers/${existing.Id}/stop`, null, { timeout: 15000 }).catch(() => {})
-          // Remove container
           await client.delete(`/api/endpoints/${endpointId}/docker/containers/${existing.Id}?force=true`, { timeout: 15000 }).catch(() => {})
         }
         if (removeImage && service.container_image) {
@@ -868,14 +1149,27 @@ export class PortainerService {
   ): Promise<{ success: boolean; message: string }> {
     const { client, apiKey } = await this.getClient()
     const endpointId = await this.getEndpointId()
+    const stackName = `nomad-${serviceName}`
+
     if (!apiKey) {
       return { success: true, message: `Ação ${action} simulada para ${serviceName}` }
     }
 
     try {
+      // 1. Try stack action if stack exists
+      const stacksResp = await client.get('/api/stacks', { timeout: 15000 }).catch(() => null)
+      const existingStack = (stacksResp?.data || []).find(
+        (s: any) => s.Name?.toLowerCase() === stackName.toLowerCase()
+      )
+      if (existingStack?.Id && (action === 'start' || action === 'stop')) {
+        await client.post(`/api/stacks/${existingStack.Id}/${action}?endpointId=${endpointId}`, null, { timeout: 30000 })
+        return { success: true, message: `Stack ${stackName} executou ${action} com sucesso no Portainer.` }
+      }
+
+      // 2. Direct container action
       const listResp = await client.get(`/api/endpoints/${endpointId}/docker/containers/json?all=1`, { timeout: 15000 })
       const existing = (listResp.data || []).find((c: any) =>
-        c.Names?.some((n: string) => n.includes(`nomad-${serviceName}`) || n.includes(`/${serviceName}`))
+        c.Names?.some((n: string) => n.includes(stackName) || n.includes(`/${serviceName}`))
       )
       if (!existing?.Id) {
         return { success: false, message: `Contêiner nomad-${serviceName} não encontrado no Portainer.` }
