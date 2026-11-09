@@ -27,9 +27,9 @@ type Props = {
 const STAGE_LABELS: Record<SystemUpdateStatus['stage'], string> = {
   idle: 'Preparando Atualização',
   starting: 'Iniciando Atualização',
-  pulling: 'Baixando Novas Imagens',
-  pulled: 'Imagens Baixadas com Sucesso',
-  recreating: 'Recriando Contêineres e Reiniciando',
+  pulling: 'Baixando Atualização',
+  pulled: 'Download Concluído',
+  recreating: 'Instalando Atualização',
   complete: 'Atualização Concluída!',
   error: 'Falha na Atualização',
 }
@@ -40,11 +40,11 @@ const translateUpdateMessage = (stage: SystemUpdateStatus['stage'], message?: st
       case 'starting':
         return 'Iniciando o processo de atualização...'
       case 'pulling':
-        return 'Baixando novas imagens Docker do Nexus NOMAD...'
+        return 'Baixando pacotes e imagens mais recentes...'
       case 'pulled':
-        return 'Novas imagens baixadas com sucesso! Preparando reinício...'
+        return 'Download concluído com sucesso! Iniciando instalação...'
       case 'recreating':
-        return 'Reiniciando contêineres e aplicando a nova versão...'
+        return 'Instalando a nova versão e inicializando serviços...'
       case 'complete':
         return 'Atualização concluída com sucesso! Recarregando sistema...'
       case 'error':
@@ -56,20 +56,20 @@ const translateUpdateMessage = (stage: SystemUpdateStatus['stage'], message?: st
 
   const lower = message.toLowerCase()
   if (lower.includes('initiated') || lower.includes('iniciando') || stage === 'starting') {
-    return 'Inicializando o processo de atualização...'
+    return 'Iniciando o processo de atualização...'
   }
   if (lower.includes('pulling') || lower.includes('baixando') || stage === 'pulling') {
-    return 'Baixando imagens Docker mais recentes do Nexus NOMAD...'
+    return 'Baixando pacotes e imagens mais recentes...'
   }
-  if (lower.includes('pulled') || lower.includes('baixadas com sucesso') || stage === 'pulled') {
-    return 'Imagens baixadas com sucesso! Preparando reinício dos serviços...'
+  if (lower.includes('pulled') || lower.includes('baixadas') || stage === 'pulled') {
+    return 'Download concluído com sucesso! Iniciando instalação...'
   }
-  if (lower.includes('recreating') || lower.includes('recriando') || stage === 'recreating') {
-    if (lower.includes('mysql') || lower.includes('banco de dados')) return 'Atualizando banco de dados (MySQL)...'
-    if (lower.includes('redis') || lower.includes('cache')) return 'Atualizando cache (Redis)...'
-    if (lower.includes('dozzle') || lower.includes('monitor')) return 'Atualizando monitor de logs (Dozzle)...'
-    if (lower.includes('admin') || lower.includes('painel')) return 'Atualizando painel do Nexus NOMAD...'
-    return 'Reiniciando contêineres e aplicando a nova versão...'
+  if (lower.includes('recreating') || lower.includes('recriando') || lower.includes('instalando') || stage === 'recreating') {
+    if (lower.includes('mysql') || lower.includes('banco de dados')) return 'Instalando componentes do banco de dados (MySQL)...'
+    if (lower.includes('redis') || lower.includes('cache')) return 'Instalando componentes de cache (Redis)...'
+    if (lower.includes('dozzle') || lower.includes('monitor')) return 'Instalando monitor de logs (Dozzle)...'
+    if (lower.includes('admin') || lower.includes('painel')) return 'Instalando nova versão do Nexus NOMAD...'
+    return 'Instalando a nova versão e inicializando serviços...'
   }
   if (lower.includes('completed') || lower.includes('concluída') || stage === 'complete') {
     return 'Atualização concluída com sucesso! Recarregando sistema...'
@@ -119,15 +119,16 @@ export default function SystemUpdatePage(props: { system: Props }) {
       try {
         const response = await api.getSystemUpdateStatus()
         if (!response) {
-          // Servidor temporariamente offline reiniciando com a nova imagem
-          setShowConnectionLostNotice(true)
+          // Servidor temporariamente offline reiniciando com a nova imagem.
+          // Avança a barra suavemente entre 70% e 94% mostrando que está instalando.
           setUpdateStatus((prev) => {
-            if (!prev) return prev
+            const currentProgress = prev ? prev.progress : 65
+            const nextProgress = Math.min(Math.max(currentProgress + 4, 72), 94)
             return {
-              ...prev,
               stage: 'recreating',
-              progress: Math.max(prev.progress, 88),
-              message: 'Reiniciando o servidor Nexus NOMAD com a nova versão...',
+              progress: nextProgress,
+              message: 'Instalando a nova versão e inicializando serviços...',
+              timestamp: new Date().toISOString(),
             }
           })
           return
@@ -138,9 +139,6 @@ export default function SystemUpdatePage(props: { system: Props }) {
         if (ADVANCED_STAGES.has(response.stage)) {
           seenAdvancedStageRef.current = true
         }
-
-        // If we can connect again, hide the connection lost notice
-        setShowConnectionLostNotice(false)
 
         // Check if update is complete or errored. We also treat a return to
         // 'idle' as completion if we previously saw an advanced stage — this
@@ -157,7 +155,6 @@ export default function SystemUpdatePage(props: { system: Props }) {
             message: 'Atualização concluída com sucesso! Recarregando sistema...',
             timestamp: new Date().toISOString(),
           })
-          setShowConnectionLostNotice(false)
           // Re-check version so the KV store clears the stale "update available" flag
           // before we reload, otherwise the banner shows "current → current"
           try {
@@ -173,18 +170,17 @@ export default function SystemUpdatePage(props: { system: Props }) {
           setError(response.message)
         }
       } catch (err) {
-        // During container restart, we'll lose connection - this is expected
-        setShowConnectionLostNotice(true)
+        // Durante o reinício, mantemos a barra avançando na etapa de instalação
         setUpdateStatus((prev) => {
-          if (!prev) return prev
+          const currentProgress = prev ? prev.progress : 65
+          const nextProgress = Math.min(Math.max(currentProgress + 4, 72), 94)
           return {
-            ...prev,
             stage: 'recreating',
-            progress: Math.max(prev.progress, 88),
-            message: 'Reiniciando o servidor Nexus NOMAD com a nova versão...',
+            progress: nextProgress,
+            message: 'Instalando a nova versão e inicializando serviços...',
+            timestamp: new Date().toISOString(),
           }
         })
-        console.log('Polling update status (container may be restarting)...')
       }
     }, 2000)
 
@@ -331,26 +327,6 @@ export default function SystemUpdatePage(props: { system: Props }) {
                 variant="bordered"
                 dismissible
                 onDismiss={() => setError(null)}
-              />
-            </div>
-          )}
-          {isUpdating && updateStatus?.stage === 'recreating' && (
-            <div className="mb-6">
-              <Alert
-                type="info"
-                title="Reiniciando Contêiner"
-                message="O contêiner administrativo está reiniciando. Esta página será recarregada automaticamente quando a atualização for concluída."
-                variant="solid"
-              />
-            </div>
-          )}
-          {isUpdating && showConnectionLostNotice && (
-            <div className="mb-6">
-              <Alert
-                type="info"
-                title="Conexão Perdida Temporariamente (Esperado)"
-                message="Você pode ver notificações de erro enquanto o servidor reinicia durante a atualização. Isso é totalmente normal e esperado. A conexão será restabelecida em instantes."
-                variant="solid"
               />
             </div>
           )}

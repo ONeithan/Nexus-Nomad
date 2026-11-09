@@ -4,7 +4,7 @@
 
 ###################################################################################################################################################################################################
 # Script                | Instalador Nexus Project NOMAD (PT-BR)
-# Versão                | 1.0.3-nexus
+# Versão                | 1.0.4-nexus
 # Repositório           | https://github.com/ONeithan/Nexus-Nomad
 ###################################################################################################################################################################################################
 
@@ -369,7 +369,7 @@ prepare_nomad_admin_image() {
 
   echo -e "${YELLOW}#${RESET} Compilando imagem Docker localmente (pode levar de 3 a 8 minutos na primeira vez)...\n"
   if ! sudo docker build \
-      --build-arg VERSION="1.0.3-nexus" \
+      --build-arg VERSION="1.0.4-nexus" \
       --build-arg BUILD_DATE="$(date -u +"%Y-%m-%dT%H:%M:%SZ")" \
       --build-arg VCS_REF="${short_sha}" \
       -t "${NOMAD_ADMIN_IMAGE}" \
