@@ -15,21 +15,24 @@
 - **Yubal:** Atualizado para `Yubal (Download de Músicas)` — Download e gerenciamento de músicas e álbuns para a biblioteca local.
 - **Ignis:** Atualizado para `Ignis (Obsidian / Notas)` — Obsidian Web / Gestão de notas e segundo cérebro pessoal.
 
-### 4. Instalação Real de Aplicações via Portainer Stacks API (Docker Compose)
-- **Causa identificada da falha anterior do Kiwix:**
-  - O contêiner oficial do Kiwix (`ghcr.io/kiwix/kiwix-serve`) utiliza como ponto de entrada o binário compilado `/usr/local/bin/kiwix-serve`. Quando iniciado com `--library /data/kiwix-library.xml` em um volume Docker remoto recém-criado e vazio, o processo encerrava no primeiro segundo com erro de arquivo inexistente.
-  - O sistema dependia de chamadas manuais à Docker Engine do Portainer sujeitas a timeouts curtos e sem provisionamento de volumes compose.
-- **Solução Arquitetural Definitiva:**
-  - A implantação no Portainer agora utiliza a **Portainer Stacks API oficial** (`POST /api/stacks/create/standalone/string?endpointId={id}`), gerando arquivos Docker Compose nativos com persistência durável em volumes.
-  - Para o **Kiwix**, a stack inclui automaticamente um contêiner inicializador leve (`init-library`) que assegura a criação do arquivo de biblioteca `/data/kiwix-library.xml` no volume compartilhado antes da execução do `kiwix-serve`, garantindo que a aplicação suba 100% saudável e responsiva na porta `8090`.
-  - Para quaisquer outras aplicações do catálogo do NOMAD, o sistema monta a definição Docker Compose equivalente com mapeamento seguro de portas, variáveis de ambiente e volumes nomeados.
-  - Validação estrita de credenciais: o sistema exige e valida a API Key do Portainer antes do deploy, eliminando falsos positivos e exibindo notificações detalhadas em tempo real via SSE.
-  - Verificação de saúde (`healthcheck`) pós-deploy para assegurar que a stack e seus contêineres estejam de fato em execução (`running`) antes de marcar como instalada.
+### 4. Suporte a 100% do Catálogo de Aplicações via Portainer Stacks API (Docker Compose Universal)
+- O gerador de Stacks Docker Compose foi totalmente reformulado para cobrir **todas as aplicações do catálogo NOMAD**:
+  - **Múltiplas Portas Suportadas:** Reconhece e mapeia todas as portas internas e secundárias (ex: Kolibri 8080 e 8311 para exercícios interativos, Qdrant 6333 e 6334, Calibre-Web 8083, Vaultwarden 80, Stirling PDF 8080, etc.).
+  - **Múltiplos Volumes Declarativos:** Converte cada diretório de persistência do `container_config` em volumes nomeados duráveis e isolados no Docker do Portainer (ex: `nomad-<app>-config`, `nomad-<app>-data`, `nomad-<app>-books`).
+  - **Variáveis de Ambiente Completas:** Repassa automaticamente todas as variáveis de configuração de cada serviço (`Env`).
+  - **Inicializadores de Segurança e Dependência:**
+    - **Kiwix:** Executa *init-container* ultraleve para provisionar `/data/kiwix-library.xml` no volume compartilhado antes da subida do `kiwix-serve`.
+    - **Vaultwarden:** Executa *init-container* com geração de certificados TLS autoassinados (`/data/cert.pem` e `/data/key.pem`) para desbloqueio seguro do cofre no navegador.
+- **Validação Rigorosa:** Exige API Key antes da instalação remota, com verificação de integridade pós-deploy (`State.Running`) e captura de logs em caso de falha.
 
-### 5. Sincronização e Reconciliação Durável (`_syncContainersWithDatabase`)
+### 5. Atualização Remota Universal de Aplicações (`updateService`)
+- A rotina de atualização de aplicativos do sistema foi estendida para reconhecer serviços executados no Portainer.
+- Ao solicitar atualização de versão no painel (individual ou via auto-update geral), o sistema dispara o pull da nova imagem no Portainer e realiza o re-deploy da Stack via API REST mantendo **100% dos volumes e dados de usuário preservados**.
+
+### 6. Sincronização e Reconciliação Durável (`_syncContainersWithDatabase`)
 - Rastreamento durável de serviços remotos gravado no KVStore (`portainer.deployedServices`).
 - A rotina de reconciliação periódica de contêineres foi atualizada para respeitar serviços implantados no Portainer, impedindo que sejam desmarcados ou desvinculados.
 - Suporte completo a operações de ciclo de vida (`start`, `stop`, `restart` e `uninstall`) comunicando diretamente com o Portainer.
 
-### 6. Atualização de Versão e Workflow
+### 7. Atualização de Versão e Workflow
 - Bumping para `v1.0.11` (`1.0.11-nexus`) com compilação e publicação automática no GitHub Container Registry (GHCR).

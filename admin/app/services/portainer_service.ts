@@ -711,18 +711,86 @@ export class PortainerService {
 
   /**
    * Build a production-grade Docker Compose definition for deploying apps via Portainer Stacks API.
-   * Special handling for Kiwix ensures the initial XML library is created reliably in the volume.
+   * Parses all ports, volumes and env from container_config to support 100% of catalog services.
    */
   private buildComposeFile(
     serviceName: string,
     image: string,
-    hostPort: string,
-    internalPort: string,
-    envVars: string[] = [],
+    primaryHostPort: string,
+    config: any,
     cmd: string | null = null
   ): string {
     const isKiwix = serviceName.toLowerCase().includes('kiwix')
+    const isVaultwarden = serviceName.toLowerCase().includes('vaultwarden')
 
+    // 1. Build Ports List
+    const portsList: string[] = []
+    const portBindings = config?.HostConfig?.PortBindings || {}
+    const exposedPorts = Object.keys(config?.ExposedPorts || {})
+    const boundInternals = new Set<string>()
+
+    // Primary UI port mapping
+    let primaryInternal = '8080'
+    if (Object.keys(portBindings).length > 0) {
+      primaryInternal = Object.keys(portBindings)[0].replace(/\/.*$/, '')
+    } else if (exposedPorts.length > 0) {
+      primaryInternal = exposedPorts[0].replace(/\/.*$/, '')
+    }
+    portsList.push(`"${primaryHostPort}:${primaryInternal}"`)
+    boundInternals.add(primaryInternal)
+
+    // Secondary ports (e.g. Kolibri 8311, Qdrant 6334)
+    for (const [bindingKey, bindingArr] of Object.entries(portBindings)) {
+      const intPort = bindingKey.replace(/\/.*$/, '')
+      if (!boundInternals.has(intPort)) {
+        const hostP = (bindingArr as any)?.[0]?.HostPort || intPort
+        portsList.push(`"${hostP}:${intPort}"`)
+        boundInternals.add(intPort)
+      }
+    }
+
+    // 2. Build Volumes List & Named Volumes declarations
+    const volumeMounts: string[] = []
+    const declaredNamedVolumes = new Set<string>()
+
+    const rawBinds = config?.HostConfig?.Binds || []
+    if (rawBinds.length > 0) {
+      for (const bind of rawBinds) {
+        const parts = bind.split(':')
+        const targetPath = parts[1] || '/data'
+        const mode = parts[2] ? `:${parts[2]}` : ''
+        const cleanName =
+          targetPath
+            .replace(/^\//, '')
+            .replace(/[^a-zA-Z0-9_-]/g, '-')
+            .toLowerCase() || 'data'
+        const volName = `nomad-${serviceName}-${cleanName}`
+        volumeMounts.push(`- ${volName}:${targetPath}${mode}`)
+        declaredNamedVolumes.add(volName)
+      }
+    } else {
+      const defaultVol = `nomad-${serviceName}-data`
+      volumeMounts.push(`- ${defaultVol}:/data`)
+      declaredNamedVolumes.add(defaultVol)
+    }
+
+    // 3. Environment Variables
+    const envVars = [
+      ...(config?.Env || []),
+      'LANG=pt_BR.UTF-8',
+      'LC_ALL=pt_BR.UTF-8',
+      'TZ=America/Sao_Paulo',
+    ]
+
+    const portsBlock = portsList.map((p) => `      - ${p}`).join('\n')
+    const volumesBlock = volumeMounts.map((v) => `      ${v}`).join('\n')
+    const envBlock = envVars.map((e) => `      - ${e}`).join('\n')
+    const cmdBlock = cmd ? `    command: ${cmd}\n` : ''
+    const namedVolumesBlock = Array.from(declaredNamedVolumes)
+      .map((v) => `  ${v}:`)
+      .join('\n')
+
+    // 4. Special Handlers for Services needing bootstrap init
     if (isKiwix) {
       return `version: '3.8'
 
@@ -738,7 +806,7 @@ services:
                echo '<?xml version=\\"1.0\\" encoding=\\"UTF-8\\"?><library version=\\"20110515\\"/>' > /data/kiwix-library.xml;
              fi"
 
-  kiwix:
+  ${serviceName}:
     image: ${image}
     container_name: nomad-${serviceName}
     restart: unless-stopped
@@ -746,22 +814,53 @@ services:
       init-library:
         condition: service_completed_successfully
     ports:
-      - "${hostPort}:${internalPort}"
+${portsBlock}
     volumes:
-      - nomad-${serviceName}-data:/data
+${volumesBlock}
     command: ["--library", "/data/kiwix-library.xml", "--monitorLibrary", "--address=0.0.0.0"]
 
 volumes:
-  nomad-${serviceName}-data:
+${namedVolumesBlock}
 `
     }
 
-    const envLines =
-      envVars.length > 0
-        ? `    environment:\n${envVars.map((e) => `      - ${e}`).join('\n')}\n`
-        : ''
-    const cmdLine = cmd ? `    command: ${cmd}\n` : ''
+    if (isVaultwarden) {
+      return `version: '3.8'
 
+services:
+  init-ssl:
+    image: alpine:latest
+    container_name: nomad-vaultwarden-init
+    restart: "no"
+    volumes:
+      - nomad-${serviceName}-data:/data
+    command: >
+      sh -c "apk add --no-cache openssl >/dev/null 2>&1;
+             if [ ! -f /data/cert.pem ] || [ ! -f /data/key.pem ]; then
+               openssl req -x509 -newkey rsa:2048 -nodes -keyout /data/key.pem -out /data/cert.pem -days 3650 -subj '/CN=vaultwarden';
+               chmod 600 /data/key.pem;
+             fi"
+
+  ${serviceName}:
+    image: ${image}
+    container_name: nomad-${serviceName}
+    restart: unless-stopped
+    depends_on:
+      init-ssl:
+        condition: service_completed_successfully
+    ports:
+${portsBlock}
+    volumes:
+${volumesBlock}
+    environment:
+${envBlock}
+
+volumes:
+${namedVolumesBlock}
+`
+    }
+
+    // Default compose for all other standard catalog apps
     return `version: '3.8'
 
 services:
@@ -770,12 +869,13 @@ services:
     container_name: nomad-${serviceName}
     restart: unless-stopped
     ports:
-      - "${hostPort}:${internalPort}"
+${portsBlock}
     volumes:
-      - nomad-${serviceName}-data:/data
-${envLines}${cmdLine}
-volumes:
-  nomad-${serviceName}-data:
+${volumesBlock}
+    environment:
+${envBlock}
+${cmdBlock}volumes:
+${namedVolumesBlock}
 `
   }
 
@@ -916,8 +1016,7 @@ volumes:
         serviceName,
         service.container_image,
         hostPort,
-        internalPort,
-        envVars,
+        config,
         service.container_command
       )
 
@@ -1178,6 +1277,126 @@ volumes:
       return { success: true, message: `Serviço ${serviceName} executou ${action} com sucesso no servidor Portainer.` }
     } catch (err: any) {
       return { success: false, message: `Falha ao executar ${action} no Portainer: ${err.message}` }
+    }
+  }
+
+  /**
+   * Update a remote Portainer service/stack to a target version or latest image tag.
+   * Preserves all container volumes, configurations and data intact.
+   */
+  public async updateRemoteService(
+    serviceName: string,
+    targetVersion?: string
+  ): Promise<{ success: boolean; message: string }> {
+    const service = await Service.query().where('service_name', serviceName).first()
+    if (!service) {
+      return { success: false, message: `Serviço ${serviceName} não encontrado.` }
+    }
+
+    const { client, apiKey } = await this.getClient()
+    const endpointId = await this.getEndpointId()
+    const stackName = `nomad-${serviceName}`
+
+    if (!apiKey) {
+      return { success: false, message: 'Chave de API do Portainer não configurada.' }
+    }
+
+    let newImage = service.container_image
+    if (targetVersion) {
+      const base = newImage.split(':')[0]
+      newImage = `${base}:${targetVersion}`
+    }
+
+    this.broadcast(
+      serviceName,
+      'pulling',
+      `Baixando nova versão (${newImage}) no servidor Portainer...`
+    )
+
+    try {
+      // 1. Pull new image
+      await client.post(
+        `/api/endpoints/${endpointId}/docker/images/create?fromImage=${encodeURIComponent(newImage)}`,
+        null,
+        { timeout: 300000 }
+      )
+
+      let hostPort = service.ui_location
+        ? service.ui_location.replace(/^https?:/, '').replace(/^.*?:/, '')
+        : '8090'
+      if (hostPort === '8080') {
+        hostPort = PortainerService.PORT_REMAPS['8080'] || '8095'
+      }
+
+      let config: any = {}
+      try {
+        if (service.container_config) {
+          config =
+            typeof service.container_config === 'string'
+              ? JSON.parse(service.container_config)
+              : service.container_config
+        }
+      } catch {}
+
+      // 2. Build updated compose definition
+      const composeContent = this.buildComposeFile(
+        serviceName,
+        newImage,
+        hostPort,
+        config,
+        service.container_command
+      )
+
+      // 3. Update stack in Portainer
+      const stacksResp = await client.get('/api/stacks', { timeout: 15000 }).catch(() => null)
+      const existingStack = (stacksResp?.data || []).find(
+        (s: any) => s.Name?.toLowerCase() === stackName.toLowerCase()
+      )
+
+      if (existingStack?.Id) {
+        this.broadcast(serviceName, 'recreating', `Atualizando Stack ${stackName} no Portainer...`)
+        await client.put(
+          `/api/stacks/${existingStack.Id}?endpointId=${endpointId}`,
+          {
+            stackFileContent: composeContent,
+            prune: false,
+          },
+          { timeout: 120000 }
+        )
+      } else {
+        await client.post(
+          `/api/stacks/create/standalone/string?endpointId=${endpointId}`,
+          {
+            name: stackName,
+            stackFileContent: composeContent,
+            env: [],
+          },
+          { timeout: 120000 }
+        )
+      }
+
+      // 4. Verify health
+      await new Promise((r) => setTimeout(r, 4000))
+
+      service.container_image = newImage
+      service.available_update_version = null
+      service.installation_status = 'idle'
+      await service.save()
+
+      this.broadcast(
+        serviceName,
+        'completed',
+        `Serviço ${service.friendly_name || serviceName} atualizado com sucesso no Portainer!`
+      )
+
+      return {
+        success: true,
+        message: `Serviço ${service.friendly_name || serviceName} atualizado para ${newImage} com sucesso.`,
+      }
+    } catch (err: any) {
+      logger.error(`Update error for remote service ${serviceName}: ${err.message}`)
+      this.broadcast(serviceName, 'error', `Falha ao atualizar no Portainer: ${err.message}`)
+      return { success: false, message: `Falha ao atualizar no Portainer: ${err.message}` }
     }
   }
 }

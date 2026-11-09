@@ -305,6 +305,23 @@ export default class SystemController {
 
     async updateService({ request, response }: HttpContext) {
         const payload = await request.validateUsing(updateServiceValidator)
+
+        const isRemote =
+            (await this.systemService.isPortainerEnabled()) &&
+            (await this.systemService.portainerService.isDeployedRemotely(payload.service_name))
+
+        if (isRemote) {
+            const result = await this.systemService.portainerService.updateRemoteService(
+                payload.service_name,
+                payload.target_version
+            )
+            if (result.success) {
+                return response.send({ success: true, message: result.message })
+            } else {
+                return response.status(400).send({ error: result.message })
+            }
+        }
+
         const result = await this.dockerService.updateContainer(
             payload.service_name,
             payload.target_version
