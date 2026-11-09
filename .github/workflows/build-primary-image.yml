@@ -1,4 +1,5 @@
 name: Build Primary Docker Image
+# Build release trigger: v1.0.10
 
 on:
   push:
