@@ -109,6 +109,9 @@ COPY README.md /app/README.md
 # (see DockerService._runPreinstallActions__CalibreWeb)
 COPY install/calibre-empty-library/metadata.db /app/assets/calibre/metadata.db
 
+# Starter mini Wikipedia ZIM, seeded into storage/zim on Kiwix install
+COPY install/wikipedia_en_100_mini_2026-01.zim /app/assets/kiwix/wikipedia_en_100_mini_2026-01.zim
+
 # Copy entrypoint script and ensure it's executable
 COPY install/entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh

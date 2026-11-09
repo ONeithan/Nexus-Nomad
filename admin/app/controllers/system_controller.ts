@@ -114,6 +114,11 @@ export default class SystemController {
 
     async affectService({ request, response }: HttpContext) {
         const payload = await request.validateUsing(affectServiceValidator);
+        const isRemote = (await this.systemService.isPortainerEnabled()) && (await this.systemService.portainerService.isDeployedRemotely(payload.service_name));
+        if (isRemote) {
+            const result = await this.systemService.portainerService.affectRemoteContainer(payload.service_name, payload.action);
+            return response.send({ success: result.success, message: result.message });
+        }
         const result = await this.dockerService.affectContainer(payload.service_name, payload.action);
         if (!result) {
             response.internalServerError({ error: 'Failed to affect service' });
@@ -532,6 +537,18 @@ export default class SystemController {
         }
         if (!service.installed) {
             return response.status(409).send({ error: `Service ${payload.service_name} is not installed` })
+        }
+
+        const isRemote = (await this.systemService.isPortainerEnabled()) && (await this.systemService.portainerService.isDeployedRemotely(payload.service_name));
+        if (isRemote) {
+            const result = await this.systemService.portainerService.undeployService(
+                payload.service_name,
+                payload.remove_image ?? false
+            );
+            if (!result.success) {
+                return response.status(500).send({ success: false, message: result.message });
+            }
+            return response.send({ success: true, message: result.message });
         }
 
         const result = await this.dockerService.uninstallService(

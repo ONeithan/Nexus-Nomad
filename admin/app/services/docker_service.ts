@@ -16,6 +16,8 @@ import {
   MESHCORE_WEB_STORAGE_PATH,
   MEDIA_STORAGE_PATH,
   JELLYFIN_MEDIA_SUBFOLDERS,
+  ensureDirectoryExists,
+  getFileStatsIfExists,
 } from '../utils/fs.js'
 import { KiwixLibraryService } from './kiwix_library_service.js'
 import { SERVICE_NAMES } from '../../constants/service_names.js'
@@ -1042,57 +1044,77 @@ export class DockerService {
   }
 
   private async _runPreinstallActions__KiwixServe(): Promise<void> {
-    /**
-     * At least one .zim file must be available before we can start the kiwix container.
-     * We'll download the lightweight mini Wikipedia Top 100 zim file for this purpose.
-     **/
     const WIKIPEDIA_ZIM_URL =
       'https://github.com/Crosstalk-Solutions/project-nomad/raw/refs/heads/main/install/wikipedia_en_100_mini_2026-01.zim'
     const filename = 'wikipedia_en_100_mini_2026-01.zim'
     const filepath = join(process.cwd(), ZIM_STORAGE_PATH, filename)
-    logger.info(`[DockerService] Kiwix Serve pre-install: Downloading ZIM file to ${filepath}`)
+    const dirPath = join(process.cwd(), ZIM_STORAGE_PATH)
+    await ensureDirectoryExists(dirPath)
+
+    logger.info(`[DockerService] Kiwix Serve pre-install: Preparing ZIM storage at ${filepath}`)
 
     this._broadcast(
       SERVICE_NAMES.KIWIX,
       'preinstall',
-      `Running pre-install actions for Kiwix Serve...`
-    )
-    this._broadcast(
-      SERVICE_NAMES.KIWIX,
-      'preinstall',
-      `Downloading Wikipedia ZIM file from ${WIKIPEDIA_ZIM_URL}. This may take some time...`
+      `Preparando biblioteca para Kiwix Serve...`
     )
 
-    try {
-      await doResumableDownloadWithRetry({
-        url: WIKIPEDIA_ZIM_URL,
-        filepath,
-        timeout: 60000,
-        allowedMimeTypes: [
-          'application/x-zim',
-          'application/x-openzim',
-          'application/octet-stream',
-        ],
-      })
-
-      this._broadcast(
-        SERVICE_NAMES.KIWIX,
-        'preinstall',
-        `Downloaded Wikipedia ZIM file to ${filepath}`
-      )
-
-      // Generate the initial kiwix library XML before the container is created
-      const kiwixLibraryService = new KiwixLibraryService()
-      await kiwixLibraryService.rebuildFromDisk()
-      this._broadcast(SERVICE_NAMES.KIWIX, 'preinstall', 'Generated kiwix library XML.')
-    } catch (error: any) {
-      this._broadcast(
-        SERVICE_NAMES.KIWIX,
-        'preinstall-error',
-        `Failed to download Wikipedia ZIM file: ${error.message}`
-      )
-      throw new Error(`Pre-install action failed: ${error.message}`)
+    // 1. Check if the mini ZIM already exists in storage
+    const existingFileStats = await getFileStatsIfExists(filepath)
+    if (!existingFileStats) {
+      // 2. Check if bundled in image assets
+      const assetPath = join(process.cwd(), 'assets/kiwix', filename)
+      const assetStats = await getFileStatsIfExists(assetPath)
+      if (assetStats) {
+        try {
+          await copyFile(assetPath, filepath)
+          logger.info(`[DockerService] Seeded ${filename} from bundled asset to ${filepath}`)
+          this._broadcast(
+            SERVICE_NAMES.KIWIX,
+            'preinstall',
+            `Amostra da Wikipédia inicial copiada dos recursos locais.`
+          )
+        } catch (copyErr: any) {
+          logger.warn(`[DockerService] Could not copy bundled ZIM asset: ${copyErr.message}`)
+        }
+      } else {
+        // 3. Fallback: try downloading if online
+        try {
+          this._broadcast(
+            SERVICE_NAMES.KIWIX,
+            'preinstall',
+            `Baixando demonstração da Wikipédia...`
+          )
+          await doResumableDownloadWithRetry({
+            url: WIKIPEDIA_ZIM_URL,
+            filepath,
+            timeout: 30000,
+            allowedMimeTypes: [
+              'application/x-zim',
+              'application/x-openzim',
+              'application/octet-stream',
+            ],
+          })
+          this._broadcast(
+            SERVICE_NAMES.KIWIX,
+            'preinstall',
+            `Download da amostra da Wikipédia concluído.`
+          )
+        } catch (downloadErr: any) {
+          logger.warn(`[DockerService] Kiwix sample download failed (${downloadErr.message}). Continuing in offline mode.`)
+          this._broadcast(
+            SERVICE_NAMES.KIWIX,
+            'preinstall',
+            `Modo offline: inicializando biblioteca vazia. Você poderá carregar arquivos ZIM pela aba ZIM.`
+          )
+        }
+      }
     }
+
+    // Always rebuild XML library (handles 0 or more ZIMs safely)
+    const kiwixLibraryService = new KiwixLibraryService()
+    await kiwixLibraryService.rebuildFromDisk()
+    this._broadcast(SERVICE_NAMES.KIWIX, 'preinstall', 'Estrutura XML da biblioteca gerada com sucesso.')
   }
 
   /**

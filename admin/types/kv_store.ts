@@ -108,6 +108,7 @@ export const KV_STORE_SCHEMA = {
   'portainer.apiKey': 'string',
   'portainer.endpointId': 'string',
   'portainer.deployTarget': 'string',
+  'portainer.deployedServices': 'string',
   // TrueNAS integration settings
   'truenas.enabled': 'boolean',
   'truenas.url': 'string',

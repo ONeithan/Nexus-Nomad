@@ -149,11 +149,28 @@ export default function SupplyDepotPage(props: {
 
   const dropdownRef = useRef<HTMLDivElement>(null)
 
-  // Auto-reload when installation completes
+  // Auto-reload when installation completes or show error
   useEffect(() => {
     if (!installActivity.length) return
-    if (installActivity.some((a) => a.type === 'completed' || a.type === 'update-complete')) {
-      setTimeout(() => window.location.reload(), 3000)
+    const last = installActivity[installActivity.length - 1]
+    if (last.type === 'completed' || last.type === 'update-complete') {
+      setServices((prev) =>
+        prev.map((s) =>
+          s.service_name === last.service_name
+            ? { ...s, installed: true, installation_status: 'idle', status: 'running' }
+            : s
+        )
+      )
+      setTimeout(() => window.location.reload(), 1500)
+    } else if (last.type === 'error') {
+      showError(last.message || 'Erro durante a instalação do serviço.')
+      setServices((prev) =>
+        prev.map((s) =>
+          s.service_name === last.service_name
+            ? { ...s, installation_status: 'error' }
+            : s
+        )
+      )
     }
   }, [installActivity])
 
@@ -1109,7 +1126,7 @@ function AppCard({
             {CATEGORY_LABELS[service.category] ?? toTitleCase(service.category)}
           </span>
         )}
-        {service.installed && (
+        {Boolean(service.installed) && (
           <span
             className={`text-xs px-2 py-0.5 rounded-full font-medium border ${
               service.node === 'portainer' || service.node === 'dell-micro'

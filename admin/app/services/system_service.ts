@@ -41,7 +41,7 @@ import { TruenasService } from '#services/truenas_service'
 export class SystemService {
   private static appVersion: string | null = null
   private static diskInfoFile = '/storage/nomad-disk-info.json'
-  private portainerService = new PortainerService()
+  public portainerService = new PortainerService()
   private truenasService = new TruenasService()
 
   constructor(private dockerService: DockerService) {}
@@ -1037,6 +1037,10 @@ export class SystemService {
             if (service.service_name === SERVICE_NAMES.OLLAMA) {
               const remoteUrl = await KVStore.getValue('ai.remoteOllamaUrl')
               if (remoteUrl) continue
+            }
+            // Exception: service was deployed to Portainer remote server — don't reset it
+            if (await this.portainerService.isDeployedRemotely(service.service_name)) {
+              continue
             }
             logger.warn(
               `Service ${service.service_name} is marked as installed but container does not exist. Marking as not installed.`

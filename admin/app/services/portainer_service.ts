@@ -452,6 +452,26 @@ export class PortainerService {
       }
     }
 
+    // 1.1 Enrich any other catalog service deployed to Portainer
+    const deployedServices = await this.getDeployedServices()
+    for (const deployedName of deployedServices) {
+      const index = services.findIndex((s) => s.service_name === deployedName)
+      if (index !== -1) {
+        const item = services[index]
+        const port = item.ui_location ? item.ui_location.replace(/^https?:/, '').replace(/^.*?:/, '') : '8090'
+        const remoteUrl = `http://${hostIp}:${port}`
+        services[index] = {
+          ...item,
+          installed: true,
+          status: 'running',
+          node: 'portainer',
+          node_label: 'Servidor Portainer',
+          ui_location: remoteUrl,
+          custom_url: remoteUrl,
+        }
+      }
+    }
+
     // 2. Add extra remote services that are not part of standard NOMAD (Komga, Navidrome, etc.)
     const existingNames = new Set(services.map((s) => s.service_name))
     let nextId = 9000
@@ -496,6 +516,39 @@ export class PortainerService {
 
   public async syncWithRemoteInventory(services: ServiceSlim[]): Promise<ServiceSlim[]> {
     return this.syncWithDellInventory(services)
+  }
+
+  /**
+   * Helper methods to durably track which services are deployed on Portainer remote server.
+   */
+  public async getDeployedServices(): Promise<string[]> {
+    try {
+      const raw = await KVStore.getValue('portainer.deployedServices')
+      if (!raw) return []
+      if (Array.isArray(raw)) return raw
+      return JSON.parse(String(raw))
+    } catch {
+      return []
+    }
+  }
+
+  public async isDeployedRemotely(serviceName: string): Promise<boolean> {
+    const deployed = await this.getDeployedServices()
+    return deployed.includes(serviceName)
+  }
+
+  public async markAsDeployedRemotely(serviceName: string): Promise<void> {
+    const deployed = await this.getDeployedServices()
+    if (!deployed.includes(serviceName)) {
+      deployed.push(serviceName)
+      await KVStore.setValue('portainer.deployedServices', JSON.stringify(deployed))
+    }
+  }
+
+  public async unmarkDeployedRemotely(serviceName: string): Promise<void> {
+    const deployed = await this.getDeployedServices()
+    const updated = deployed.filter((s) => s !== serviceName)
+    await KVStore.setValue('portainer.deployedServices', JSON.stringify(updated))
   }
 
   /**
@@ -547,7 +600,7 @@ export class PortainerService {
     }
 
     // Determine target host port, avoiding port 8080 conflicts
-    let hostPort = service.ui_location ? service.ui_location.replace(/^https?:/, '') : '8090'
+    let hostPort = service.ui_location ? service.ui_location.replace(/^https?:/, '').replace(/^.*?:/, '') : '8090'
     if (hostPort === '8080') {
       hostPort = PortainerService.PORT_REMAPS['8080'] || '8095'
       logger.info(
@@ -633,9 +686,33 @@ export class PortainerService {
           logger.warn(`Portainer image pull: ${pullErr?.message}`)
         }
 
-        // 3. Construct Docker container payload
-        const defaultBinds = config?.HostConfig?.Binds || [`nomad-${serviceName}-data:/data`]
-        const containerPayload = {
+        // 3. Resolve internal container port and host port
+        let internalPort = '8080'
+        if (config?.HostConfig?.PortBindings) {
+          const keys = Object.keys(config.HostConfig.PortBindings)
+          if (keys.length > 0) {
+            internalPort = keys[0].replace(/\/.*$/, '')
+          }
+        } else if (config?.ExposedPorts) {
+          const keys = Object.keys(config.ExposedPorts)
+          if (keys.length > 0) {
+            internalPort = keys[0].replace(/\/.*$/, '')
+          }
+        }
+
+        // 4. Construct Docker container payload
+        const defaultBinds = config?.HostConfig?.Binds && config.HostConfig.Binds.length > 0
+          ? config.HostConfig.Binds.map((b: string) => {
+              if (b.startsWith('/')) {
+                const parts = b.split(':')
+                const targetPath = parts[1] || '/data'
+                return `nomad-${serviceName}-data:${targetPath}`
+              }
+              return b
+            })
+          : [`nomad-${serviceName}-data:/data`]
+
+        const containerPayload: any = {
           Image: service.container_image,
           name: `nomad-${serviceName}`,
           Env: [
@@ -644,13 +721,26 @@ export class PortainerService {
             'LC_ALL=pt_BR.UTF-8',
             'TZ=America/Sao_Paulo',
           ],
+          ExposedPorts: {
+            [`${internalPort}/tcp`]: {},
+          },
           HostConfig: {
             RestartPolicy: { Name: 'unless-stopped' },
             PortBindings: {
-              [`${hostPort}/tcp`]: [{ HostPort: hostPort }],
+              [`${internalPort}/tcp`]: [{ HostPort: String(hostPort) }],
             },
             Binds: defaultBinds,
           },
+        }
+
+        if (serviceName.includes('kiwix')) {
+          containerPayload.Entrypoint = [
+            '/bin/sh',
+            '-c',
+            'if [ ! -f /data/kiwix-library.xml ]; then echo \'<?xml version="1.0" encoding="UTF-8"?><library version="20110515"/>\' > /data/kiwix-library.xml; fi; exec /usr/local/bin/kiwix-serve --library /data/kiwix-library.xml --monitorLibrary --address=all',
+          ]
+        } else if (service.container_command) {
+          containerPayload.Cmd = service.container_command.split(' ')
         }
 
         this.broadcast(serviceName, 'creating', `Criando contêiner nomad-${serviceName} no servidor Portainer...`)
@@ -665,13 +755,21 @@ export class PortainerService {
           containerId = createResp.data?.Id
         } catch (createErr: any) {
           if (createErr.response?.status === 409) {
-            logger.info(`Container nomad-${serviceName} already exists on Portainer. Reusing existing.`)
+            logger.info(`Container nomad-${serviceName} already exists on Portainer. Recreating...`)
             try {
               const listResp = await client.get(`/api/endpoints/${endpointId}/docker/containers/json?all=1`, { timeout: 15000 })
               const existing = (listResp.data || []).find((c: any) =>
                 c.Names?.some((n: string) => n.includes(`nomad-${serviceName}`))
               )
-              containerId = existing?.Id
+              if (existing?.Id) {
+                await client.delete(`/api/endpoints/${endpointId}/docker/containers/${existing.Id}?force=true`, { timeout: 30000 }).catch(() => {})
+                const retryResp = await client.post(
+                  `/api/endpoints/${endpointId}/docker/containers/create?name=nomad-${serviceName}`,
+                  containerPayload,
+                  { timeout: 30000 }
+                )
+                containerId = retryResp.data?.Id
+              }
             } catch {}
           } else {
             throw createErr
@@ -681,6 +779,19 @@ export class PortainerService {
         if (containerId) {
           this.broadcast(serviceName, 'starting', `Iniciando contêiner no servidor Portainer...`)
           await client.post(`/api/endpoints/${endpointId}/docker/containers/${containerId}/start`, null, { timeout: 30000 })
+
+          // Wait 1.5s and verify running state
+          await new Promise((r) => setTimeout(r, 1500))
+          const inspectResp = await client.get(`/api/endpoints/${endpointId}/docker/containers/${containerId}/json`, { timeout: 15000 }).catch(() => null)
+          const isRunning = inspectResp?.data?.State?.Running
+          if (isRunning === false) {
+            let logs = ''
+            try {
+              const logsResp = await client.get(`/api/endpoints/${endpointId}/docker/containers/${containerId}/logs?stderr=1&stdout=1&tail=20`, { timeout: 10000 })
+              logs = typeof logsResp?.data === 'string' ? logsResp.data : ''
+            } catch {}
+            throw new Error(`Contêiner parou inesperadamente após iniciar. ${logs ? `Logs: ${logs.slice(0, 200)}` : ''}`)
+          }
         }
       } catch (apiErr: any) {
         logger.error(`Direct Portainer API call failed: ${apiErr.message}`)
@@ -695,6 +806,7 @@ export class PortainerService {
     }
 
     // Mark as installed and linked to remote server
+    await this.markAsDeployedRemotely(serviceName)
     service.installed = true
     service.installation_status = 'idle'
     service.ui_location = targetUrl
@@ -706,5 +818,72 @@ export class PortainerService {
       'completed',
       `Aplicação instalada e ativa no Servidor Portainer em ${targetUrl}!`
     )
+  }
+
+  public async undeployService(
+    serviceName: string,
+    removeImage = false
+  ): Promise<{ success: boolean; message: string }> {
+    const service = await Service.query().where('service_name', serviceName).first()
+    if (!service) {
+      return { success: false, message: `Serviço ${serviceName} não encontrado` }
+    }
+
+    const { client, apiKey } = await this.getClient()
+    const endpointId = await this.getEndpointId()
+
+    if (apiKey) {
+      try {
+        const listResp = await client.get(`/api/endpoints/${endpointId}/docker/containers/json?all=1`, { timeout: 15000 })
+        const existing = (listResp.data || []).find((c: any) =>
+          c.Names?.some((n: string) => n.includes(`nomad-${serviceName}`) || n.includes(`/${serviceName}`))
+        )
+        if (existing?.Id) {
+          // Stop container
+          await client.post(`/api/endpoints/${endpointId}/docker/containers/${existing.Id}/stop`, null, { timeout: 15000 }).catch(() => {})
+          // Remove container
+          await client.delete(`/api/endpoints/${endpointId}/docker/containers/${existing.Id}?force=true`, { timeout: 15000 }).catch(() => {})
+        }
+        if (removeImage && service.container_image) {
+          await client.delete(`/api/endpoints/${endpointId}/docker/images/${encodeURIComponent(service.container_image)}?force=true`, { timeout: 15000 }).catch(() => {})
+        }
+      } catch (err: any) {
+        logger.warn(`[PortainerService] Undeploy remote container error: ${err.message}`)
+      }
+    }
+
+    await this.unmarkDeployedRemotely(serviceName)
+    service.installed = false
+    service.installation_status = 'idle'
+    service.custom_url = null
+    await service.save()
+
+    this.broadcast(serviceName, 'uninstalled', `Serviço ${service.friendly_name || serviceName} desinstalado do servidor remoto.`)
+    return { success: true, message: `Serviço ${service.friendly_name || serviceName} desinstalado com sucesso.` }
+  }
+
+  public async affectRemoteContainer(
+    serviceName: string,
+    action: 'start' | 'stop' | 'restart'
+  ): Promise<{ success: boolean; message: string }> {
+    const { client, apiKey } = await this.getClient()
+    const endpointId = await this.getEndpointId()
+    if (!apiKey) {
+      return { success: true, message: `Ação ${action} simulada para ${serviceName}` }
+    }
+
+    try {
+      const listResp = await client.get(`/api/endpoints/${endpointId}/docker/containers/json?all=1`, { timeout: 15000 })
+      const existing = (listResp.data || []).find((c: any) =>
+        c.Names?.some((n: string) => n.includes(`nomad-${serviceName}`) || n.includes(`/${serviceName}`))
+      )
+      if (!existing?.Id) {
+        return { success: false, message: `Contêiner nomad-${serviceName} não encontrado no Portainer.` }
+      }
+      await client.post(`/api/endpoints/${endpointId}/docker/containers/${existing.Id}/${action}`, null, { timeout: 30000 })
+      return { success: true, message: `Serviço ${serviceName} executou ${action} com sucesso no servidor Portainer.` }
+    } catch (err: any) {
+      return { success: false, message: `Falha ao executar ${action} no Portainer: ${err.message}` }
+    }
   }
 }
