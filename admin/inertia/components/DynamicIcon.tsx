@@ -11,12 +11,9 @@ interface DynamicIconProps {
 }
 
 const DynamicIcon: React.FC<DynamicIconProps> = ({ icon, className, stroke, onClick }) => {
-  if (!icon) return null
-
-  const Icon = icons[icon]
+  const Icon = (icon && icons[icon]) || icons['IconBrandDocker']
 
   if (!Icon) {
-    console.warn(`Icon "${icon}" not found in icon map.`)
     return null
   }
 

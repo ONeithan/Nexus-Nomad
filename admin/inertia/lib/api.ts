@@ -678,11 +678,11 @@ class API {
     })()
   }
 
-  async installService(service_name: string) {
+  async installService(service_name: string, target?: 'local' | 'portainer') {
     try {
       const response = await this.client.post<{ success: boolean; message: string }>(
         '/system/services/install',
-        { service_name }
+        { service_name, target }
       )
       return response.data
     } catch (error) {

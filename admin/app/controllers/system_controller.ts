@@ -65,10 +65,10 @@ export default class SystemController {
     async installService({ request, response }: HttpContext) {
         const payload = await request.validateUsing(installServiceValidator);
 
-        // Check if deploy target is Portainer (Remote Server)
+        // Check if deploy target is Portainer (Remote Server) or Local
         const portainerEnabled = await this.systemService.isPortainerEnabled()
-        const deployTarget = (await KVStore.getValue('portainer.deployTarget')) || (portainerEnabled ? 'portainer' : 'local')
-        if (portainerEnabled && deployTarget === 'portainer') {
+        const target = payload.target || (portainerEnabled ? ((await KVStore.getValue('portainer.deployTarget')) || 'portainer') : 'local')
+        if (target === 'portainer' && portainerEnabled) {
             const result = await this.systemService.deployToPortainer(payload.service_name)
             if (result.success) {
                 return response.send({ success: true, message: result.message })

@@ -7,7 +7,13 @@ export default class SupplyDepotController {
   constructor(private systemService: SystemService) {}
 
   async index({ inertia }: HttpContext) {
-    const services = await this.systemService.getServices({ installedOnly: false })
-    return inertia.render('supply-depot', { system: { services } })
+    const [services, portainer] = await Promise.all([
+      this.systemService.getServices({ installedOnly: false }),
+      this.systemService.getPortainerStatus(),
+    ])
+    return inertia.render('supply-depot', {
+      system: { services },
+      portainer,
+    })
   }
 }

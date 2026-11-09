@@ -4,6 +4,7 @@ import { LINK_TILE_COLOR_IDS } from '../../constants/link_tile_colors.js'
 export const installServiceValidator = vine.compile(
   vine.object({
     service_name: vine.string().trim(),
+    target: vine.enum(['local', 'portainer']).optional(),
   })
 )
 

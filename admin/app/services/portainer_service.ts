@@ -69,7 +69,7 @@ export class PortainerService {
       service_name: 'jellyfin',
       friendly_name: 'Jellyfin Media Server',
       description: 'Central de mídia pessoal para streaming de filmes, séries e vídeos (Servidor Remoto)',
-      icon: 'IconDeviceTv',
+      icon: 'IconBrandDocker',
       category: 'media',
       port: 8096,
       protocol: 'http',
@@ -79,7 +79,7 @@ export class PortainerService {
       service_name: 'komga-nexus',
       friendly_name: 'Komga (Nexus Codex)',
       description: 'Biblioteca e leitor de mangás, manhwas, webtoons e livros (Servidor Remoto)',
-      icon: 'IconBook2',
+      icon: 'IconBrandDocker',
       category: 'media',
       port: 25600,
       protocol: 'http',
@@ -88,7 +88,7 @@ export class PortainerService {
       service_name: 'navidrome-nexus',
       friendly_name: 'Navidrome (Streaming de Música)',
       description: 'Servidor de streaming de áudio e músicas com suporte a playlists (Servidor Remoto)',
-      icon: 'IconHeadphones',
+      icon: 'IconBrandDocker',
       category: 'media',
       port: 4533,
       protocol: 'http',
@@ -97,7 +97,7 @@ export class PortainerService {
       service_name: 'suwayomi-nexus',
       friendly_name: 'Suwayomi (Tachiyomi Server)',
       description: 'Leitor e sincronizador de mangás e manhwas na rede local (Servidor Remoto)',
-      icon: 'IconBookmark',
+      icon: 'IconBrandDocker',
       category: 'media',
       port: 4567,
       protocol: 'http',
@@ -106,7 +106,7 @@ export class PortainerService {
       service_name: 'meelo-nexus',
       friendly_name: 'Meelo (Videoclipes)',
       description: 'Servidor de gerenciamento e streaming de videoclipes musicais (Servidor Remoto)',
-      icon: 'IconMusic',
+      icon: 'IconBrandDocker',
       category: 'media',
       port: 5000,
       protocol: 'http',
@@ -115,7 +115,7 @@ export class PortainerService {
       service_name: 'guacamole-nexus',
       friendly_name: 'Apache Guacamole (Acesso Remoto)',
       description: 'Gateway de acesso remoto HTML5 para desktops e terminais sem cliente (Servidor Remoto)',
-      icon: 'IconTerminal2',
+      icon: 'IconBrandDocker',
       category: 'utility',
       port: 8088,
       protocol: 'http',
@@ -124,7 +124,7 @@ export class PortainerService {
       service_name: 'metube-nexus',
       friendly_name: 'MeTube (Download de Mídia)',
       description: 'Interface web com yt-dlp para download de vídeos e músicas (Servidor Remoto)',
-      icon: 'IconBrandYoutube',
+      icon: 'IconBrandDocker',
       category: 'media',
       port: 8081,
       protocol: 'http',
@@ -133,7 +133,7 @@ export class PortainerService {
       service_name: 'tagr-nexus',
       friendly_name: 'Tagr (Metadados de Música)',
       description: 'Organizador e editor de metadados para biblioteca musical (Servidor Remoto)',
-      icon: 'IconTag',
+      icon: 'IconBrandDocker',
       category: 'utility',
       port: 3000,
       protocol: 'http',
@@ -142,7 +142,7 @@ export class PortainerService {
       service_name: 'yubal-nexus',
       friendly_name: 'Yubal (Playlist Sync)',
       description: 'Sincronizador automático de playlists do Navidrome (Servidor Remoto)',
-      icon: 'IconPlaylist',
+      icon: 'IconBrandDocker',
       category: 'utility',
       port: 8050,
       protocol: 'http',
@@ -151,7 +151,7 @@ export class PortainerService {
       service_name: 'ignis-nexus',
       friendly_name: 'Ignis Core (Segundo Cérebro)',
       description: 'Gestão de notas, ideias e cofres de conhecimento pessoal (Servidor Remoto)',
-      icon: 'IconBrain',
+      icon: 'IconBrandDocker',
       category: 'productivity',
       port: 8180,
       protocol: 'http',
@@ -595,7 +595,36 @@ export class PortainerService {
     // If authenticated via API Key, create stack or container via Portainer REST API
     if (apiKey) {
       try {
-        // Construct Docker container payload
+        // 1. Resolve real active endpointId if available
+        try {
+          const epResp = await client.get('/api/endpoints').catch(() => null)
+          let endpoints: any[] = []
+          if (Array.isArray(epResp?.data)) {
+            endpoints = epResp.data
+          } else if (epResp?.data && Array.isArray(epResp.data.values)) {
+            endpoints = epResp.data.values
+          }
+          if (endpoints.length > 0) {
+            const activeEp = endpoints.find((e: any) => e.Type === 1 || e.Type === 2) || endpoints[0]
+            if (activeEp?.Id) endpointId = activeEp.Id
+          }
+        } catch {}
+
+        // 2. Pull container image on Portainer Docker host before creating
+        try {
+          this.broadcast(
+            serviceName,
+            'pulling',
+            `Baixando imagem ${service.container_image} no servidor Portainer...`
+          )
+          await client.post(
+            `/api/endpoints/${endpointId}/docker/images/create?fromImage=${encodeURIComponent(service.container_image)}`
+          )
+        } catch (pullErr: any) {
+          logger.warn(`Portainer image pull: ${pullErr?.message}`)
+        }
+
+        // 3. Construct Docker container payload
         const containerPayload = {
           Image: service.container_image,
           name: `nomad-${serviceName}`,

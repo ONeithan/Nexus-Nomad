@@ -104,7 +104,10 @@ type Modal =
   | { type: 'update'; service: ServiceSlim }
   | null
 
-export default function SupplyDepotPage(props: { system: { services: ServiceSlim[] } }) {
+export default function SupplyDepotPage(props: {
+  system: { services: ServiceSlim[] }
+  portainer?: { enabled: boolean; online: boolean; url?: string }
+}) {
   const { showError } = useErrorNotification()
   const { addNotification } = useNotifications()
   const { isOnline } = useInternetStatus()
@@ -124,6 +127,7 @@ export default function SupplyDepotPage(props: { system: { services: ServiceSlim
   const [customAppOpen, setCustomAppOpen] = useState(false)
   const [portainerModalOpen, setPortainerModalOpen] = useState(false)
   const [editApp, setEditApp] = useState<CustomAppInitial | null>(null)
+  const [installTarget, setInstallTarget] = useState<'local' | 'portainer'>('local')
   // App whose custom launch URL is being configured (null while the modal is closed).
   const [urlApp, setUrlApp] = useState<ServiceSlim | null>(null)
   const [removeImage, setRemoveImage] = useState(false)
@@ -138,6 +142,8 @@ export default function SupplyDepotPage(props: { system: { services: ServiceSlim
   } | null>(null)
   const [preflightLoading, setPreflightLoading] = useState(false)
   const [forceInstall, setForceInstall] = useState(false)
+
+  const isPortainerConfigured = Boolean(props.portainer?.enabled && props.portainer?.online)
 
   const dropdownRef = useRef<HTMLDivElement>(null)
 
@@ -235,14 +241,26 @@ export default function SupplyDepotPage(props: { system: { services: ServiceSlim
 
     if (hasWarnings && !forceInstall) return
 
-    // Keep the modal open with a spinning confirm button while the request is in
-    // flight; close it once the install job is dispatched. Progress then streams
-    // via the InstallActivityFeed broadcast, so we drop the loading flag here.
     setLoading(true)
-    const result = await api.installService(service.service_name)
+    const result = await api.installService(service.service_name, installTarget)
     setModal(null)
     setLoading(false)
-    if (!result?.success) showError(result?.message || 'Falha ao iniciar a instalação.')
+    if (!result?.success) {
+      showError(result?.message || 'Falha ao iniciar a instalação.')
+    } else {
+      // Atualiza o estado do card imediatamente para 'installing' com spinner
+      setServices((prev) =>
+        prev.map((s) =>
+          s.service_name === service.service_name
+            ? { ...s, installation_status: 'installing' }
+            : s
+        )
+      )
+      addNotification({
+        message: result.message || `Instalação de ${service.friendly_name} iniciada!`,
+        type: 'success',
+      })
+    }
   }
 
   async function handleAffect(service: ServiceSlim, action: 'start' | 'stop' | 'restart') {
@@ -593,28 +611,76 @@ export default function SupplyDepotPage(props: { system: { services: ServiceSlim
             setModal(null)
           }}
           onConfirm={() => handleInstall(modal.service)}
-          confirmText="Instalar no Servidor Remoto"
+          confirmText={installTarget === 'portainer' ? 'Instalar no Servidor Remoto' : 'Instalar Localmente'}
           confirmIcon="IconDownload"
           confirmVariant="primary"
           confirmLoading={loading}
         >
-          <div className="space-y-3 text-sm text-text-muted">
-            <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-300">
-              <p className="font-semibold flex items-center gap-2 text-sm text-emerald-300">
-                <IconServer className="w-4 h-4 text-emerald-400" />
-                Destino: Servidor Docker (Portainer)
-              </p>
-              <p className="text-xs text-text-muted mt-1 leading-relaxed">
-                Este aplicativo será enviado para o servidor Portainer remoto configurado e executado lá, sem consumir armazenamento ou memória do seu dispositivo local.
-              </p>
-            </div>
+          <div className="space-y-4 text-sm text-text-muted">
+            {isPortainerConfigured && (
+              <div className="space-y-2">
+                <label className="text-xs font-semibold text-text-primary uppercase tracking-wider block">
+                  Escolha o destino da instalação:
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setInstallTarget('local')}
+                    className={`flex items-start gap-2.5 p-3 rounded-xl border text-left transition-all ${
+                      installTarget === 'local'
+                        ? 'border-desert-green bg-desert-green-lighter/30 ring-1 ring-desert-green'
+                        : 'border-border-subtle bg-surface-secondary hover:border-desert-stone-light'
+                    }`}
+                  >
+                    <IconDeviceDesktop className={`w-5 h-5 mt-0.5 flex-shrink-0 ${installTarget === 'local' ? 'text-desert-green-darker' : 'text-text-muted'}`} />
+                    <div>
+                      <strong className="block text-xs font-bold text-text-primary">Instalação Local</strong>
+                      <span className="text-[11px] text-text-muted leading-tight block mt-0.5">
+                        Executa no dispositivo NOMAD atual
+                      </span>
+                    </div>
+                  </button>
 
-            <p>
-              Isso irá baixar e iniciar <strong className="text-text-primary">{modal.service.friendly_name}</strong>
-              {modal.service.ui_location && (
-                <> na porta <strong className="text-text-primary">{modal.service.ui_location === '8080' ? '8095 (8080 reservada para UniFi)' : modal.service.ui_location}</strong></>
-              )}.
-            </p>
+                  <button
+                    type="button"
+                    onClick={() => setInstallTarget('portainer')}
+                    className={`flex items-start gap-2.5 p-3 rounded-xl border text-left transition-all ${
+                      installTarget === 'portainer'
+                        ? 'border-emerald-500 bg-emerald-500/10 ring-1 ring-emerald-500'
+                        : 'border-border-subtle bg-surface-secondary hover:border-desert-stone-light'
+                    }`}
+                  >
+                    <IconBrandDocker className={`w-5 h-5 mt-0.5 flex-shrink-0 ${installTarget === 'portainer' ? 'text-emerald-600' : 'text-text-muted'}`} />
+                    <div>
+                      <strong className="block text-xs font-bold text-text-primary">Servidor Portainer</strong>
+                      <span className="text-[11px] text-text-muted leading-tight block mt-0.5">
+                        Executa no servidor remoto ({props.portainer?.url ? new URL(props.portainer.url).hostname : 'remoto'})
+                      </span>
+                    </div>
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {installTarget === 'portainer' ? (
+              <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-300">
+                <p className="font-semibold flex items-center gap-2 text-xs text-emerald-300">
+                  <IconServer className="w-4 h-4 text-emerald-400" />
+                  Destino Selecionado: Servidor Docker Remoto (Portainer)
+                </p>
+                <p className="text-xs text-text-muted mt-1 leading-relaxed">
+                  Este contêiner será criado e executado no servidor remoto configurado, sem consumir CPU e memória deste notebook.
+                </p>
+              </div>
+            ) : (
+              <p>
+                Isso irá baixar e iniciar <strong className="text-text-primary">{modal.service.friendly_name}</strong>
+                {modal.service.ui_location && (
+                  <> na porta <strong className="text-text-primary">{modal.service.ui_location === '8080' ? '8095 (8080 reservada para UniFi)' : modal.service.ui_location}</strong></>
+                )} localmente.
+              </p>
+            )}
+
             {modal.service.powered_by && (
               <p className="text-xs">Desenvolvido com {modal.service.powered_by}</p>
             )}
@@ -935,7 +1001,19 @@ function AppCard({
   // with a lock when it's served over HTTPS, rather than the raw "https:8480" string.
   const uiIsPath = !!service.ui_location && service.ui_location.startsWith('/')
   const uiIsHttps = /^https:/.test(service.ui_location || '')
-  const uiPort = service.ui_location && !uiIsPath ? service.ui_location.replace(/^https?:/, '') : null
+  let displayPort: string | null = null
+  if (service.ui_location && !uiIsPath) {
+    try {
+      if (service.ui_location.startsWith('http://') || service.ui_location.startsWith('https://')) {
+        const parsed = new URL(service.ui_location)
+        displayPort = parsed.port || (parsed.protocol === 'https:' ? '443' : '80')
+      } else {
+        displayPort = service.ui_location.replace(/^https?:/, '').replace(/^\/+/, '')
+      }
+    } catch {
+      displayPort = service.ui_location.replace(/^https?:/, '').replace(/^\/+/, '')
+    }
+  }
   // Per-app documentation link (in-app docs page, anchored to this app's section). Null for apps
   // without a doc section (custom apps, undocumented catalog apps) so the Docs item is hidden.
   const docLink = getSupplyDepotDocLink(service.service_name)
@@ -975,11 +1053,10 @@ function AppCard({
       <div className="flex items-start justify-between mb-3">
         <div className="flex items-center gap-3">
           <div className="w-12 h-12 rounded-lg bg-desert-green-lighter border border-desert-green-light flex items-center justify-center flex-shrink-0">
-            {service.icon ? (
-              <DynamicIcon icon={service.icon as DynamicIconName} className="h-7 w-7 text-desert-green" />
-            ) : (
-              <IconBrandDocker className="h-7 w-7 text-text-muted" />
-            )}
+            <DynamicIcon
+              icon={(service.icon as DynamicIconName) || 'IconBrandDocker'}
+              className="h-7 w-7 text-desert-green"
+            />
           </div>
           <div className="min-w-0">
             <p className="font-semibold text-text-primary text-sm leading-tight truncate">
@@ -1024,9 +1101,17 @@ function AppCard({
             {CATEGORY_LABELS[service.category] ?? toTitleCase(service.category)}
           </span>
         )}
-        {(service.node === 'portainer' || service.node === 'dell-micro') && (
-          <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
-            Servidor Portainer
+        {service.installed && (
+          <span
+            className={`text-xs px-2 py-0.5 rounded-full font-medium border ${
+              service.node === 'portainer' || service.node === 'dell-micro'
+                ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+                : 'bg-desert-sand/30 text-desert-green-darker border-desert-stone-lighter/60'
+            }`}
+          >
+            {service.node === 'portainer' || service.node === 'dell-micro'
+              ? 'Servidor Portainer'
+              : 'Local (NOMAD)'}
           </span>
         )}
         {service.is_custom ? (
@@ -1050,9 +1135,9 @@ function AppCard({
             legado
           </span>
         ) : null}
-        {uiPort && (
+        {displayPort && (
           <span className="text-xs px-2 py-0.5 rounded-full bg-surface-secondary text-text-muted font-mono">
-            {uiIsHttps ? '🔒 ' : ''}:{uiPort}
+            {uiIsHttps ? '🔒 ' : ''}:{displayPort}
           </span>
         )}
         {service.available_update_version && !service.is_custom && (
@@ -1079,6 +1164,18 @@ function AppCard({
             fullWidth
           >
             Instalar
+          </StyledButton>
+        )}
+
+        {!service.installed && service.installation_status === 'installing' && (
+          <StyledButton
+            size="sm"
+            variant="secondary"
+            loading={true}
+            disabled
+            fullWidth
+          >
+            Instalando...
           </StyledButton>
         )}
 
