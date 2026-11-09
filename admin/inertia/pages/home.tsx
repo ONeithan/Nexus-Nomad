@@ -155,7 +155,10 @@ export default function Home(props: {
   props.system.services
     .filter(
       (service) =>
-        service.installed && (service.ui_location || service.custom_url) && !service.is_link_tile
+        service.installed &&
+        (service.ui_location || service.custom_url) &&
+        !service.is_link_tile &&
+        service.node !== 'portainer'
     )
     .forEach((service) => {
       const resolvedAiName =
@@ -193,7 +196,7 @@ export default function Home(props: {
 
   // User-added link tiles: shortcuts to things NOMAD does not manage.
   props.system.services
-    .filter((service) => service.is_link_tile && service.custom_url)
+    .filter((service) => service.is_link_tile && service.custom_url && service.node !== 'portainer')
     .forEach((service) => {
       items.push({
         label: service.friendly_name || service.service_name,
