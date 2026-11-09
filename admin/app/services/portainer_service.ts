@@ -248,9 +248,13 @@ export class PortainerService {
       Accept: 'application/json',
     }
     if (apiKey) {
-      headers['X-API-Key'] = apiKey
-      headers['x-api-key'] = apiKey
-      headers['Authorization'] = `Bearer ${apiKey}`
+      if (apiKey.startsWith('ey') && apiKey.includes('.')) {
+        // Formato JWT
+        headers['Authorization'] = `Bearer ${apiKey}`
+      } else {
+        // Portainer Access Token (X-API-Key). NUNCA enviar Authorization junto, pois o Portainer rejeita com 401
+        headers['X-API-Key'] = apiKey
+      }
     }
 
     const client = axios.create({
