@@ -36,6 +36,8 @@ export default function PortainerConfigModal({ isOpen, onClose }: PortainerConfi
     authenticated?: boolean
     totalContainers?: number
     runningContainers?: number
+    apiKey?: string
+    containers?: any[]
     error?: string
   } | null>(null)
 
@@ -50,6 +52,7 @@ export default function PortainerConfigModal({ isOpen, onClose }: PortainerConfi
     version?: string
     hostname?: string
     pools?: string[]
+    apiKey?: string
     error?: string
   } | null>(null)
 
@@ -67,10 +70,12 @@ export default function PortainerConfigModal({ isOpen, onClose }: PortainerConfi
       if (pRes?.status) {
         setPortainerStatus(pRes.status)
         if (pRes.status.url) setPortainerUrl(pRes.status.url)
+        if (pRes.status.apiKey) setPortainerKey(pRes.status.apiKey)
       }
       if (tRes?.status) {
         setTruenasStatus(tRes.status)
         if (tRes.status.url) setTruenasUrl(tRes.status.url)
+        if (tRes.status.apiKey) setTruenasKey(tRes.status.apiKey)
       }
     } catch (e) {
       console.error(e)

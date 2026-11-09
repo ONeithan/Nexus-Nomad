@@ -33,13 +33,39 @@ export default class SettingsController {
   }
 
   async servers({ inertia }: HttpContext) {
-    const [portainerStatus, truenasStatus] = await Promise.all([
+    const [
+      portainerStatus,
+      truenasStatus,
+      portainerUrl,
+      portainerApiKey,
+      portainerEnabled,
+      truenasUrl,
+      truenasApiKey,
+      truenasEnabled,
+    ] = await Promise.all([
       this.systemService.getPortainerStatus(),
       this.systemService.getTruenasStatus(),
+      KVStore.getValue('portainer.url'),
+      KVStore.getValue('portainer.apiKey'),
+      KVStore.getValue('portainer.enabled'),
+      KVStore.getValue('truenas.url'),
+      KVStore.getValue('truenas.apiKey'),
+      KVStore.getValue('truenas.enabled'),
     ])
+
     return inertia.render('settings/servers', {
-      portainer: portainerStatus,
-      truenas: truenasStatus,
+      portainer: {
+        ...portainerStatus,
+        url: portainerUrl || portainerStatus.url || '',
+        apiKey: portainerApiKey || portainerStatus.apiKey || '',
+        enabled: portainerEnabled === true || portainerStatus.enabled,
+      },
+      truenas: {
+        ...truenasStatus,
+        url: truenasUrl || truenasStatus.url || '',
+        apiKey: truenasApiKey || truenasStatus.apiKey || '',
+        enabled: truenasEnabled === true || truenasStatus.enabled,
+      },
     })
   }
 

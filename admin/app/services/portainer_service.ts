@@ -7,6 +7,15 @@ import KVStore from '#models/kv_store'
 import Service from '#models/service'
 import type { ServiceSlim } from '../../types/services.js'
 
+export interface PortainerContainerInfo {
+  id?: string
+  name: string
+  image: string
+  state: string
+  status: string
+  ports: string[]
+}
+
 export interface PortainerStatus {
   enabled: boolean
   online: boolean
@@ -16,7 +25,9 @@ export interface PortainerStatus {
   version?: string
   totalContainers?: number
   runningContainers?: number
+  containers?: PortainerContainerInfo[]
   error?: string
+  apiKey?: string
 }
 
 export interface RemoteServiceDef {
@@ -229,17 +240,24 @@ export class PortainerService {
     overrideUrl?: string,
     overrideApiKey?: string
   ): Promise<{ client: AxiosInstance; baseUrl: string; apiKey: string }> {
-    const baseUrl = overrideUrl !== undefined ? overrideUrl.trim() : await this.getBaseUrl()
-    const apiKey = overrideApiKey !== undefined ? overrideApiKey.trim() : await this.getApiKey()
+    const rawUrl = overrideUrl && overrideUrl.trim().length > 0 ? overrideUrl.trim() : await this.getBaseUrl()
+    const baseUrl = rawUrl.replace(/\/+$/, '')
+    const apiKey = overrideApiKey && overrideApiKey.trim().length > 0 ? overrideApiKey.trim() : await this.getApiKey()
+
+    const headers: Record<string, string> = {
+      Accept: 'application/json',
+    }
+    if (apiKey) {
+      headers['X-API-Key'] = apiKey
+      headers['x-api-key'] = apiKey
+      headers['Authorization'] = `Bearer ${apiKey}`
+    }
 
     const client = axios.create({
       baseURL: baseUrl || 'http://127.0.0.1:9443',
-      timeout: 5000,
+      timeout: 6000,
       httpsAgent: new https.Agent({ rejectUnauthorized: false }),
-      headers: {
-        'Accept': 'application/json',
-        ...(apiKey ? { 'X-API-Key': apiKey } : {}),
-      },
+      headers,
     })
 
     return { client, baseUrl, apiKey }
@@ -260,6 +278,7 @@ export class PortainerService {
         url: '',
         endpointId,
         authenticated: false,
+        apiKey: apiKey || '',
         error: 'Nenhum endereço de servidor Portainer configurado.',
       }
     }
@@ -274,35 +293,106 @@ export class PortainerService {
         statusResp?.data?.Version ||
         'Portainer CE'
 
-      // 2. If API Key is present, query endpoint containers count
+      // 2. If API Key is present, query endpoints & containers
       let totalContainers = 0
       let runningContainers = 0
       let authenticated = false
+      let resolvedEndpointId = endpointId
+      let containersList: PortainerContainerInfo[] = []
 
       if (apiKey) {
         try {
-          const containersResp = await client.get(
-            `/api/endpoints/${endpointId}/docker/containers/json?all=1`
-          )
-          if (Array.isArray(containersResp.data)) {
+          // Discover active environments / endpoints from Portainer
+          const endpointsResp = await client.get('/api/endpoints').catch((err) => {
+            logger.warn(`Portainer /api/endpoints failed: ${err?.message}`)
+            return null
+          })
+
+          let endpoints: any[] = []
+          if (Array.isArray(endpointsResp?.data)) {
+            endpoints = endpointsResp.data
+          } else if (endpointsResp?.data && Array.isArray(endpointsResp.data.values)) {
+            endpoints = endpointsResp.data.values
+          }
+
+          if (endpoints.length > 0) {
             authenticated = true
-            totalContainers = containersResp.data.length
-            runningContainers = containersResp.data.filter((c: any) => c.State === 'running').length
+            const activeEp =
+              endpoints.find((ep: any) => ep.Type === 1 || ep.Type === 2) ||
+              endpoints[0]
+            if (activeEp?.Id) {
+              resolvedEndpointId = activeEp.Id
+            }
+
+            // If snapshots exist, initialize counts from snapshot
+            if (activeEp?.Snapshots && activeEp.Snapshots[0]) {
+              const snap = activeEp.Snapshots[0]
+              runningContainers = snap.RunningContainerCount ?? 0
+              totalContainers = (snap.RunningContainerCount ?? 0) + (snap.StoppedContainerCount ?? 0)
+            }
+          }
+
+          // Fetch containers list from Docker proxy on Portainer
+          // Try candidate endpoint IDs (resolvedEndpointId, 1, 2)
+          const targetEpIds = Array.from(new Set([resolvedEndpointId, 1, 2].filter(Boolean)))
+          for (const epId of targetEpIds) {
+            try {
+              const containersResp = await client.get(
+                `/api/endpoints/${epId}/docker/containers/json?all=1`
+              )
+              if (Array.isArray(containersResp?.data)) {
+                authenticated = true
+                resolvedEndpointId = epId
+                totalContainers = containersResp.data.length
+                runningContainers = containersResp.data.filter((c: any) => c.State === 'running').length
+
+                containersList = containersResp.data.map((c: any) => {
+                  const rawName = (c.Names && c.Names[0]) || (c.Id ? c.Id.slice(0, 12) : 'container')
+                  const cleanName = rawName.replace(/^\//, '')
+                  const ports = (c.Ports || [])
+                    .map((p: any) =>
+                      p.PublicPort
+                        ? `${p.PublicPort}:${p.PrivatePort}/${p.Type}`
+                        : `${p.PrivatePort}/${p.Type}`
+                    )
+                    .filter(Boolean)
+                  return {
+                    id: c.Id ? c.Id.slice(0, 12) : undefined,
+                    name: cleanName,
+                    image: c.Image || '',
+                    state: c.State || 'unknown',
+                    status: c.Status || '',
+                    ports,
+                  }
+                })
+                break
+              }
+            } catch {
+              // Try next endpoint ID
+            }
           }
         } catch (authErr: any) {
           logger.warn(`Portainer API key auth failed: ${authErr?.message}`)
         }
       }
 
+      let authError: string | undefined = undefined
+      if (apiKey && !authenticated) {
+        authError = 'Servidor online, mas o token de acesso (API Key) não foi aceito pelo Portainer.'
+      }
+
       return {
         enabled,
         online: true,
         url: baseUrl,
-        endpointId,
+        endpointId: resolvedEndpointId,
         authenticated,
         version,
         totalContainers,
         runningContainers,
+        containers: containersList,
+        apiKey: apiKey || '',
+        error: authError,
       }
     } catch (error: any) {
       logger.info(`Portainer at ${baseUrl} is unreachable: ${error.message}`)
@@ -312,6 +402,7 @@ export class PortainerService {
         url: baseUrl,
         endpointId,
         authenticated: false,
+        apiKey: apiKey || '',
         error: error.message || 'Não foi possível conectar ao servidor Portainer.',
       }
     }

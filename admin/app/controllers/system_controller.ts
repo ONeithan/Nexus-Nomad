@@ -92,8 +92,11 @@ export default class SystemController {
 
     async testPortainerConnection({ request, response }: HttpContext) {
         const body = request.body() || {}
-        const status = await this.systemService.getPortainerStatus(body.url, body.apiKey)
-        return response.send({ success: status.online, status })
+        const url = request.input('url', body.url)
+        const apiKey = request.input('apiKey', body.apiKey)
+        const status = await this.systemService.getPortainerStatus(url, apiKey)
+        const success = status.online && (!apiKey || status.authenticated)
+        return response.send({ success, status })
     }
 
     async getTruenasStatus({ response }: HttpContext) {
@@ -103,7 +106,9 @@ export default class SystemController {
 
     async testTruenasConnection({ request, response }: HttpContext) {
         const body = request.body() || {}
-        const status = await this.systemService.getTruenasStatus(body.url, body.apiKey)
+        const url = request.input('url', body.url)
+        const apiKey = request.input('apiKey', body.apiKey)
+        const status = await this.systemService.getTruenasStatus(url, apiKey)
         return response.send({ success: status.online, status })
     }
 

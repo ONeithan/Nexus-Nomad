@@ -11,6 +11,7 @@ export interface TruenasStatus {
   hostname?: string
   pools?: string[]
   error?: string
+  apiKey?: string
 }
 
 export class TruenasService {
@@ -23,14 +24,15 @@ export class TruenasService {
     const enabled = await this.isEnabled()
     const storedUrl = (await KVStore.getValue('truenas.url')) || ''
     const storedKey = (await KVStore.getValue('truenas.apiKey')) || ''
-    const rawUrl = (overrideUrl !== undefined ? overrideUrl : storedUrl).trim()
-    const apiKey = (overrideApiKey !== undefined ? overrideApiKey : storedKey).trim()
+    const rawUrl = (overrideUrl && overrideUrl.trim() !== '' ? overrideUrl : storedUrl).trim()
+    const apiKey = (overrideApiKey && overrideApiKey.trim() !== '' ? overrideApiKey : storedKey).trim()
 
     if (!rawUrl) {
       return {
         enabled,
         online: false,
         url: '',
+        apiKey: apiKey || '',
         error: 'Nenhum endereço de servidor TrueNAS configurado.',
       }
     }
@@ -69,12 +71,14 @@ export class TruenasService {
           version: info.version || 'TrueNAS SCALE / Core',
           hostname: info.hostname || 'truenas',
           pools,
+          apiKey: apiKey || '',
         }
       } else {
         return {
           enabled,
           online: false,
           url: cleanUrl,
+          apiKey: apiKey || '',
           error: res.error || `HTTP ${res.status}: Não foi possível autenticar no TrueNAS.`,
         }
       }
@@ -84,6 +88,7 @@ export class TruenasService {
         enabled,
         online: false,
         url,
+        apiKey: apiKey || '',
         error: err.message || 'Falha na conexão com o servidor TrueNAS.',
       }
     }

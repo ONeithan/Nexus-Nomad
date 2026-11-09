@@ -707,6 +707,15 @@ class API {
           version?: string
           totalContainers?: number
           runningContainers?: number
+          containers?: Array<{
+            id?: string
+            name: string
+            image: string
+            state: string
+            status: string
+            ports: string[]
+          }>
+          apiKey?: string
           error?: string
         }
       }>('/system/services/portainer/status')
@@ -741,6 +750,7 @@ class API {
           version?: string
           hostname?: string
           pools?: string[]
+          apiKey?: string
           error?: string
         }
       }>('/system/services/truenas/status')
