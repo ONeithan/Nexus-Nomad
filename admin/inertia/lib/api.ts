@@ -619,10 +619,14 @@ class API {
   }
 
   async getSystemUpdateStatus() {
-    return catchInternal(async () => {
+    try {
       const response = await this.client.get<SystemUpdateStatus>('/system/update/status')
       return response.data
-    })()
+    } catch {
+      // Falhas de rede temporárias durante a recriação do contêiner são normais e esperadas;
+      // não disparam notificações de erro na tela.
+      return undefined
+    }
   }
 
   async getSystemUpdateLogs() {

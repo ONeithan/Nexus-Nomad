@@ -5,9 +5,17 @@
  * @returns true if version1 is newer than version2
  */
 export function isNewerVersion(version1: string, version2: string, includePreReleases = false): boolean {
-  const normalize = (v: string) => v.replace(/^v/, '')
-  const [base1, pre1] = normalize(version1).split('-')
-  const [base2, pre2] = normalize(version2).split('-')
+  const normalize = (v: string) => v.replace(/^v/i, '').replace(/-nexus$/i, '').trim()
+  const clean1 = normalize(version1)
+  const clean2 = normalize(version2)
+
+  // If identical after cleaning fork suffixes, it's the exact same release
+  if (clean1 === clean2) {
+    return false
+  }
+
+  const [base1, pre1] = clean1.split('-')
+  const [base2, pre2] = clean2.split('-')
 
   // If pre-releases are not included and version1 is a pre-release, don't consider it newer
   if (!includePreReleases && pre1) {
@@ -43,7 +51,7 @@ export function isNewerVersion(version1: string, version2: string, includePreRel
  * @returns The major version number
  */
 export function parseMajorVersion(tag: string): number {
-  const normalized = tag.replace(/^v/, '')
+  const normalized = tag.replace(/^v/i, '').replace(/-nexus$/i, '').trim()
   const major = parseInt(normalized.split('.')[0], 10)
   return isNaN(major) ? 0 : major
 }
