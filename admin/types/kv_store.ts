@@ -102,6 +102,12 @@ export const KV_STORE_SCHEMA = {
   // herbal REMEDY sections stay hidden until this flips true. Defaults off
   // (null → false); flipped on after a clinician content-pass, not user-toggled.
   'drugReference.remediesEnabled': 'boolean',
+  // Portainer integration settings for remote deployment to Dell OptiPlex Micro
+  'portainer.enabled': 'boolean',
+  'portainer.url': 'string',
+  'portainer.apiKey': 'string',
+  'portainer.endpointId': 'string',
+  'portainer.deployTarget': 'string',
 } as const
 
 type KVTagToType<T extends string> = T extends 'boolean' ? boolean : string

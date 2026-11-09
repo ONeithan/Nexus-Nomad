@@ -34,11 +34,13 @@ import { invalidateAssistantNameCache } from '../../config/inertia.js'
 import { invalidateMinRelevanceCache } from '../utils/rag_relevance.js'
 import { invalidateResponseStyleCache } from '../utils/response_style.js'
 import { KiwixLibraryService } from '#services/kiwix_library_service'
+import { PortainerService } from '#services/portainer_service'
 
 @inject()
 export class SystemService {
   private static appVersion: string | null = null
   private static diskInfoFile = '/storage/nomad-disk-info.json'
+  private portainerService = new PortainerService()
 
   constructor(private dockerService: DockerService) {}
 
@@ -355,7 +357,19 @@ export class SystemService {
       })
     }
 
-    return toReturn
+    return await this.portainerService.syncWithDellInventory(toReturn)
+  }
+
+  async getPortainerStatus() {
+    return await this.portainerService.getStatus()
+  }
+
+  async isPortainerEnabled() {
+    return await this.portainerService.isEnabled()
+  }
+
+  async deployToPortainer(serviceName: string) {
+    return await this.portainerService.deployService(serviceName)
   }
 
   static getAppVersion(): string {

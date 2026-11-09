@@ -17,6 +17,7 @@ import {
   IconPlayerStop,
   IconRefresh,
   IconSearch,
+  IconServer,
   IconTrash,
   IconWorld,
 } from '@tabler/icons-react'
@@ -28,6 +29,7 @@ import InstallActivityFeed from '~/components/InstallActivityFeed'
 import LoadingSpinner from '~/components/LoadingSpinner'
 import Alert from '~/components/Alert'
 import CustomAppModal, { CustomAppInitial } from '~/components/CustomAppModal'
+import PortainerConfigModal from '~/components/PortainerConfigModal'
 import AppUrlModal from '~/components/AppUrlModal'
 import ServiceLogsModal from '~/components/ServiceLogsModal'
 import ServiceStatsModal from '~/components/ServiceStatsModal'
@@ -56,6 +58,7 @@ function extractTag(containerImage: string): string {
 const CATEGORIES = [
   { id: 'all', label: 'Todos' },
   { id: 'installed', label: 'Instalados' },
+  { id: 'dell-micro', label: 'Dell Micro (Portainer)' },
   { id: 'productivity', label: 'Produtividade' },
   { id: 'media', label: 'Mídia & Livros' },
   { id: 'security', label: 'Segurança' },
@@ -119,6 +122,7 @@ export default function SupplyDepotPage(props: { system: { services: ServiceSlim
   const [checkingUpdates, setCheckingUpdates] = useState(false)
   const [openDropdown, setOpenDropdown] = useState<string | null>(null)
   const [customAppOpen, setCustomAppOpen] = useState(false)
+  const [portainerModalOpen, setPortainerModalOpen] = useState(false)
   const [editApp, setEditApp] = useState<CustomAppInitial | null>(null)
   // App whose custom launch URL is being configured (null while the modal is closed).
   const [urlApp, setUrlApp] = useState<ServiceSlim | null>(null)
@@ -188,7 +192,12 @@ export default function SupplyDepotPage(props: { system: { services: ServiceSlim
   // ── Filtering ─────────────────────────────────────────────────────────────
   const filteredServices = props.system.services.filter((s) => {
     if (activeCategory === 'installed' && !s.installed) return false
-    if (activeCategory !== 'all' && activeCategory !== 'installed') {
+    if (activeCategory === 'dell-micro' && s.node !== 'dell-micro') return false
+    if (
+      activeCategory !== 'all' &&
+      activeCategory !== 'installed' &&
+      activeCategory !== 'dell-micro'
+    ) {
       if (s.category !== activeCategory) return false
     }
     if (search.trim()) {
@@ -198,6 +207,7 @@ export default function SupplyDepotPage(props: { system: { services: ServiceSlim
         s.description?.toLowerCase().includes(q) ||
         s.powered_by?.toLowerCase().includes(q) ||
         s.category?.toLowerCase().includes(q) ||
+        s.node_label?.toLowerCase().includes(q) ||
         Boolean(s.category && CATEGORY_LABELS[s.category]?.toLowerCase().includes(q))
       )
     }
@@ -452,6 +462,13 @@ export default function SupplyDepotPage(props: { system: { services: ServiceSlim
                 Verificar Atualizações
               </StyledButton>
               <StyledButton
+                icon="IconServer"
+                variant="outline"
+                onClick={() => setPortainerModalOpen(true)}
+              >
+                Nó Dell Micro
+              </StyledButton>
+              <StyledButton
                 icon="IconBrandDocker"
                 variant="outline"
                 onClick={() => setCustomAppOpen(true)}
@@ -571,16 +588,26 @@ export default function SupplyDepotPage(props: { system: { services: ServiceSlim
             setModal(null)
           }}
           onConfirm={() => handleInstall(modal.service)}
-          confirmText="Instalar"
+          confirmText="Instalar no Dell Micro"
           confirmIcon="IconDownload"
           confirmVariant="primary"
           confirmLoading={loading}
         >
           <div className="space-y-3 text-sm text-text-muted">
+            <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-300">
+              <p className="font-semibold flex items-center gap-2 text-sm text-emerald-300">
+                <IconServer className="w-4 h-4 text-emerald-400" />
+                Destino: Dell OptiPlex Micro 7000 (Portainer)
+              </p>
+              <p className="text-xs text-text-muted mt-1 leading-relaxed">
+                Este aplicativo será enviado para o seu Portainer no Dell Micro (192.168.1.151) e executado remotamente lá, sem consumir armazenamento ou memória do seu notebook.
+              </p>
+            </div>
+
             <p>
               Isso irá baixar e iniciar <strong className="text-text-primary">{modal.service.friendly_name}</strong>
               {modal.service.ui_location && (
-                <> na porta <strong className="text-text-primary">{modal.service.ui_location}</strong></>
+                <> na porta <strong className="text-text-primary">{modal.service.ui_location === '8080' ? '8095 (8080 reservada para UniFi)' : modal.service.ui_location}</strong></>
               )}.
             </p>
             {modal.service.powered_by && (
@@ -590,7 +617,7 @@ export default function SupplyDepotPage(props: { system: { services: ServiceSlim
             {preflightLoading && (
               <div className="flex items-center gap-2 text-xs text-text-muted py-2">
                 <span className="animate-spin inline-block w-3 h-3 border border-desert-green border-t-transparent rounded-full" />
-                Verificando conflitos…
+                Verificando pré-requisitos…
               </div>
             )}
 
@@ -833,6 +860,11 @@ export default function SupplyDepotPage(props: { system: { services: ServiceSlim
         onSaved={handleUrlSaved}
         showError={showError}
       />
+
+      <PortainerConfigModal
+        isOpen={portainerModalOpen}
+        onClose={() => setPortainerModalOpen(false)}
+      />
     </AppLayout>
   )
 }
@@ -987,6 +1019,11 @@ function AppCard({
             {CATEGORY_LABELS[service.category] ?? toTitleCase(service.category)}
           </span>
         )}
+        {service.node === 'dell-micro' && (
+          <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+            Dell Micro
+          </span>
+        )}
         {service.is_custom ? (
           <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-surface-secondary text-text-muted border border-surface-secondary">
             personalizado
@@ -1076,65 +1113,69 @@ function AppCard({
                       Documentação
                     </a>
                   )}
-                  {isStopped && (
-                    <DropdownItem icon={<IconPlayerPlay className="h-4 w-4" />} label="Iniciar" onClick={onStart} />
-                  )}
-                  {isRunning && (
-                    <DropdownItem icon={<IconPlayerStop className="h-4 w-4" />} label="Parar" onClick={onStop} />
-                  )}
-                  <DropdownItem icon={<IconRefresh className="h-4 w-4" />} label="Reiniciar" onClick={onRestart} />
-                  <DropdownItem icon={<IconFileText className="h-4 w-4" />} label="Logs" onClick={onLogs} />
-                  <DropdownItem icon={<IconChartBar className="h-4 w-4" />} label="Estatísticas" onClick={onStats} />
-                  <DropdownItem icon={<IconPencil className="h-4 w-4" />} label="Editar" onClick={onEdit} />
                   <DropdownItem icon={<IconWorld className="h-4 w-4" />} label="Definir URL personalizada" onClick={onSetUrl} />
-                  {
-                    migrationInstructionsHref ? (
-                      <a
-                        href={migrationInstructionsHref}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        onClick={(e) => e.stopPropagation()}
-                        className="flex items-center gap-2 w-full px-3 py-2 text-xs transition-colors text-left cursor-pointer text-text-primary hover:bg-surface-secondary"
-                      >
-                        <IconBook className="h-4 w-4" />
-                        {migrationInstructionsText || 'Instruções de migração'}
-                      </a>
-                    ) : (null)
-                  }
-                  {!service.is_custom && onToggleAutoUpdate ? (
-                    autoUpdateMasterEnabled ? (
-                      <DropdownItem
-                        icon={
-                          <IconClockBolt
-                            className={`h-4 w-4 ${autoUpdateEnabled ? 'text-desert-green' : ''}`}
+                  {!service.is_unmanaged && (
+                    <>
+                      {isStopped && (
+                        <DropdownItem icon={<IconPlayerPlay className="h-4 w-4" />} label="Iniciar" onClick={onStart} />
+                      )}
+                      {isRunning && (
+                        <DropdownItem icon={<IconPlayerStop className="h-4 w-4" />} label="Parar" onClick={onStop} />
+                      )}
+                      <DropdownItem icon={<IconRefresh className="h-4 w-4" />} label="Reiniciar" onClick={onRestart} />
+                      <DropdownItem icon={<IconFileText className="h-4 w-4" />} label="Logs" onClick={onLogs} />
+                      <DropdownItem icon={<IconChartBar className="h-4 w-4" />} label="Estatísticas" onClick={onStats} />
+                      <DropdownItem icon={<IconPencil className="h-4 w-4" />} label="Editar" onClick={onEdit} />
+                      {
+                        migrationInstructionsHref ? (
+                          <a
+                            href={migrationInstructionsHref}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                            className="flex items-center gap-2 w-full px-3 py-2 text-xs transition-colors text-left cursor-pointer text-text-primary hover:bg-surface-secondary"
+                          >
+                            <IconBook className="h-4 w-4" />
+                            {migrationInstructionsText || 'Instruções de migração'}
+                          </a>
+                        ) : (null)
+                      }
+                      {!service.is_custom && onToggleAutoUpdate ? (
+                        autoUpdateMasterEnabled ? (
+                          <DropdownItem
+                            icon={
+                              <IconClockBolt
+                                className={`h-4 w-4 ${autoUpdateEnabled ? 'text-desert-green' : ''}`}
+                              />
+                            }
+                            label={`Atualização autom.: ${autoUpdateEnabled ? 'Ativada' : 'Desativada'}`}
+                            onClick={() => onToggleAutoUpdate(!autoUpdateEnabled)}
                           />
-                        }
-                        label={`Atualização autom.: ${autoUpdateEnabled ? 'Ativada' : 'Desativada'}`}
-                        onClick={() => onToggleAutoUpdate(!autoUpdateEnabled)}
-                      />
-                    ) : (
-                      <DropdownItem
-                        icon={<IconClockBolt className="h-4 w-4" />}
-                        label="Atualização autom. desativada — abrir Config."
-                        onClick={() => router.visit('/settings/update')}
-                      />
-                    )
-                  ) : null}
-                  {service.available_update_version && !service.is_custom ? (
-                    <DropdownItem
-                      icon={<IconArrowUp className="h-4 w-4 text-desert-green" />}
-                      label={`Atualizar para ${service.available_update_version}`}
-                      onClick={onUpdateVersion}
-                    />
-                  ) : null}
-                  {service.is_custom ? (
-                    <DropdownItem icon={<IconCloudDownload className="h-4 w-4" />} label="Atualizar (baixar mais recente)" onClick={onUpdate} />
-                  ) : null}
-                  <DropdownItem icon={<IconRefresh className="h-4 w-4 text-desert-orange" />} label="Forçar Reinstalação" onClick={onReinstall} danger />
-                  {service.is_custom ? (
-                    <DropdownItem icon={<IconTrash className="h-4 w-4 text-desert-red" />} label="Excluir" onClick={onDelete} danger />
-                  ) : (
-                    <DropdownItem icon={<IconTrash className="h-4 w-4 text-desert-red" />} label="Desinstalar" onClick={onUninstall} danger />
+                        ) : (
+                          <DropdownItem
+                            icon={<IconClockBolt className="h-4 w-4" />}
+                            label="Atualização autom. desativada — abrir Config."
+                            onClick={() => router.visit('/settings/update')}
+                          />
+                        )
+                      ) : null}
+                      {service.available_update_version && !service.is_custom ? (
+                        <DropdownItem
+                          icon={<IconArrowUp className="h-4 w-4 text-desert-green" />}
+                          label={`Atualizar para ${service.available_update_version}`}
+                          onClick={onUpdateVersion}
+                        />
+                      ) : null}
+                      {service.is_custom ? (
+                        <DropdownItem icon={<IconCloudDownload className="h-4 w-4" />} label="Atualizar (baixar mais recente)" onClick={onUpdate} />
+                      ) : null}
+                      <DropdownItem icon={<IconRefresh className="h-4 w-4 text-desert-orange" />} label="Forçar Reinstalação" onClick={onReinstall} danger />
+                      {service.is_custom ? (
+                        <DropdownItem icon={<IconTrash className="h-4 w-4 text-desert-red" />} label="Excluir" onClick={onDelete} danger />
+                      ) : (
+                        <DropdownItem icon={<IconTrash className="h-4 w-4 text-desert-red" />} label="Desinstalar" onClick={onUninstall} danger />
+                      )}
+                    </>
                   )}
                 </div>
               )}

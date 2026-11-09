@@ -31,5 +31,10 @@ export const SETTINGS_KEYS: KVStoreKey[] = [
     'contentAutoUpdate.cooloffHours',
     'contentAutoUpdate.maxBytesPerWindow',
     'benchmark.rerunBannerDismissed',
-    'apps.homebox.apiKeyPepper'
+    'apps.homebox.apiKeyPepper',
+    'portainer.enabled',
+    'portainer.url',
+    'portainer.apiKey',
+    'portainer.endpointId',
+    'portainer.deployTarget'
 ];

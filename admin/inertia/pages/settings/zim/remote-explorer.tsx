@@ -454,7 +454,7 @@ export default function ZimRemoteExplorer() {
       await api.downloadCategoryTier(category.slug, tier.slug)
 
       addNotification({
-        message: `Started downloading "${category.name} - ${tier.name}"`,
+        message: `Download de "${category.name} - ${tier.name}" iniciado`,
         type: 'success',
       })
       invalidateDownloads()
@@ -464,7 +464,7 @@ export default function ZimRemoteExplorer() {
     } catch (error) {
       console.error('Error downloading tier resources:', error)
       addNotification({
-        message: 'An error occurred while starting downloads.',
+        message: 'Ocorreu um erro ao iniciar os downloads.',
         type: 'error',
       })
     }
@@ -491,8 +491,8 @@ export default function ZimRemoteExplorer() {
         addNotification({
           message:
             selectedWikipedia === 'none'
-              ? 'Wikipedia removed successfully'
-              : 'Wikipedia download started',
+              ? 'Wikipédia removida com sucesso'
+              : 'Download da Wikipédia iniciado',
           type: 'success',
         })
         invalidateDownloads()
@@ -500,14 +500,14 @@ export default function ZimRemoteExplorer() {
         setSelectedWikipedia(null)
       } else {
         addNotification({
-          message: result?.message || 'Failed to change Wikipedia selection',
+          message: result?.message || 'Falha ao alterar a seleção da Wikipédia',
           type: 'error',
         })
       }
     } catch (error) {
       console.error('Error selecting Wikipedia:', error)
       addNotification({
-        message: 'An error occurred while changing Wikipedia selection',
+        message: 'Ocorreu um erro ao alterar a seleção da Wikipédia',
         type: 'error',
       })
     } finally {
@@ -803,7 +803,7 @@ export default function ZimRemoteExplorer() {
                               confirmDownload(record)
                             }}
                           >
-                            Download
+                            Baixar
                           </StyledButton>
                         </div>
                       )
@@ -1000,7 +1000,7 @@ export default function ZimRemoteExplorer() {
                                 icon="IconDownload"
                                 onClick={() => confirmCustomDownload(file)}
                               >
-                                Download
+                                Baixar
                               </StyledButton>
                             </td>
                           </tr>
@@ -1019,12 +1019,12 @@ export default function ZimRemoteExplorer() {
             title="Gerenciar Bibliotecas Personalizadas"
             open={manageModalOpen}
             onCancel={() => setManageModalOpen(false)}
-            cancelText="Close"
+            cancelText="Fechar"
           >
             <div className="space-y-6">
               <div>
                 <p className="text-sm text-text-muted mb-4">
-                  Add Kiwix mirrors or other ZIM file sources for faster downloads.
+                  Adicione espelhos do Kiwix ou outras fontes de arquivos ZIM para downloads mais rápidos.
                 </p>
 
                 {/* Existing libraries */}
@@ -1039,7 +1039,7 @@ export default function ZimRemoteExplorer() {
                           <p className="font-medium text-text-primary truncate">
                             {lib.name}
                             {lib.is_default && (
-                              <span className="ml-2 text-xs text-text-muted font-normal">(built-in)</span>
+                              <span className="ml-2 text-xs text-text-muted font-normal">(integrado)</span>
                             )}
                           </p>
                           <p className="text-xs text-text-muted truncate">{lib.base_url}</p>
@@ -1083,7 +1083,7 @@ export default function ZimRemoteExplorer() {
                       addLibraryMutation.isPending
                     }
                   >
-                    Add Library
+                    Adicionar Biblioteca
                   </StyledButton>
                 </div>
               </div>

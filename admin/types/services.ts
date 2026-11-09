@@ -22,4 +22,9 @@ export type ServiceSlim = Pick<
   | 'is_link_tile'
   | 'link_color'
   | 'category'
-> & { status?: string }
+> & {
+  status?: string
+  node?: 'local' | 'dell-micro' | 'portainer'
+  node_label?: string
+  is_unmanaged?: boolean
+}

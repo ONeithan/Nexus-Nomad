@@ -1,0 +1,24 @@
+## Nexus NOMAD v1.0.5 — Integração com Portainer (Dell Micro), Central de Aplicativos e Filtros no Catálogo Kiwix
+
+### 🚀 Novidades e Recursos Desta Versão:
+
+- **Integração com Nó Remoto Dell OptiPlex Micro 7000 (Portainer):**
+  - **Vínculo e Visualização de Contêineres Existentes:** O NOMAD agora detecta e exibe as aplicações já ativas no Dell Micro (`192.168.1.151`) sem gerenciá-las ou alterá-las — incluindo Jellyfin (8096), Komga (25600), Navidrome (4533), Suwayomi (4567), Meelo (5000), Apache Guacamole (8088), MeTube (8081), Tagr (3000), Yubal (8050) e Ignis (8180).
+  - **Instalação Remota Direta no Dell:** Ao clicar em "Instalar" em qualquer aplicativo da Central de Aplicativos, a implantação é enviada remotamente para o Portainer no Dell Micro, poupando 100% dos recursos de disco e memória do seu notebook.
+  - **Proteção da Porta 8080 (UniFi OS):** O sistema protege e evita automaticamente a porta 8080 (reservada para a controladora UniFi OS Server no Debian do Dell), mapeando aplicações para portas alternativas seguras.
+  - **Localização PT-BR Automática:** Contêineres implantados recebem variáveis de ambiente em português (`LANG=pt_BR.UTF-8`, `LC_ALL=pt_BR.UTF-8`, `TZ=America/Sao_Paulo`) por padrão.
+  - **Modal de Gestão do Nó Dell Micro:** Botão dedicado na Central de Aplicativos para testar a conectividade em tempo real com o Portainer e configurar URL ou chaves de acesso.
+
+- **Nova Central de Aplicativos:**
+  - Renomeação completa de "Depósito de Suprimentos" para "Central de Aplicativos" em todos os menus, cabeçalhos e fluxos.
+  - Adicionada aba de filtro específica para visualizar rapidamente os serviços do "Dell Micro (Portainer)".
+  - Badges visuais destacando quais aplicações estão ativas no Dell Micro.
+
+- **Filtros e Ordenação no Catálogo Kiwix:**
+  - Filtro por faixa de tamanho: Leve (até 500 MB), Médio (500 MB a 2 GB), Grande (2 GB a 10 GB) e Muito Pesado (> 10 GB).
+  - Ordenação interativa ao clicar nos cabeçalhos das colunas: Título, Autor, Atualizado e Tamanho.
+  - Tradução completa dos botões ("Baixar"), rótulo ("Idioma:") e modais de confirmação 100% em PT-BR.
+
+- **Correções Visuais e Atualizador:**
+  - Correção de legibilidade e contraste na seleção de pacotes curados da Wikipédia no modo escuro (fundo translúcido com anel verde-oliva).
+  - Atualização do sistema suave, sem alertas falsos de desconexão e com barra de progresso progressiva durante a reinicialização dos contêineres.

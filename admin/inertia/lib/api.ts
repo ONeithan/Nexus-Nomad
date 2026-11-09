@@ -694,6 +694,41 @@ class API {
     }
   }
 
+  async getPortainerStatus() {
+    try {
+      const response = await this.client.get<{
+        success: boolean
+        status: {
+          online: boolean
+          url: string
+          endpointId: number
+          authenticated: boolean
+          version?: string
+          totalContainers?: number
+          runningContainers?: number
+          error?: string
+        }
+      }>('/system/services/portainer/status')
+      return response.data
+    } catch (error) {
+      console.error('Error fetching Portainer status:', error)
+      return undefined
+    }
+  }
+
+  async testPortainer() {
+    try {
+      const response = await this.client.post<{
+        success: boolean
+        status: any
+      }>('/system/services/portainer/test')
+      return response.data
+    } catch (error) {
+      console.error('Error testing Portainer connection:', error)
+      return undefined
+    }
+  }
+
   async getGlobalMapInfo() {
     return catchInternal(async () => {
       const response = await this.client.get<{

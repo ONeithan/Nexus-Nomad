@@ -1,5 +1,6 @@
 import { DockerService } from '#services/docker_service';
 import { SystemService } from '#services/system_service'
+import KVStore from '#models/kv_store'
 import { SystemUpdateService } from '#services/system_update_service'
 import { ContainerRegistryService } from '#services/container_registry_service'
 import { AutoUpdateService } from '#services/auto_update_service'
@@ -64,12 +65,34 @@ export default class SystemController {
     async installService({ request, response }: HttpContext) {
         const payload = await request.validateUsing(installServiceValidator);
 
+        // Check if deploy target is Portainer (Dell Micro)
+        const portainerEnabled = await this.systemService.isPortainerEnabled()
+        const deployTarget = (await KVStore.getValue('portainer.deployTarget')) || (portainerEnabled ? 'portainer' : 'local')
+        if (portainerEnabled && deployTarget === 'portainer') {
+            const result = await this.systemService.deployToPortainer(payload.service_name)
+            if (result.success) {
+                return response.send({ success: true, message: result.message })
+            } else {
+                return response.status(400).send({ success: false, message: result.message })
+            }
+        }
+
         const result = await this.dockerService.createContainerPreflight(payload.service_name);
         if (result.success) {
             response.send({ success: true, message: result.message });
         } else {
             response.status(400).send({ success: false, message: result.message });
         }
+    }
+
+    async getPortainerStatus({ response }: HttpContext) {
+        const status = await this.systemService.getPortainerStatus()
+        return response.send({ success: true, status })
+    }
+
+    async testPortainerConnection({ response }: HttpContext) {
+        const status = await this.systemService.getPortainerStatus()
+        return response.send({ success: status.online, status })
     }
 
     async affectService({ request, response }: HttpContext) {

@@ -541,6 +541,14 @@ router
       summary: 'List services',
       tags: ['system'],
     })
+    documented(router.get('/services/portainer/status', [SystemController, 'getPortainerStatus']), {
+      summary: 'Get Portainer integration status',
+      tags: ['system'],
+    })
+    documented(router.post('/services/portainer/test', [SystemController, 'testPortainerConnection']), {
+      summary: 'Test connection to Portainer on Dell Micro',
+      tags: ['system'],
+    })
     documented(router.post('/services/affect', [SystemController, 'affectService']), {
       summary: 'Start, stop, or restart a service',
       tags: ['system'],
