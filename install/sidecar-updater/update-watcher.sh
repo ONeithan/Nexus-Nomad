@@ -37,7 +37,7 @@ perform_update() {
     > "$LOG_FILE"
 
     # Stage 1: Starting
-    write_status "starting" 0 "System update initiated"
+    write_status "starting" 10 "Inicializando processo de atualização do sistema..."
     log "System update initiated"
     sleep 1
 
@@ -50,12 +50,12 @@ perform_update() {
         log "Successfully updated compose.yml admin image tag to '${target_tag}'"
     else
         log "ERROR: Failed to update compose.yml image tag"
-        write_status "error" 0 "Failed to update compose.yml image tag - check logs"
+        write_status "error" 0 "Falha ao atualizar tag no compose.yml - verifique os logs"
         return 1
     fi
 
     # Stage 2: Pulling images
-    write_status "pulling" 20 "Pulling latest Docker images..."
+    write_status "pulling" 30 "Baixando imagens Docker mais recentes..."
     log "Pulling latest Docker images..."
 
     # Snapshot the images backing our managed repos before the pull supersedes
@@ -64,16 +64,16 @@ perform_update() {
 
     if docker compose -p "$COMPOSE_PROJECT_NAME" -f "$COMPOSE_FILE" pull >> "$LOG_FILE" 2>&1; then
         log "Successfully pulled latest images"
-        write_status "pulled" 60 "Images pulled successfully"
+        write_status "pulled" 65 "Imagens baixadas com sucesso!"
     else
         log "Target tag pull failed, attempting fallback to :latest..."
         sed -i -e "s|\(image: ghcr\.io/oneithan/nexus-nomad\):.*|\1:latest|" "$COMPOSE_FILE" 2>> "$LOG_FILE"
         if docker compose -p "$COMPOSE_PROJECT_NAME" -f "$COMPOSE_FILE" pull >> "$LOG_FILE" 2>&1; then
             log "Successfully pulled images via :latest fallback"
-            write_status "pulled" 60 "Images pulled successfully"
+            write_status "pulled" 65 "Imagens baixadas com sucesso!"
         else
             log "ERROR: Failed to pull images"
-            write_status "error" 0 "Failed to pull Docker images - check logs"
+            write_status "error" 0 "Falha ao baixar imagens Docker - verifique os logs"
             return 1
         fi
     fi
@@ -81,18 +81,26 @@ perform_update() {
     sleep 2
     
     # Stage 3: Recreating containers individually (excluding updater)
-    write_status "recreating" 65 "Recreating containers individually..."
-    log "Recreating containers individually (excluding updater)..."
+    # Atualiza contêineres auxiliares primeiro e o admin por ÚLTIMO para manter a interface web viva o máximo possível!
+    write_status "recreating" 70 "Recriando contêineres e aplicando nova versão..."
+    log "Recreating containers individually (auxiliary first, admin last)..."
     
-    # List of services to update (excluding updater)
-    SERVICES_TO_UPDATE="admin mysql redis dozzle"
+    SERVICES_TO_UPDATE="mysql redis dozzle admin"
     
-    local current_progress=65
-    local progress_per_service=8  # (95 - 65) / 4 services ≈ 8% per service
+    local current_progress=72
+    local progress_per_service=6  # (96 - 72) / 4 services = 6% per service
     
     for service in $SERVICES_TO_UPDATE; do
-        log "Updating service: $service"
-        write_status "recreating" $current_progress "Recreating $service..."
+        local svc_label="$service"
+        case "$service" in
+            admin) svc_label="painel administrativo";;
+            mysql) svc_label="banco de dados";;
+            redis) svc_label="cache";;
+            dozzle) svc_label="monitor de logs";;
+        esac
+
+        log "Updating service: $service ($svc_label)"
+        write_status "recreating" $current_progress "Atualizando serviço: ${svc_label}..."
         
         # Stop the service
         log "  Stopping $service..."
@@ -108,7 +116,7 @@ perform_update() {
             log "  ✓ Successfully recreated $service"
         else
             log "  ERROR: Failed to recreate $service"
-            write_status "error" $current_progress "Failed to recreate $service - check logs"
+            write_status "error" $current_progress "Falha ao recriar $service - verifique os logs"
             return 1
         fi
         
@@ -120,7 +128,7 @@ perform_update() {
     # Stage 4: Reclaim disk from superseded images (best-effort; never fails the update)
     prune_old_images
 
-    write_status "complete" 100 "System update completed successfully"
+    write_status "complete" 100 "Atualização do sistema concluída com sucesso!"
     log "System update completed successfully"
 
     return 0
@@ -248,8 +256,8 @@ while true; do
             log "Update failed - see logs for details"
         fi
         
-        sleep 5
-        write_status "idle" 0 "Ready for update requests"
+        sleep 30
+        write_status "idle" 0 "Pronto para receber atualizações"
     fi
     
     # Sleep before next check (1 second polling)

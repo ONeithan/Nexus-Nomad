@@ -77,7 +77,7 @@ update_and_recreate() {
       sudo rm -rf "${src_dir}"
       sudo git clone --depth 1 --branch "${GITHUB_BRANCH}" "https://github.com/${GITHUB_USER}/${GITHUB_REPO}.git" "${src_dir}"
     fi
-    sudo docker build --build-arg VERSION="1.0.2-nexus" -t "${NOMAD_ADMIN_IMAGE}" "${src_dir}"
+    sudo docker build --build-arg VERSION="1.0.3-nexus" -t "${NOMAD_ADMIN_IMAGE}" "${src_dir}"
   fi
 
   echo -e "${YELLOW}#${RESET} Atualizando contêineres auxiliares..."
