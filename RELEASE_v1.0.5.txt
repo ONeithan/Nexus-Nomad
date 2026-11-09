@@ -1,24 +1,24 @@
-## Nexus NOMAD v1.0.5 — Integração com Portainer (Dell Micro), Central de Aplicativos e Filtros no Catálogo Kiwix
+## Nexus NOMAD v1.0.5 — Central de Aplicativos, Suporte a Nó Remoto (Portainer) e Catálogo Kiwix
 
-### 🚀 Novidades e Recursos Desta Versão:
+### 🚀 Novidades e Melhorias desta Versão:
 
-- **Integração com Nó Remoto Dell OptiPlex Micro 7000 (Portainer):**
-  - **Vínculo e Visualização de Contêineres Existentes:** O NOMAD agora detecta e exibe as aplicações já ativas no Dell Micro (`192.168.1.151`) sem gerenciá-las ou alterá-las — incluindo Jellyfin (8096), Komga (25600), Navidrome (4533), Suwayomi (4567), Meelo (5000), Apache Guacamole (8088), MeTube (8081), Tagr (3000), Yubal (8050) e Ignis (8180).
-  - **Instalação Remota Direta no Dell:** Ao clicar em "Instalar" em qualquer aplicativo da Central de Aplicativos, a implantação é enviada remotamente para o Portainer no Dell Micro, poupando 100% dos recursos de disco e memória do seu notebook.
-  - **Proteção da Porta 8080 (UniFi OS):** O sistema protege e evita automaticamente a porta 8080 (reservada para a controladora UniFi OS Server no Debian do Dell), mapeando aplicações para portas alternativas seguras.
-  - **Localização PT-BR Automática:** Contêineres implantados recebem variáveis de ambiente em português (`LANG=pt_BR.UTF-8`, `LC_ALL=pt_BR.UTF-8`, `TZ=America/Sao_Paulo`) por padrão.
-  - **Modal de Gestão do Nó Dell Micro:** Botão dedicado na Central de Aplicativos para testar a conectividade em tempo real com o Portainer e configurar URL ou chaves de acesso.
+- **Suporte a Nó de Execução Remoto (Portainer / Docker):**
+  - **Implantação Remota Desacoplada:** Possibilidade de vincular um servidor Docker/Portainer na rede local (`https://<IP_DO_SERVIDOR>:9443`), fazendo com que novas aplicações da Central sejam implantadas e executadas diretamente no servidor remoto, poupando 100% do armazenamento e memória do dispositivo local.
+  - **Detecção e Vínculo de Serviços Existentes:** Exibição e atalho rápido em 1 clique para aplicações já ativas no nó remoto (como Jellyfin, Komga, Navidrome, etc.) com visualização segura e não destrutiva.
+  - **Proteção Inteligente de Portas de Rede:** Prevenção automática de conflitos com portas reservadas de infraestrutura (como a porta 8080), remapeando aplicações para portas seguras.
+  - **Localização PT-BR Padrão:** Injeção automática de variáveis de localização brasileira (`LANG=pt_BR.UTF-8`, `LC_ALL=pt_BR.UTF-8`, `TZ=America/Sao_Paulo`) nos contêineres implantados.
+  - **Modal de Gestão de Nó:** Botão dedicado na Central de Aplicativos para testar a conectividade em tempo real, configurar credenciais ou alternar entre execução local e remota.
 
-- **Nova Central de Aplicativos:**
-  - Renomeação completa de "Depósito de Suprimentos" para "Central de Aplicativos" em todos os menus, cabeçalhos e fluxos.
-  - Adicionada aba de filtro específica para visualizar rapidamente os serviços do "Dell Micro (Portainer)".
-  - Badges visuais destacando quais aplicações estão ativas no Dell Micro.
+- **Central de Aplicativos:**
+  - Renomeação completa de "Depósito de Suprimentos" para "Central de Aplicativos" em todos os menus, cabeçalhos e rotas.
+  - Adição de filtro por nó remoto para localizar rapidamente serviços executados no servidor.
+  - Indicadores e badges informando claramente o nó de execução de cada aplicação.
 
 - **Filtros e Ordenação no Catálogo Kiwix:**
   - Filtro por faixa de tamanho: Leve (até 500 MB), Médio (500 MB a 2 GB), Grande (2 GB a 10 GB) e Muito Pesado (> 10 GB).
-  - Ordenação interativa ao clicar nos cabeçalhos das colunas: Título, Autor, Atualizado e Tamanho.
-  - Tradução completa dos botões ("Baixar"), rótulo ("Idioma:") e modais de confirmação 100% em PT-BR.
+  - Ordenação interativa por clique nos cabeçalhos das colunas: Título, Autor, Data de Atualização e Tamanho do arquivo.
+  - Tradução integral para PT-BR dos botões ("Baixar"), seletor de idioma ("Idioma:") e modais de confirmação de download.
 
-- **Correções Visuais e Atualizador:**
-  - Correção de legibilidade e contraste na seleção de pacotes curados da Wikipédia no modo escuro (fundo translúcido com anel verde-oliva).
-  - Atualização do sistema suave, sem alertas falsos de desconexão e com barra de progresso progressiva durante a reinicialização dos contêineres.
+- **Correções Visuais e Atualizador do Sistema:**
+  - Correção de legibilidade e contraste na seleção de pacotes curados da Wikipédia no modo escuro (fundo translúcido com destaque verde-oliva).
+  - Transição de atualização do sistema fluida, sem alertas falsos de desconexão e com barra de progresso contínua durante a reinicialização dos contêineres.
