@@ -19,7 +19,7 @@ export interface PortainerStatus {
   error?: string
 }
 
-export interface DellServiceDef {
+export interface RemoteServiceDef {
   service_name: string
   friendly_name: string
   description: string
@@ -30,32 +30,34 @@ export interface DellServiceDef {
   is_built_in?: boolean
 }
 
+export type DellServiceDef = RemoteServiceDef
+
 /**
  * PortainerService handles communication with Portainer CE running on
- * the Dell OptiPlex Micro 7000 (192.168.1.151).
+ * a remote Docker host.
  *
  * It enables:
- * 1. Showing all services already running on the Dell Micro (Jellyfin, Komga, Navidrome, etc.)
- * 2. Remote deployments: when the user installs apps, they are deployed to Portainer on Dell
- *    rather than consuming resources on the local notebook.
- * 3. Port safety: guarantees TCP port 8080 is NEVER bound (reserved by UniFi OS Server on Debian).
+ * 1. Showing all services already running on the remote host (Jellyfin, Komga, Navidrome, etc.)
+ * 2. Remote deployments: when the user installs apps, they are deployed to Portainer on the server
+ *    rather than consuming resources on the local device.
+ * 3. Port safety: guarantees TCP port 8080 is remapped if reserved by infrastructure (e.g., UniFi Inform).
  */
 export class PortainerService {
-  private static readonly DEFAULT_PORTAINER_URL = 'https://192.168.1.151:9443'
-  private static readonly DEFAULT_DELL_IP = '192.168.1.151'
+  private static readonly DEFAULT_PORTAINER_URL = ''
+  private static readonly DEFAULT_TARGET_HOST = '127.0.0.1'
   private static readonly DEFAULT_ENDPOINT_ID = 1
 
-  // Safe ports mapping on Dell Micro (avoiding TCP 8080 which is reserved for UniFi Inform)
+  // Safe ports mapping on remote host (avoiding TCP 8080 conflicts)
   private static readonly PORT_REMAPS: Record<string, string> = {
     '8080': '8095',
   }
 
-  // Pre-configured inventory of services active on the Dell OptiPlex Micro 7000
-  public static readonly DELL_KNOWN_SERVICES: DellServiceDef[] = [
+  // Pre-configured inventory of services commonly running on homelab remote servers
+  public static readonly REMOTE_KNOWN_SERVICES: RemoteServiceDef[] = [
     {
       service_name: 'jellyfin',
       friendly_name: 'Jellyfin Media Server',
-      description: 'Central de mídia pessoal para streaming de filmes, séries e vídeos (Dell Micro)',
+      description: 'Central de mídia pessoal para streaming de filmes, séries e vídeos (Servidor Remoto)',
       icon: 'IconDeviceTv',
       category: 'media',
       port: 8096,
@@ -65,7 +67,7 @@ export class PortainerService {
     {
       service_name: 'komga-nexus',
       friendly_name: 'Komga (Nexus Codex)',
-      description: 'Biblioteca e leitor de mangás, manhwas, webtoons e livros (Dell Micro)',
+      description: 'Biblioteca e leitor de mangás, manhwas, webtoons e livros (Servidor Remoto)',
       icon: 'IconBook2',
       category: 'media',
       port: 25600,
@@ -74,7 +76,7 @@ export class PortainerService {
     {
       service_name: 'navidrome-nexus',
       friendly_name: 'Navidrome (Streaming de Música)',
-      description: 'Servidor de streaming de áudio e músicas com suporte a playlists (Dell Micro)',
+      description: 'Servidor de streaming de áudio e músicas com suporte a playlists (Servidor Remoto)',
       icon: 'IconHeadphones',
       category: 'media',
       port: 4533,
@@ -83,7 +85,7 @@ export class PortainerService {
     {
       service_name: 'suwayomi-nexus',
       friendly_name: 'Suwayomi (Tachiyomi Server)',
-      description: 'Leitor e sincronizador de mangás e manhwas na rede local (Dell Micro)',
+      description: 'Leitor e sincronizador de mangás e manhwas na rede local (Servidor Remoto)',
       icon: 'IconBookmark',
       category: 'media',
       port: 4567,
@@ -92,7 +94,7 @@ export class PortainerService {
     {
       service_name: 'meelo-nexus',
       friendly_name: 'Meelo (Videoclipes)',
-      description: 'Servidor de gerenciamento e streaming de videoclipes musicais (Dell Micro)',
+      description: 'Servidor de gerenciamento e streaming de videoclipes musicais (Servidor Remoto)',
       icon: 'IconMusic',
       category: 'media',
       port: 5000,
@@ -101,7 +103,7 @@ export class PortainerService {
     {
       service_name: 'guacamole-nexus',
       friendly_name: 'Apache Guacamole (Acesso Remoto)',
-      description: 'Gateway de acesso remoto HTML5 para desktops e terminais sem cliente (Dell Micro)',
+      description: 'Gateway de acesso remoto HTML5 para desktops e terminais sem cliente (Servidor Remoto)',
       icon: 'IconTerminal2',
       category: 'utility',
       port: 8088,
@@ -110,7 +112,7 @@ export class PortainerService {
     {
       service_name: 'metube-nexus',
       friendly_name: 'MeTube (Download de Mídia)',
-      description: 'Interface web com yt-dlp para download de vídeos e músicas (Dell Micro)',
+      description: 'Interface web com yt-dlp para download de vídeos e músicas (Servidor Remoto)',
       icon: 'IconBrandYoutube',
       category: 'media',
       port: 8081,
@@ -119,7 +121,7 @@ export class PortainerService {
     {
       service_name: 'tagr-nexus',
       friendly_name: 'Tagr (Metadados de Música)',
-      description: 'Organizador e editor de metadados para biblioteca musical (Dell Micro)',
+      description: 'Organizador e editor de metadados para biblioteca musical (Servidor Remoto)',
       icon: 'IconTag',
       category: 'utility',
       port: 3000,
@@ -128,7 +130,7 @@ export class PortainerService {
     {
       service_name: 'yubal-nexus',
       friendly_name: 'Yubal (Playlist Sync)',
-      description: 'Sincronizador automático de playlists do Navidrome (Dell Micro)',
+      description: 'Sincronizador automático de playlists do Navidrome (Servidor Remoto)',
       icon: 'IconPlaylist',
       category: 'utility',
       port: 8050,
@@ -137,22 +139,24 @@ export class PortainerService {
     {
       service_name: 'ignis-nexus',
       friendly_name: 'Ignis Core (Segundo Cérebro)',
-      description: 'Gestão de notas, ideias e cofres de conhecimento pessoal (Dell Micro)',
+      description: 'Gestão de notas, ideias e cofres de conhecimento pessoal (Servidor Remoto)',
       icon: 'IconBrain',
       category: 'productivity',
       port: 8180,
       protocol: 'http',
     },
     {
-      service_name: 'portainer-dell',
-      friendly_name: 'Portainer CE (Dell Micro)',
-      description: 'Gerenciador central de contêineres e stacks Docker no Dell Micro',
+      service_name: 'portainer-remote',
+      friendly_name: 'Portainer CE (Painel de Gestão)',
+      description: 'Gerenciador central de contêineres e stacks Docker no servidor remoto',
       icon: 'IconBrandDocker',
       category: 'utility',
       port: 9443,
       protocol: 'https',
     },
   ]
+
+  public static readonly DELL_KNOWN_SERVICES = PortainerService.REMOTE_KNOWN_SERVICES
 
   /**
    * Check if Portainer integration has been explicitly enabled by the user
@@ -171,7 +175,7 @@ export class PortainerService {
    */
   public async getTargetHost(): Promise<string> {
     const baseUrl = await this.getBaseUrl()
-    if (!baseUrl) return PortainerService.DEFAULT_DELL_IP
+    if (!baseUrl) return ''
     try {
       const parsed = new URL(baseUrl)
       return parsed.hostname
@@ -221,12 +225,15 @@ export class PortainerService {
   /**
    * Create an axios instance configured with ignore-cert for Portainer self-signed HTTPS
    */
-  private async getClient(): Promise<{ client: AxiosInstance; baseUrl: string; apiKey: string }> {
-    const baseUrl = await this.getBaseUrl()
-    const apiKey = await this.getApiKey()
+  private async getClient(
+    overrideUrl?: string,
+    overrideApiKey?: string
+  ): Promise<{ client: AxiosInstance; baseUrl: string; apiKey: string }> {
+    const baseUrl = overrideUrl !== undefined ? overrideUrl.trim() : await this.getBaseUrl()
+    const apiKey = overrideApiKey !== undefined ? overrideApiKey.trim() : await this.getApiKey()
 
     const client = axios.create({
-      baseURL: baseUrl,
+      baseURL: baseUrl || 'http://127.0.0.1:9443',
       timeout: 5000,
       httpsAgent: new https.Agent({ rejectUnauthorized: false }),
       headers: {
@@ -239,11 +246,23 @@ export class PortainerService {
   }
 
   /**
-   * Test connection and retrieve status of the Portainer server on the Dell Micro
+   * Test connection and retrieve status of the remote Portainer server
    */
-  public async getStatus(): Promise<PortainerStatus> {
-    const { client, baseUrl, apiKey } = await this.getClient()
+  public async getStatus(overrideUrl?: string, overrideApiKey?: string): Promise<PortainerStatus> {
+    const { client, baseUrl, apiKey } = await this.getClient(overrideUrl, overrideApiKey)
     const endpointId = await this.getEndpointId()
+    const enabled = await this.isEnabled()
+
+    if (!baseUrl) {
+      return {
+        enabled,
+        online: false,
+        url: '',
+        endpointId,
+        authenticated: false,
+        error: 'Nenhum endereço de servidor Portainer configurado.',
+      }
+    }
 
     try {
       // 1. Try public ping / status endpoint
@@ -275,8 +294,6 @@ export class PortainerService {
         }
       }
 
-      const enabled = await this.isEnabled()
-
       return {
         enabled,
         online: true,
@@ -288,7 +305,6 @@ export class PortainerService {
         runningContainers,
       }
     } catch (error: any) {
-      const enabled = await this.isEnabled()
       logger.info(`Portainer at ${baseUrl} is unreachable: ${error.message}`)
       return {
         enabled,
@@ -296,16 +312,16 @@ export class PortainerService {
         url: baseUrl,
         endpointId,
         authenticated: false,
-        error: error.message || 'Não foi possível conectar ao Portainer no Dell Micro.',
+        error: error.message || 'Não foi possível conectar ao servidor Portainer.',
       }
     }
   }
 
   /**
-   * Enrich and synchronize catalog services with the Dell OptiPlex Micro inventory.
-   * - Only runs when the user has explicitly enabled/configured the Dell Micro node.
-   * - Binds existing services (like Jellyfin on 8096) so NOMAD shows them as Active on Dell.
-   * - Adds the other Dell services as non-manageable quick-launch tiles.
+   * Enrich and synchronize catalog services with the remote server inventory.
+   * - Only runs when the user has explicitly enabled/configured the remote node.
+   * - Binds existing services (like Jellyfin on 8096) so NOMAD shows them as Active on the server.
+   * - Adds the other remote services as non-manageable quick-launch tiles.
    */
   public async syncWithDellInventory(services: ServiceSlim[]): Promise<ServiceSlim[]> {
     const enabled = await this.isEnabled()
@@ -314,53 +330,55 @@ export class PortainerService {
       return services
     }
 
-    const dellIp = await this.getTargetHost()
-    const dellKnown = PortainerService.DELL_KNOWN_SERVICES
+    const hostIp = await this.getTargetHost()
+    if (!hostIp) return services
+
+    const remoteKnown = PortainerService.REMOTE_KNOWN_SERVICES
 
     // 1. Check if Jellyfin exists in NOMAD's catalog
     const jellyfinIndex = services.findIndex((s) => s.service_name.toLowerCase() === 'jellyfin')
     if (jellyfinIndex !== -1) {
       const jellyfin = services[jellyfinIndex]
-      // Mark as installed on Dell Micro with direct URL to port 8096
+      // Mark as installed on remote server with direct URL to port 8096
       services[jellyfinIndex] = {
         ...jellyfin,
         installed: true,
         status: 'running',
-        node: 'dell-micro',
-        node_label: 'Dell Micro (Portainer)',
-        ui_location: `http://${dellIp}:8096`,
-        custom_url: `http://${dellIp}:8096`,
-        is_unmanaged: true, // Cannot stop/uninstall from notebook
+        node: 'portainer',
+        node_label: 'Servidor Portainer',
+        ui_location: `http://${hostIp}:8096`,
+        custom_url: `http://${hostIp}:8096`,
+        is_unmanaged: true, // Cannot stop/uninstall from local device
         friendly_name: jellyfin.friendly_name || 'Jellyfin Media Server',
         description:
           jellyfin.description ||
-          'Central de mídia conectada ao TrueNAS rodando no Dell Micro (Porta 8096)',
+          'Central de mídia pessoal conectada ao Servidor Portainer (Porta 8096)',
       }
     }
 
-    // 2. Add extra Dell services that are not part of standard NOMAD (Komga, Navidrome, etc.)
+    // 2. Add extra remote services that are not part of standard NOMAD (Komga, Navidrome, etc.)
     const existingNames = new Set(services.map((s) => s.service_name))
     let nextId = 9000
 
-    for (const dellApp of dellKnown) {
-      if (existingNames.has(dellApp.service_name) || dellApp.service_name === 'jellyfin') {
+    for (const remoteApp of remoteKnown) {
+      if (existingNames.has(remoteApp.service_name) || remoteApp.service_name === 'jellyfin') {
         continue
       }
 
-      const launchUrl = `${dellApp.protocol}://${dellIp}:${dellApp.port}`
+      const launchUrl = `${remoteApp.protocol}://${hostIp}:${remoteApp.port}`
 
       services.push({
         id: nextId++,
-        service_name: dellApp.service_name,
-        friendly_name: dellApp.friendly_name,
-        description: dellApp.description,
-        icon: dellApp.icon,
+        service_name: remoteApp.service_name,
+        friendly_name: remoteApp.friendly_name,
+        description: remoteApp.description,
+        icon: remoteApp.icon,
         installed: true,
         installation_status: 'idle',
         status: 'running',
         ui_location: launchUrl,
         custom_url: launchUrl,
-        powered_by: 'Dell Homelab',
+        powered_by: 'Servidor Remoto',
         display_order: 50 + nextId,
         container_image: 'remote-container',
         available_update_version: null,
@@ -370,14 +388,18 @@ export class PortainerService {
         is_deprecated: false,
         is_link_tile: true,
         link_color: '#10b981',
-        category: dellApp.category,
-        node: 'dell-micro',
-        node_label: 'Dell Micro (Portainer)',
+        category: remoteApp.category,
+        node: 'portainer',
+        node_label: 'Servidor Portainer',
         is_unmanaged: true,
       })
     }
 
     return services
+  }
+
+  public async syncWithRemoteInventory(services: ServiceSlim[]): Promise<ServiceSlim[]> {
+    return this.syncWithDellInventory(services)
   }
 
   /**
@@ -393,8 +415,8 @@ export class PortainerService {
   }
 
   /**
-   * Deploy a NOMAD service to Portainer on the Dell Micro.
-   * Ensures the notebook itself is not burdened with the container.
+   * Deploy a NOMAD service to remote Portainer.
+   * Ensures the local device itself is not burdened with the container.
    */
   public async deployService(serviceName: string): Promise<{ success: boolean; message: string }> {
     const service = await Service.query().where('service_name', serviceName).first()
@@ -406,7 +428,7 @@ export class PortainerService {
       return { success: false, message: `Serviço "${serviceName}" já está instalado.` }
     }
 
-    const dellIp = PortainerService.DEFAULT_DELL_IP
+    const hostIp = (await this.getTargetHost()) || PortainerService.DEFAULT_TARGET_HOST
     const { client, apiKey } = await this.getClient()
     const endpointId = await this.getEndpointId()
 
@@ -422,19 +444,19 @@ export class PortainerService {
       config = {}
     }
 
-    // Determine target host port, avoiding port 8080 (UniFi OS reserved)
+    // Determine target host port, avoiding port 8080 conflicts
     let hostPort = service.ui_location ? service.ui_location.replace(/^https?:/, '') : '8090'
     if (hostPort === '8080') {
       hostPort = PortainerService.PORT_REMAPS['8080'] || '8095'
       logger.info(
-        `[PortainerService] Port 8080 is reserved for UniFi OS Server on Dell Micro. Remapped ${serviceName} to ${hostPort}.`
+        `[PortainerService] Port 8080 is reserved. Remapped ${serviceName} to ${hostPort}.`
       )
     }
 
     this.broadcast(
       serviceName,
       'initializing',
-      `Iniciando implantação de ${service.friendly_name} no Dell Micro (192.168.1.151)...`
+      `Iniciando implantação de ${service.friendly_name} no servidor Portainer (${hostIp})...`
     )
 
     // Set installation status to installing
@@ -442,7 +464,7 @@ export class PortainerService {
     await service.save()
 
     // Execute remote deploy asynchronously
-    this.executeRemoteDeploy(service, config, hostPort, dellIp, client, apiKey, endpointId).catch(
+    this.executeRemoteDeploy(service, config, hostPort, hostIp, client, apiKey, endpointId).catch(
       async (err) => {
         logger.error(`Remote deploy error for ${serviceName}: ${err.message}`)
         service.installation_status = 'error'
@@ -453,7 +475,7 @@ export class PortainerService {
 
     return {
       success: true,
-      message: `Implantação de "${service.friendly_name}" enviada para o Portainer no Dell Micro.`,
+      message: `Implantação de "${service.friendly_name}" enviada para o Servidor Portainer.`,
     }
   }
 
@@ -461,18 +483,18 @@ export class PortainerService {
     service: Service,
     config: any,
     hostPort: string,
-    dellIp: string,
+    hostIp: string,
     client: AxiosInstance,
     apiKey: string,
     endpointId: number
   ): Promise<void> {
     const serviceName = service.service_name
-    const targetUrl = `http://${dellIp}:${hostPort}`
+    const targetUrl = `http://${hostIp}:${hostPort}`
 
     this.broadcast(
       serviceName,
       'pulling',
-      `Solicitando pull da imagem ${service.container_image} no Portainer do Dell Micro...`
+      `Solicitando pull da imagem ${service.container_image} no servidor Portainer...`
     )
 
     // If authenticated via API Key, create stack or container via Portainer REST API
@@ -496,7 +518,7 @@ export class PortainerService {
           },
         }
 
-        this.broadcast(serviceName, 'creating', `Criando contêiner nomad-${serviceName} no Dell Micro...`)
+        this.broadcast(serviceName, 'creating', `Criando contêiner nomad-${serviceName} no servidor Portainer...`)
 
         const createResp = await client.post(
           `/api/endpoints/${endpointId}/docker/containers/create?name=nomad-${serviceName}`,
@@ -505,12 +527,12 @@ export class PortainerService {
 
         const containerId = createResp.data?.Id
         if (containerId) {
-          this.broadcast(serviceName, 'starting', `Iniciando contêiner no Dell Micro...`)
+          this.broadcast(serviceName, 'starting', `Iniciando contêiner no servidor Portainer...`)
           await client.post(`/api/endpoints/${endpointId}/docker/containers/${containerId}/start`)
         }
       } catch (apiErr: any) {
         logger.warn(
-          `Direct Portainer API call failed (${apiErr.message}). Falling back to LAN registered service link.`
+          `Direct Portainer API call failed (${apiErr.message}). Falling back to registered service link.`
         )
       }
     } else {
@@ -518,7 +540,7 @@ export class PortainerService {
       await new Promise((resolve) => setTimeout(resolve, 2000))
     }
 
-    // Mark as installed and linked to Dell Micro
+    // Mark as installed and linked to remote server
     service.installed = true
     service.installation_status = 'idle'
     service.ui_location = targetUrl
@@ -528,7 +550,7 @@ export class PortainerService {
     this.broadcast(
       serviceName,
       'completed',
-      `Aplicação instalada e ativa no Dell Micro em ${targetUrl}!`
+      `Aplicação instalada e ativa no Servidor Portainer em ${targetUrl}!`
     )
   }
 }

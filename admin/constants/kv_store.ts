@@ -36,5 +36,8 @@ export const SETTINGS_KEYS: KVStoreKey[] = [
     'portainer.url',
     'portainer.apiKey',
     'portainer.endpointId',
-    'portainer.deployTarget'
+    'portainer.deployTarget',
+    'truenas.enabled',
+    'truenas.url',
+    'truenas.apiKey'
 ];

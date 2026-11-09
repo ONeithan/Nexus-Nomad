@@ -58,7 +58,7 @@ function extractTag(containerImage: string): string {
 const CATEGORIES = [
   { id: 'all', label: 'Todos' },
   { id: 'installed', label: 'Instalados' },
-  { id: 'dell-micro', label: 'Dell Micro (Portainer)' },
+  { id: 'remote-server', label: 'Servidor Portainer' },
   { id: 'productivity', label: 'Produtividade' },
   { id: 'media', label: 'Mídia & Livros' },
   { id: 'security', label: 'Segurança' },
@@ -192,11 +192,16 @@ export default function SupplyDepotPage(props: { system: { services: ServiceSlim
   // ── Filtering ─────────────────────────────────────────────────────────────
   const filteredServices = props.system.services.filter((s) => {
     if (activeCategory === 'installed' && !s.installed) return false
-    if (activeCategory === 'dell-micro' && s.node !== 'dell-micro') return false
+    if (
+      activeCategory === 'remote-server' &&
+      s.node !== 'portainer' &&
+      s.node !== 'dell-micro'
+    )
+      return false
     if (
       activeCategory !== 'all' &&
       activeCategory !== 'installed' &&
-      activeCategory !== 'dell-micro'
+      activeCategory !== 'remote-server'
     ) {
       if (s.category !== activeCategory) return false
     }
@@ -466,7 +471,7 @@ export default function SupplyDepotPage(props: { system: { services: ServiceSlim
                 variant="outline"
                 onClick={() => setPortainerModalOpen(true)}
               >
-                Nó Dell Micro
+                Servidores Remotos
               </StyledButton>
               <StyledButton
                 icon="IconBrandDocker"
@@ -588,7 +593,7 @@ export default function SupplyDepotPage(props: { system: { services: ServiceSlim
             setModal(null)
           }}
           onConfirm={() => handleInstall(modal.service)}
-          confirmText="Instalar no Dell Micro"
+          confirmText="Instalar no Servidor Remoto"
           confirmIcon="IconDownload"
           confirmVariant="primary"
           confirmLoading={loading}
@@ -597,10 +602,10 @@ export default function SupplyDepotPage(props: { system: { services: ServiceSlim
             <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-300">
               <p className="font-semibold flex items-center gap-2 text-sm text-emerald-300">
                 <IconServer className="w-4 h-4 text-emerald-400" />
-                Destino: Dell OptiPlex Micro 7000 (Portainer)
+                Destino: Servidor Docker (Portainer)
               </p>
               <p className="text-xs text-text-muted mt-1 leading-relaxed">
-                Este aplicativo será enviado para o seu Portainer no Dell Micro (192.168.1.151) e executado remotamente lá, sem consumir armazenamento ou memória do seu notebook.
+                Este aplicativo será enviado para o servidor Portainer remoto configurado e executado lá, sem consumir armazenamento ou memória do seu dispositivo local.
               </p>
             </div>
 
@@ -1019,9 +1024,9 @@ function AppCard({
             {CATEGORY_LABELS[service.category] ?? toTitleCase(service.category)}
           </span>
         )}
-        {service.node === 'dell-micro' && (
+        {(service.node === 'portainer' || service.node === 'dell-micro') && (
           <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
-            Dell Micro
+            Servidor Portainer
           </span>
         )}
         {service.is_custom ? (

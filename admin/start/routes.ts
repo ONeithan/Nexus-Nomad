@@ -138,6 +138,7 @@ router
 router
   .group(() => {
     router.get('/system', [SettingsController, 'system'])
+    router.get('/servers', [SettingsController, 'servers'])
     router.on('/apps').redirectToPath('/supply-depot') // superseded by Supply Depot
     router.get('/legal', [SettingsController, 'legal'])
     router.get('/maps', [SettingsController, 'maps'])
@@ -546,7 +547,15 @@ router
       tags: ['system'],
     })
     documented(router.post('/services/portainer/test', [SystemController, 'testPortainerConnection']), {
-      summary: 'Test connection to Portainer on Dell Micro',
+      summary: 'Test connection to Portainer server',
+      tags: ['system'],
+    })
+    documented(router.get('/services/truenas/status', [SystemController, 'getTruenasStatus']), {
+      summary: 'Get TrueNAS integration status',
+      tags: ['system'],
+    })
+    documented(router.post('/services/truenas/test', [SystemController, 'testTruenasConnection']), {
+      summary: 'Test connection to TrueNAS server',
       tags: ['system'],
     })
     documented(router.post('/services/affect', [SystemController, 'affectService']), {

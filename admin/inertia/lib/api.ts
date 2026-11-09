@@ -699,6 +699,7 @@ class API {
       const response = await this.client.get<{
         success: boolean
         status: {
+          enabled: boolean
           online: boolean
           url: string
           endpointId: number
@@ -716,15 +717,49 @@ class API {
     }
   }
 
-  async testPortainer() {
+  async testPortainer(payload?: { url?: string; apiKey?: string }) {
     try {
       const response = await this.client.post<{
         success: boolean
         status: any
-      }>('/system/services/portainer/test')
+      }>('/system/services/portainer/test', payload || {})
       return response.data
     } catch (error) {
       console.error('Error testing Portainer connection:', error)
+      return undefined
+    }
+  }
+
+  async getTruenasStatus() {
+    try {
+      const response = await this.client.get<{
+        success: boolean
+        status: {
+          enabled: boolean
+          online: boolean
+          url: string
+          version?: string
+          hostname?: string
+          pools?: string[]
+          error?: string
+        }
+      }>('/system/services/truenas/status')
+      return response.data
+    } catch (error) {
+      console.error('Error fetching TrueNAS status:', error)
+      return undefined
+    }
+  }
+
+  async testTruenas(payload?: { url?: string; apiKey?: string }) {
+    try {
+      const response = await this.client.post<{
+        success: boolean
+        status: any
+      }>('/system/services/truenas/test', payload || {})
+      return response.data
+    } catch (error) {
+      console.error('Error testing TrueNAS connection:', error)
       return undefined
     }
   }

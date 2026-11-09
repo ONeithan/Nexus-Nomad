@@ -45,44 +45,41 @@ export default function DrugDisclaimerModal({ open, onAcknowledge }: { open: boo
                 <IconAlertTriangle size={26} />
               </span>
               <DialogTitle as="h3" className="mt-4 text-lg font-bold text-text-primary">
-                Before you use the Drug Reference
+                Antes de usar o Guia de Medicamentos
               </DialogTitle>
             </div>
 
             <div className="mt-4 space-y-3 text-sm text-text-secondary">
               <p>
-                This tool shows general health information from official <strong>FDA drug labels</strong> and
-                matches symptoms to over-the-counter options. It is provided for <strong>information only</strong>.
+                Esta ferramenta exibe informações gerais de saúde extraídas de <strong>bulas oficiais da FDA</strong> e
+                correlaciona sintomas a opções de venda livre (isentos de prescrição médica). É fornecida exclusivamente para fins <strong>informativos e de referência offline</strong>.
               </p>
               <ul className="list-disc space-y-1.5 pl-5">
                 <li>
-                  It is <strong>not medical advice</strong> and not a substitute for a doctor, pharmacist, or nurse.
+                  <strong>Não constitui aconselhamento médico</strong> nem substitui a consulta com médicos, farmacêuticos ou enfermeiros.
                 </li>
                 <li>
-                  It is <strong>not a drug-interaction checker</strong>. Always read each product&rsquo;s full label
-                  and check with a professional before combining medicines.
+                  <strong>Não é um verificador cruzado de interações medicamentosas</strong>. Sempre leia a bula completa do produto físico que você possui e consulte um profissional de saúde antes de combinar medicamentos.
                 </li>
                 <li>
-                  Situation matches come from label text, not clinical recommendations — they can be incomplete or
-                  include products you wouldn&rsquo;t expect.
+                  A correspondência por situação e sintomas provém do texto descritivo das bulas, não de recomendações clínicas — podendo estar incompleta ou incluir produtos não convencionais.
                 </li>
                 <li>
-                  Always follow the directions on the <strong>actual product you have</strong>; dosages and warnings
-                  differ between products.
+                  Siga sempre as instruções e advertências contidas no <strong>produto físico real que você possui</strong>; dosagens e contraindicações variam entre fabricantes e apresentações.
                 </li>
                 <li>
-                  In an emergency, or if symptoms are severe, worsening, or you&rsquo;re unsure,{' '}
-                  <strong>contact a medical professional or call emergency services</strong>.
+                  Em caso de emergência ou se os sintomas forem graves, persistirem ou piorarem,{' '}
+                  <strong>procure atendimento médico imediatamente ou acione os serviços de urgência</strong>.
                 </li>
               </ul>
               <p className="text-xs text-text-muted">
-                Data is from openFDA (U.S. FDA, public domain). NOMAD is not affiliated with or endorsed by the FDA.
+                Dados extraídos do openFDA (U.S. FDA, domínio público). O NOMAD não possui afiliação ou endosso governamental.
               </p>
             </div>
 
             <div className="mt-6">
               <StyledButton variant="action" fullWidth onClick={acknowledge}>
-                I understand — continue
+                Compreendo e aceito — Continuar
               </StyledButton>
             </div>
           </DialogPanel>

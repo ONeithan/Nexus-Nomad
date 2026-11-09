@@ -10,6 +10,7 @@ import {
   IconHeart,
   IconMapRoute,
   IconMovie,
+  IconServer,
   IconSettings,
   IconWand,
   IconZoom
@@ -30,6 +31,7 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
 
   const navigation = [
     { name: 'Sistema & Discos', href: '/settings/system', icon: IconSettings, current: false },
+    { name: 'Servidores Remotos', href: '/settings/servers', icon: IconServer, current: false },
     { name: aiLabel, href: '/settings/models', icon: IconWand, current: false },
     { name: 'Central de Aplicativos', href: '/supply-depot', icon: IconBox, current: false },
     { name: 'Explorador de Conteúdo ZIM', href: '/settings/zim/remote-explorer', icon: IconZoom, current: false },

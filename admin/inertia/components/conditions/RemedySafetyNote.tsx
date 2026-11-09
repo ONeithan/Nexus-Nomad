@@ -23,15 +23,15 @@ export default function RemedySafetyNote() {
         aria-hidden="true"
       />
       <div className="space-y-1">
-        <p className="font-bold">Informational only — not medical advice.</p>
+        <p className="font-bold">Apenas para referência informativa — não constitui prescrição médica.</p>
         <p className="text-amber-800">
-          These remedies have limited or mixed evidence, are not FDA-evaluated, and are not a
-          substitute for professional care. Check with a clinician before using any of them, and
-          before combining one with a medication you already take.
+          Remédios caseiros e ervas possuem evidências clínicas variáveis, não são avaliados pela FDA e não
+          substituem cuidados profissionais. Consulte um médico antes de utilizá-los e antes de combiná-los
+          com qualquer medicamento que você já faça uso.
         </p>
         <p className="text-amber-800">
-          In an emergency, or if symptoms are severe or worsening,{' '}
-          <strong>seek real medical care — call emergency services</strong>.
+          Em situações de emergência ou agravamento dos sintomas,{' '}
+          <strong>procure atendimento médico de urgência</strong>.
         </p>
       </div>
     </div>

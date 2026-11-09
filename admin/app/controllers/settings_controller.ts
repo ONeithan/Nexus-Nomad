@@ -32,6 +32,17 @@ export default class SettingsController {
     })
   }
 
+  async servers({ inertia }: HttpContext) {
+    const [portainerStatus, truenasStatus] = await Promise.all([
+      this.systemService.getPortainerStatus(),
+      this.systemService.getTruenasStatus(),
+    ])
+    return inertia.render('settings/servers', {
+      portainer: portainerStatus,
+      truenas: truenasStatus,
+    })
+  }
+
   async apps({ inertia }: HttpContext) {
     const services = await this.systemService.getServices({ installedOnly: false })
     return inertia.render('settings/apps', {

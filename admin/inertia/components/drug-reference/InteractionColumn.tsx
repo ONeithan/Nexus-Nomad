@@ -17,7 +17,7 @@ interface Props {
 export default function InteractionColumn({ entry, onRemove }: Props) {
   const isRx = entry.product_type === PRODUCT_TYPES.RX
   const isOtc = entry.product_type === PRODUCT_TYPES.OTC
-  const displayName = entry.brand_name ?? entry.generic_name ?? 'Unknown Drug'
+  const displayName = entry.brand_name ?? entry.generic_name ?? 'Medicamento Desconhecido'
 
   return (
     <div className="flex h-full flex-col min-w-0 border border-desert-tan-lighter rounded-lg overflow-hidden">
@@ -47,7 +47,7 @@ export default function InteractionColumn({ entry, onRemove }: Props) {
           <button
             type="button"
             onClick={() => onRemove(entry.id)}
-            aria-label={`Remove ${displayName} from comparison`}
+            aria-label={`Remover ${displayName} da comparação`}
             className="flex-shrink-0 text-desert-stone-light hover:text-desert-stone-dark transition-colors text-lg leading-none ml-1 mt-0.5"
           >
             ×
@@ -61,7 +61,7 @@ export default function InteractionColumn({ entry, onRemove }: Props) {
           <LabelBlocks text={entry.drug_interactions} />
         ) : (
           <p className="text-sm text-desert-stone-light italic">
-            No labeled interaction text on this label.
+            Nenhum texto de interações constante nesta bula.
           </p>
         )}
       </div>

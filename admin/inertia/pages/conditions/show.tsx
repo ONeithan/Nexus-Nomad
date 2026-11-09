@@ -40,7 +40,7 @@ export default function ConditionsShow({ condition, drugs, remedies, drugRowCoun
             className="inline-flex items-center gap-1 text-sm text-desert-green hover:underline"
           >
             <IconArrowLeft size={16} />
-            Drug Reference
+            Voltar ao Guia de Medicamentos
           </Link>
         </div>
 
@@ -58,32 +58,30 @@ export default function ConditionsShow({ condition, drugs, remedies, drugRowCoun
         {/* Drug list / empty states */}
         {noData ? (
           <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center">
-            <p className="text-lg font-semibold mb-2">No drug data yet</p>
+            <p className="text-lg font-semibold mb-2">Nenhum dado de medicamentos instalado</p>
             <p className="mb-6 opacity-70">
-              Download the offline FDA drug labels from Drug Reference to see matches for this
-              situation.
+              Baixe a base de bulas da FDA no Guia de Medicamentos para consultar os medicamentos indicados para esta situação.
             </p>
             <Link href="/drug-reference">
               <span className="inline-block rounded bg-desert-green px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-desert-green-dark">
-                Go to Drug Reference
+                Ir para o Guia de Medicamentos
               </span>
             </Link>
           </div>
         ) : drugs.length === 0 ? (
           <div className="text-center py-8 opacity-60">
-            No over-the-counter drugs match &ldquo;{label}&rdquo; in the current label data. Try
-            searching by drug name in{' '}
+            Nenhum medicamento de venda livre corresponde a &ldquo;{label}&rdquo; na base de bulas atual. Experimente buscar pelo nome no{' '}
             <Link href="/drug-reference" className="text-desert-green hover:underline">
-              Drug Reference
+              Guia de Medicamentos
             </Link>
             .
           </div>
         ) : (
           <>
             <div className="flex items-baseline justify-between mb-2">
-              <h2 className="text-base font-semibold">Over-the-counter options</h2>
+              <h2 className="text-base font-semibold">Opções de Venda Livre (OTC)</h2>
               <span className="text-xs text-gray-500">
-                {drugs.length} result{drugs.length !== 1 ? 's' : ''}
+                {drugs.length} resultado{drugs.length !== 1 ? 's' : ''}
               </span>
             </div>
             <div className="divide-y divide-gray-200 border border-gray-200 rounded-lg overflow-hidden">
@@ -101,14 +99,13 @@ export default function ConditionsShow({ condition, drugs, remedies, drugRowCoun
               <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-desert-tan/20 text-desert-tan-dark">
                 <IconLeaf size={16} />
               </span>
-              <h2 className="text-base font-semibold text-desert-tan-dark">Natural remedies</h2>
+              <h2 className="text-base font-semibold text-desert-tan-dark">Cuidados e Remédios Naturais</h2>
               <span className="text-xs text-desert-stone ml-auto">
-                {remedies.length} {remedies.length !== 1 ? 'remedies' : 'remedy'}
+                {remedies.length} {remedies.length !== 1 ? 'opções' : 'opção'}
               </span>
             </div>
 
-            {/* Safety note — co-located with the affirmative remedy guidance,
-                not just the page-top banner (upstream PR #1040 requirement). */}
+            {/* Safety note */}
             <div className="mb-3">
               <RemedySafetyNote />
             </div>
@@ -119,10 +116,8 @@ export default function ConditionsShow({ condition, drugs, remedies, drugRowCoun
               ))}
             </div>
 
-            {/* Plain-text credit — no link-out; the reference is fully bundled. */}
             <p className="mt-3 text-xs text-desert-stone">
-              Sources: NCCIH &ldquo;Herbs at a Glance&rdquo; (NIH) and US-government health
-              guidance (CDC, MedlinePlus/NLM, FDA). Public domain (US government works).
+              Fontes: NCCIH &ldquo;Herbs at a Glance&rdquo; (NIH) e diretrizes de saúde do governo dos EUA (CDC, MedlinePlus/NLM, FDA). Domínio público.
             </p>
           </div>
         )}
@@ -130,13 +125,11 @@ export default function ConditionsShow({ condition, drugs, remedies, drugRowCoun
         {/* ── Source citation ───────────────────────────────────────────────── */}
         <footer className="mt-8 pt-4 border-t border-gray-200 text-xs text-gray-500 space-y-1">
           <p>
-            <strong>Source:</strong> U.S. Food &amp; Drug Administration drug labeling, via{' '}
-            <strong>openFDA</strong> — public domain (CC0 1.0). NOMAD is not affiliated with or
-            endorsed by the FDA.
+            <strong>Fonte:</strong> Rotulagem de medicamentos da U.S. Food &amp; Drug Administration, via{' '}
+            <strong>openFDA</strong> — domínio público (CC0 1.0). O NOMAD não é afiliado nem endossado pela FDA.
           </p>
           <p>
-            Matches are FDA label-indication text, not medical recommendations. Do not rely on this
-            data to make decisions regarding medical care.
+            As correspondências são baseadas exclusivamente nas indicações textuais das bulas. Consulte sempre profissionais habilitados.
           </p>
         </footer>
       </div>
@@ -155,17 +148,15 @@ function NaturalRemedyCard({ remedy }: { remedy: NaturalRemedy }) {
           <p className="font-semibold text-sm text-desert-tan-dark">
             {remedy.name}
             <span className="ml-2 inline-block rounded-full bg-desert-tan/15 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-desert-tan-dark align-middle">
-              {remedy.kind === 'self-care' ? 'Self-care' : 'Herb'}
+              {remedy.kind === 'self-care' ? 'Autocuidado' : 'Fitoterápico / Erva'}
             </span>
           </p>
           {remedy.commonNames.length > 0 && (
             <p className="text-xs text-desert-stone mt-0.5">{remedy.commonNames.join(', ')}</p>
           )}
         </div>
-        {/* Plain-text attribution — deliberately NOT a link. The card is fully
-            self-contained for offline use; nothing on it needs internet. */}
         <span className="flex-shrink-0 text-xs text-desert-stone mt-0.5">
-          Source: {remedySourceName(remedy)}
+          Fonte: {remedySourceName(remedy)}
         </span>
       </div>
 
@@ -174,14 +165,14 @@ function NaturalRemedyCard({ remedy }: { remedy: NaturalRemedy }) {
         <p className="text-desert-green-darker">{remedy.uses}</p>
         {remedy.how && (
           <p className="text-xs text-desert-green-darker bg-desert-sand/40 rounded px-2 py-1.5 border border-desert-stone-lighter/40">
-            <strong>How:</strong> {remedy.how}
+            <strong>Como usar:</strong> {remedy.how}
           </p>
         )}
         <p className="text-xs text-desert-stone-dark border-l-2 border-desert-tan-lighter pl-2">
-          <strong className="text-desert-tan-dark">Evidence:</strong> {remedy.evidence}
+          <strong className="text-desert-tan-dark">Evidência científica:</strong> {remedy.evidence}
         </p>
         <p className="text-xs text-desert-red-dark bg-desert-red/5 rounded px-2 py-1.5 border border-desert-red-lighter/30">
-          <strong>Cautions:</strong> {remedy.cautions}
+          <strong>Precauções:</strong> {remedy.cautions}
         </p>
       </div>
     </div>

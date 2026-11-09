@@ -58,17 +58,17 @@ const ROUTE_OPTIONS = [
 
 /** Friendly "form" label for a route value (how you take it), plainer than the raw route. */
 const ROUTE_FRIENDLY: Record<string, string> = {
-  ORAL: 'Oral (pill, liquid)',
-  TOPICAL: 'Topical (cream, gel)',
-  OPHTHALMIC: 'Eye drops',
-  OTIC: 'Ear drops',
-  NASAL: 'Nasal spray',
-  INHALATION: 'Inhaler',
-  SUBLINGUAL: 'Under the tongue',
-  RECTAL: 'Rectal',
+  ORAL: 'Oral (comprimido, gotas, xarope)',
+  TOPICAL: 'Tópico (pomada, creme, gel)',
+  OPHTHALMIC: 'Colírio / Oftálmico',
+  OTIC: 'Gotas auriculares / Otológico',
+  NASAL: 'Spray nasal',
+  INHALATION: 'Inalador / Inalação',
+  SUBLINGUAL: 'Sublingual',
+  RECTAL: 'Retal',
   VAGINAL: 'Vaginal',
-  TRANSDERMAL: 'Skin patch',
-  DENTAL: 'Dental',
+  TRANSDERMAL: 'Adesivo transdérmico',
+  DENTAL: 'Odontológico',
 }
 
 const DEBOUNCE_MS = 350
@@ -456,34 +456,34 @@ export default function DrugReferenceIndex({
   if (isEmpty) {
     return (
       <AppLayout compact>
-        <Head title="Drug Reference" />
+        <Head title="Guia de Medicamentos" />
         <div className="p-4 max-w-4xl mx-auto">
           <PageHeader rowCount={rowCount} />
           <DrugDisclaimerModal open={showDisclaimer} onAcknowledge={() => setShowDisclaimer(false)} />
           <div className="border-2 border-dashed border-desert-stone-lighter rounded-2xl p-8 text-center bg-desert-white">
-            <p className="text-lg font-semibold mb-2 text-desert-green-darker">No FDA drug data yet</p>
+            <p className="text-lg font-semibold mb-2 text-desert-green-darker">Nenhum dado de medicamentos FDA instalado</p>
             <p className="mb-6 opacity-70">
-              Download the openFDA drug-label dataset to enable offline search. Requires ~1.7 GB
-              compressed download (~8–10 GB after ingestion).
+              Baixe o conjunto de dados de bulas openFDA para habilitar a busca offline. Requer download comprimido de ~1.7 GB
+              (~8–10 GB após indexação local).
             </p>
             <div className="flex flex-wrap items-center justify-center gap-3">
               <StyledButton variant="primary" onClick={handleTriggerDownload} disabled={triggering || busy}>
                 {phase === 'downloading'
-                  ? 'Downloading…'
+                  ? 'Baixando…'
                   : phase === 'ingesting'
-                    ? 'Indexing…'
+                    ? 'Indexando…'
                     : triggering
-                      ? 'Starting…'
-                      : 'Download FDA drug data'}
+                      ? 'Iniciando…'
+                      : 'Baixar base de dados FDA'}
               </StyledButton>
               {canIngestFromDisk && (
                 <StyledButton variant="secondary" onClick={handleIngestFromDisk} disabled={ingesting || busy}>
-                  {ingesting ? 'Starting…' : 'Ingest into search'}
+                  {ingesting ? 'Iniciando…' : 'Indexar na busca'}
                 </StyledButton>
               )}
               {phase === 'ingesting' && (
                 <StyledButton variant="outline" onClick={handleResetIngest} disabled={resetting}>
-                  {resetting ? 'Restarting…' : 'Restart ingest'}
+                  {resetting ? 'Reiniciando…' : 'Reiniciar indexação'}
                 </StyledButton>
               )}
             </div>
@@ -508,7 +508,7 @@ export default function DrugReferenceIndex({
 
   return (
     <AppLayout compact>
-      <Head title="Drug Reference" />
+      <Head title="Guia de Medicamentos" />
       <div className="p-4 max-w-4xl mx-auto">
         <PageHeader rowCount={rowCount} />
         <DrugDisclaimerModal open={showDisclaimer} onAcknowledge={() => setShowDisclaimer(false)} />
@@ -516,13 +516,13 @@ export default function DrugReferenceIndex({
         <TabGroup selectedIndex={tabIndex} onChange={setTabIndex}>
           <TabList className="mb-5 flex gap-1 border-b border-desert-stone-lighter/50">
             <Tab className={tabClass}>
-              <IconSearch size={16} /> Search by drug
+              <IconSearch size={16} /> Buscar por Medicamento
             </Tab>
             <Tab className={tabClass}>
-              <IconFirstAidKit size={16} /> By situation
+              <IconFirstAidKit size={16} /> Por Sintoma / Situação
             </Tab>
             <Tab className={tabClass}>
-              <IconDatabase size={16} /> FDA data
+              <IconDatabase size={16} /> Dados da Base FDA
             </Tab>
           </TabList>
 
@@ -546,7 +546,7 @@ export default function DrugReferenceIndex({
                   value={query}
                   onChange={handleQueryChange}
                   autoFocus
-                  placeholder="Search a medicine by name — ibuprofen, Benadryl, loratadine…"
+                  placeholder="Pesquise um medicamento por nome — ibuprofeno, paracetamol, dipirona…"
                   className="w-full rounded-lg border border-desert-stone-lighter bg-surface-primary py-2.5 pl-10 pr-4 text-sm text-desert-green-darker transition focus:border-desert-green focus:outline-none focus:ring-2 focus:ring-desert-green/20"
                 />
               </div>
@@ -555,21 +555,21 @@ export default function DrugReferenceIndex({
               <div className="mb-6">
                 <div className="flex items-center gap-2">
                   <FilterPill active={productType === null} onClick={() => handleFilterChange(null)}>
-                    All
+                    Todos
                   </FilterPill>
                   <FilterPill
                     active={productType === PRODUCT_TYPES.OTC}
                     tone="olive"
                     onClick={() => handleFilterChange(PRODUCT_TYPES.OTC)}
                   >
-                    Over-the-counter
+                    Venda Livre (OTC)
                   </FilterPill>
                   <FilterPill
                     active={productType === PRODUCT_TYPES.RX}
                     tone="orange"
                     onClick={() => handleFilterChange(PRODUCT_TYPES.RX)}
                   >
-                    Prescription
+                    Prescrição Médica (Rx)
                   </FilterPill>
                   <button
                     type="button"
@@ -577,20 +577,20 @@ export default function DrugReferenceIndex({
                     className="ml-auto flex items-center gap-1 rounded-full border border-desert-stone-lighter bg-surface-primary px-3 py-1 text-xs text-desert-green-darker hover:border-desert-green"
                   >
                     <IconAdjustmentsHorizontal size={14} />
-                    {route ? ROUTE_FRIENDLY[route] : 'Form'} · {sort === 'name' ? 'A–Z' : 'Best match'}
+                    {route ? ROUTE_FRIENDLY[route] : 'Forma / Via'} · {sort === 'name' ? 'A–Z' : 'Melhor correspondência'}
                     <IconChevronDown size={14} className={filtersOpen ? 'rotate-180 transition' : 'transition'} />
                   </button>
                 </div>
                 {filtersOpen && (
                   <div className="mt-3 flex flex-wrap items-center gap-3 rounded-lg border border-desert-stone-lighter/60 bg-desert-sand/20 p-3">
                     <label className="flex items-center gap-2 text-xs text-desert-green-darker">
-                      Form (how you take it)
+                      Forma (via de administração)
                       <select
                         value={route ?? ''}
                         onChange={(e) => handleRouteChange(e.target.value || null)}
                         className="rounded-lg border border-desert-stone-lighter bg-surface-primary px-2 py-1 text-xs text-desert-green-darker focus:border-desert-green focus:outline-none"
                       >
-                        <option value="">Any form</option>
+                        <option value="">Qualquer forma</option>
                         {ROUTE_OPTIONS.map((r) => (
                           <option key={r} value={r}>
                             {ROUTE_FRIENDLY[r]}
@@ -599,13 +599,13 @@ export default function DrugReferenceIndex({
                       </select>
                     </label>
                     <label className="flex items-center gap-2 text-xs text-desert-green-darker">
-                      Sort
+                      Ordenação
                       <select
                         value={sort}
                         onChange={(e) => handleSortChange(e.target.value as 'relevance' | 'name')}
                         className="rounded-lg border border-desert-stone-lighter bg-surface-primary px-2 py-1 text-xs text-desert-green-darker focus:border-desert-green focus:outline-none"
                       >
-                        <option value="relevance">Best match</option>
+                        <option value="relevance">Melhor correspondência</option>
                         <option value="name">A–Z</option>
                       </select>
                     </label>
@@ -614,18 +614,18 @@ export default function DrugReferenceIndex({
               </div>
 
               {drugLoading && drugResults.length === 0 && (
-                <div className="text-center py-8 opacity-60">Searching…</div>
+                <div className="text-center py-8 opacity-60">Buscando…</div>
               )}
 
               {!drugSearched && (
                 <div className="rounded-2xl border border-dashed border-desert-stone-lighter/70 p-8 text-center text-sm text-desert-stone">
-                  Type a medicine name above to search {rowCount.toLocaleString()} FDA drug labels.
+                  Digite o nome de um medicamento acima para buscar em {rowCount.toLocaleString()} bulas indexadas.
                   <br />
-                  Looking for something to treat a symptom instead? Try the{' '}
+                  Procurando tratamento para um sintoma específico? Experimente a aba{' '}
                   <button className="font-semibold text-desert-green underline" onClick={() => setTabIndex(1)}>
-                    By situation
-                  </button>{' '}
-                  tab.
+                    Por Sintoma / Situação
+                  </button>
+                  .
                 </div>
               )}
 
@@ -636,10 +636,10 @@ export default function DrugReferenceIndex({
                       <IconPill size={18} />
                     </span>
                     <h2 className="text-sm font-bold text-desert-green-darker">
-                      {ingredientGroups.length} ingredient{ingredientGroups.length !== 1 ? 's' : ''}
+                      {ingredientGroups.length} princípio{ingredientGroups.length !== 1 ? 's' : ''} ativo{ingredientGroups.length !== 1 ? 's' : ''}
                     </h2>
                     <span className="ml-auto text-xs text-desert-stone">
-                      {drugResults.length} product{drugResults.length !== 1 ? 's' : ''}
+                      {drugResults.length} produto{drugResults.length !== 1 ? 's' : ''}
                     </span>
                   </div>
                   <div className="divide-y divide-desert-stone-lighter/40">
@@ -650,7 +650,7 @@ export default function DrugReferenceIndex({
                   {hasMore && (
                     <div className="flex justify-center border-t border-desert-stone-lighter/40 p-3">
                       <StyledButton variant="secondary" onClick={handleLoadMore} disabled={drugLoading}>
-                        {drugLoading ? 'Loading…' : 'Load more products'}
+                        {drugLoading ? 'Carregando…' : 'Carregar mais produtos'}
                       </StyledButton>
                     </div>
                   )}
@@ -659,7 +659,7 @@ export default function DrugReferenceIndex({
 
               {drugNothing && (
                 <div className="text-center py-8 opacity-60">
-                  No medicines match &ldquo;{query}&rdquo;.
+                  Nenhum medicamento corresponde a &ldquo;{query}&rdquo;.
                 </div>
               )}
             </TabPanel>
@@ -672,7 +672,7 @@ export default function DrugReferenceIndex({
               <div className="my-4">
                 {anySituationSelected && (
                   <div className="mb-3 flex flex-wrap items-center gap-2">
-                    <span className="text-xs font-semibold text-desert-stone">Selected:</span>
+                    <span className="text-xs font-semibold text-desert-stone">Selecionados:</span>
                     {selectedSlugs.map((slug) => {
                       const c = conditions.find((x) => x.slug === slug)
                       if (!c) return null
@@ -696,7 +696,7 @@ export default function DrugReferenceIndex({
                       }}
                       className="text-xs text-desert-stone underline hover:text-desert-green-darker"
                     >
-                      Clear
+                      Limpar
                     </button>
                   </div>
                 )}
@@ -707,7 +707,7 @@ export default function DrugReferenceIndex({
                   className="flex items-center gap-1 rounded-full border border-desert-stone-lighter bg-surface-primary px-3 py-1 text-xs text-desert-green-darker hover:border-desert-olive"
                 >
                   <IconFirstAidKit size={14} />
-                  {anySituationSelected ? 'Add another situation' : 'Pick one or more situations'}
+                  {anySituationSelected ? 'Adicionar outra situação' : 'Escolha uma ou mais situações'}
                   <IconChevronDown size={14} className={browseOpen ? 'rotate-180 transition' : 'transition'} />
                 </button>
 
@@ -745,12 +745,12 @@ export default function DrugReferenceIndex({
 
               {!anySituationSelected && (
                 <div className="rounded-2xl border border-dashed border-desert-stone-lighter/70 p-8 text-center text-sm text-desert-stone">
-                  Pick a situation (or a few) above to see the over-the-counter drugs whose FDA labels list it.
+                  Selecione uma situação ou sintoma acima para ver os medicamentos de venda livre indicados em bulas.
                 </div>
               )}
 
               {situationLoading && (
-                <div className="text-center py-6 opacity-60">Finding options…</div>
+                <div className="text-center py-6 opacity-60">Buscando opções…</div>
               )}
 
               {/* Intersection — treats ALL selected situations */}
@@ -761,7 +761,7 @@ export default function DrugReferenceIndex({
                       <IconFirstAidKit size={18} />
                     </span>
                     <h2 className="text-sm font-bold text-desert-olive-dark">
-                      Treats all {selectedSlugs.length} selected
+                      Atende a todas as {selectedSlugs.length} selecionadas
                     </h2>
                     <span className="ml-auto text-xs text-desert-stone">{intersection.length} OTC</span>
                   </div>
@@ -777,8 +777,7 @@ export default function DrugReferenceIndex({
                   ALL selected (intersection empty), or for a single situation. */}
               {!situationLoading && intersection.length === 0 && selectedSlugs.length >= 2 && (
                 <p className="mb-3 text-sm text-desert-stone">
-                  No single option treats all {selectedSlugs.length} of these — here are options for each
-                  situation.
+                  Nenhum produto único atende a todas as {selectedSlugs.length} situações — aqui estão as opções para cada uma:
                 </p>
               )}
               {!situationLoading &&
@@ -792,7 +791,7 @@ export default function DrugReferenceIndex({
                 if (allDrugs.length === 0 && remediesShown.length === 0) {
                   return (
                     <p key={slug} className="mb-4 text-sm text-desert-stone">
-                      No additional OTC options found for <strong>{r.label}</strong>.
+                      Nenhuma opção adicional de venda livre encontrada para <strong>{r.label}</strong>.
                     </p>
                   )
                 }
@@ -803,7 +802,7 @@ export default function DrugReferenceIndex({
                         <IconFirstAidKit size={18} />
                       </span>
                       <h2 className="text-sm font-bold text-desert-green-darker">
-                        For <span className="text-desert-olive-dark">&ldquo;{r.label}&rdquo;</span>
+                        Para <span className="text-desert-olive-dark">&ldquo;{r.label}&rdquo;</span>
                       </h2>
                       <span className="ml-auto text-xs text-desert-stone">
                         {allDrugs.length} OTC
@@ -822,7 +821,7 @@ export default function DrugReferenceIndex({
                         <div className="flex items-center gap-2 px-4 py-2 border-b border-desert-tan-lighter/30">
                           <IconLeaf size={14} className="text-desert-tan-dark" />
                           <span className="text-xs font-semibold uppercase tracking-wide text-desert-tan-dark">
-                            Natural remedies
+                            Cuidados e remédios complementares
                           </span>
                         </div>
                         <div className="border-b border-desert-tan-lighter/20 p-3">
@@ -844,25 +843,24 @@ export default function DrugReferenceIndex({
             <TabPanel>
               <div className={`${CARD_SURFACE} p-5`}>
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                  <h2 className="text-sm font-bold text-desert-green-darker">FDA drug data</h2>
+                  <h2 className="text-sm font-bold text-desert-green-darker">Base de dados FDA</h2>
                   <div className="flex flex-wrap items-center gap-2">
                     {canIngestFromDisk && (
                       <StyledButton variant="outline" size="sm" onClick={handleIngestFromDisk} disabled={ingesting || busy}>
-                        {ingesting ? 'Starting…' : 'Ingest into search'}
+                        {ingesting ? 'Iniciando…' : 'Indexar na busca'}
                       </StyledButton>
                     )}
                     <StyledButton variant="secondary" size="sm" onClick={handleTriggerDownload} disabled={triggering || busy}>
                       {phase === 'downloading'
-                        ? 'Downloading…'
+                        ? 'Baixando…'
                         : phase === 'ingesting'
-                          ? 'Indexing…'
-                          : 'Update FDA data'}
+                          ? 'Indexando…'
+                          : 'Atualizar dados FDA'}
                     </StyledButton>
                   </div>
                 </div>
                 <p className="mb-4 text-xs text-desert-stone">
-                  {rowCount.toLocaleString()} drug labels installed. Updating re-checks openFDA for a newer
-                  dataset and refreshes the offline copy.
+                  {rowCount.toLocaleString()} bulas instaladas. Atualizar verifica o repositório openFDA em busca de versões mais recentes e atualiza a cópia offline.
                 </p>
                 {status && <IngestStatus status={status} onRefresh={handleStatusRefresh} />}
               </div>
@@ -882,18 +880,17 @@ function PageHeader({ rowCount }: { rowCount: number }) {
   return (
     <div className="mb-4">
       <div className="flex flex-wrap items-start justify-between gap-3 mb-1">
-        <h1 className="text-2xl font-bold text-desert-green-darker">Drug Reference</h1>
+        <h1 className="text-2xl font-bold text-desert-green-darker">Guia de Medicamentos</h1>
         {rowCount > 0 && (
           <Link href="/drug-reference/interactions">
             <StyledButton variant="outline" size="sm" onClick={() => {}}>
-              Compare label warnings
+              Comparar advertências de bulas
             </StyledButton>
           </Link>
         )}
       </div>
       <p className="text-sm opacity-70">
-        Look up a medicine by name, or start from a symptom to find over-the-counter options — all from
-        offline FDA drug labels.
+        Consulte medicamentos pelo nome comercial ou princípio ativo, ou localize opções por sintomas e situações — tudo a partir de bulas offline.
       </p>
     </div>
   )
@@ -904,9 +901,8 @@ function PageHeader({ rowCount }: { rowCount: number }) {
 function SourceFooter() {
   return (
     <footer className="mt-8 pt-4 border-t border-desert-stone-lighter/40 text-xs text-desert-stone">
-      <strong>Source:</strong> U.S. Food &amp; Drug Administration drug labeling, via{' '}
-      <strong>openFDA</strong> — public domain (CC0 1.0). NOMAD is not affiliated with or endorsed by the
-      FDA. Label data and situation matches are label-text only; do not rely on them for medical decisions.
+      <strong>Fonte:</strong> Rotulagem e bulas da U.S. Food &amp; Drug Administration, via{' '}
+      <strong>openFDA</strong> — domínio público (CC0 1.0). O NOMAD não é afiliado nem endossado pela FDA. Os dados de bulas e correlações de situações são apenas textuais; consulte sempre profissionais de saúde.
     </footer>
   )
 }
@@ -921,7 +917,7 @@ function SituationRemedyRow({ remedy }: { remedy: NaturalRemedy }) {
           <p className="text-sm font-semibold text-desert-tan-dark">
             {remedy.name}
             <span className="ml-2 inline-block rounded-full bg-desert-tan/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-desert-tan-dark align-middle">
-              {remedy.kind === 'self-care' ? 'Self-care' : 'Herb'}
+              {remedy.kind === 'self-care' ? 'Autocuidado' : 'Fitoterápico / Erva'}
             </span>
           </p>
           {remedy.commonNames.length > 0 && (
@@ -929,18 +925,18 @@ function SituationRemedyRow({ remedy }: { remedy: NaturalRemedy }) {
           )}
         </div>
         <span className="flex-shrink-0 text-xs text-desert-stone mt-0.5">
-          Source: {remedySourceName(remedy)}
+          Fonte: {remedySourceName(remedy)}
         </span>
       </div>
       <p className="mt-1.5 text-xs text-desert-green-darker">{remedy.uses}</p>
       {remedy.how && (
         <p className="mt-1 text-xs text-desert-green-darker">
-          <strong>How:</strong> {remedy.how}
+          <strong>Como usar:</strong> {remedy.how}
         </p>
       )}
       {remedy.cautions && (
         <p className="mt-1 text-xs text-desert-red-dark">
-          <strong>Cautions:</strong> {remedy.cautions}
+          <strong>Precauções:</strong> {remedy.cautions}
         </p>
       )}
     </div>

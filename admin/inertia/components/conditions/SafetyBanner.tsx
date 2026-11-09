@@ -18,19 +18,19 @@ export default function SafetyBanner() {
           aria-hidden="true"
         />
         <div className="text-sm text-amber-900">
-          <p className="font-bold mb-1">Informational reference only — not medical advice.</p>
+          <p className="font-bold mb-1">Referência puramente informativa — não constitui aconselhamento médico.</p>
           <ul className="list-disc pl-5 space-y-0.5 text-amber-800">
             <li>
-              These results match FDA drug-label indications to a situation. They are{' '}
-              <strong>not a recommendation</strong> and <strong>not an FDA endorsement</strong>.
+              Estes resultados relacionam indicações textuais de bulas oficiais a sintomas. Eles{' '}
+              <strong>não são uma recomendação médica</strong> e <strong>não possuem endosso da FDA</strong>.
             </li>
             <li>
-              This is <strong>not a drug-interaction checker</strong>. Read each label&rsquo;s full
-              warnings, and check with a pharmacist or clinician before combining medicines.
+              Isto <strong>não é um verificador cruzado de interações medicamentosas</strong>. Leia a bula completa
+              do produto físico e consulte um médico ou farmacêutico antes de combinar remédios.
             </li>
             <li>
-              In an emergency, or if symptoms are severe or worsening,{' '}
-              <strong>contact a medical professional or call emergency services</strong>.
+              Em caso de emergência ou sintomas graves/persistentes,{' '}
+              <strong>procure atendimento médico imediatamente ou acione o socorro de urgência</strong>.
             </li>
           </ul>
         </div>

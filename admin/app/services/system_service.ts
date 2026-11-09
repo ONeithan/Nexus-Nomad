@@ -35,12 +35,14 @@ import { invalidateMinRelevanceCache } from '../utils/rag_relevance.js'
 import { invalidateResponseStyleCache } from '../utils/response_style.js'
 import { KiwixLibraryService } from '#services/kiwix_library_service'
 import { PortainerService } from '#services/portainer_service'
+import { TruenasService } from '#services/truenas_service'
 
 @inject()
 export class SystemService {
   private static appVersion: string | null = null
   private static diskInfoFile = '/storage/nomad-disk-info.json'
   private portainerService = new PortainerService()
+  private truenasService = new TruenasService()
 
   constructor(private dockerService: DockerService) {}
 
@@ -360,8 +362,8 @@ export class SystemService {
     return await this.portainerService.syncWithDellInventory(toReturn)
   }
 
-  async getPortainerStatus() {
-    return await this.portainerService.getStatus()
+  async getPortainerStatus(url?: string, apiKey?: string) {
+    return await this.portainerService.getStatus(url, apiKey)
   }
 
   async isPortainerEnabled() {
@@ -370,6 +372,14 @@ export class SystemService {
 
   async deployToPortainer(serviceName: string) {
     return await this.portainerService.deployService(serviceName)
+  }
+
+  async getTruenasStatus(url?: string, apiKey?: string) {
+    return await this.truenasService.getStatus(url, apiKey)
+  }
+
+  async isTruenasEnabled() {
+    return await this.truenasService.isEnabled()
   }
 
   static getAppVersion(): string {

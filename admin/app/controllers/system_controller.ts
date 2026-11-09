@@ -65,7 +65,7 @@ export default class SystemController {
     async installService({ request, response }: HttpContext) {
         const payload = await request.validateUsing(installServiceValidator);
 
-        // Check if deploy target is Portainer (Dell Micro)
+        // Check if deploy target is Portainer (Remote Server)
         const portainerEnabled = await this.systemService.isPortainerEnabled()
         const deployTarget = (await KVStore.getValue('portainer.deployTarget')) || (portainerEnabled ? 'portainer' : 'local')
         if (portainerEnabled && deployTarget === 'portainer') {
@@ -90,8 +90,20 @@ export default class SystemController {
         return response.send({ success: true, status })
     }
 
-    async testPortainerConnection({ response }: HttpContext) {
-        const status = await this.systemService.getPortainerStatus()
+    async testPortainerConnection({ request, response }: HttpContext) {
+        const body = request.body() || {}
+        const status = await this.systemService.getPortainerStatus(body.url, body.apiKey)
+        return response.send({ success: status.online, status })
+    }
+
+    async getTruenasStatus({ response }: HttpContext) {
+        const status = await this.systemService.getTruenasStatus()
+        return response.send({ success: true, status })
+    }
+
+    async testTruenasConnection({ request, response }: HttpContext) {
+        const body = request.body() || {}
+        const status = await this.systemService.getTruenasStatus(body.url, body.apiKey)
         return response.send({ success: status.online, status })
     }
 

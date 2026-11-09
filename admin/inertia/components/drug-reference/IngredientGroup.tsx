@@ -58,7 +58,7 @@ export default function IngredientGroup({
           </span>
         )}
         <span className="ml-auto text-xs text-desert-stone flex-shrink-0">
-          {group.products.length} products
+          {group.products.length} produto{group.products.length !== 1 ? 's' : ''}
         </span>
       </button>
       {open && (
