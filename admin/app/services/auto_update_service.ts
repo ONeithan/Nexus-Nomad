@@ -10,6 +10,7 @@ import { SystemService } from '#services/system_service'
 import { SystemUpdateService } from '#services/system_update_service'
 import { ContainerRegistryService } from '#services/container_registry_service'
 import { isNewerVersion, parseMajorVersion } from '../utils/version.js'
+import { resilientGithubHttpsAgent } from '../utils/github_fetch.js'
 import { isWithinWindow as isWithinWindowUtil } from '../utils/update_window.js'
 import {
   checkImageDiskSpace,
@@ -214,8 +215,12 @@ export class AutoUpdateService {
 
     try {
       const response = await axios.get(RELEASES_URL, {
-        headers: { Accept: 'application/vnd.github+json' },
-        timeout: 5000,
+        headers: {
+          'Accept': 'application/vnd.github+json',
+          'User-Agent': 'Nexus-NOMAD-Updater',
+        },
+        timeout: 7000,
+        httpsAgent: resilientGithubHttpsAgent,
       })
       if (!Array.isArray(response.data)) {
         throw new Error('Unexpected response from GitHub releases API')

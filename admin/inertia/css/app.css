@@ -59,12 +59,43 @@
   --tactical-hazard: #ea580c;
   --tactical-text: #e2e6e3;
   --tactical-muted: #9aa89d;
+
+  /* Typography */
+  --font-sans: 'Barlow', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: 'Share Tech Mono', 'JetBrains Mono', Consolas, 'Liberation Mono', monospace;
+}
+
+html,
+body {
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
 body {
   background-color: var(--color-desert-sand);
   color: var(--color-text-primary);
   transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+[data-theme="tactical"] body {
+  background-image: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.18) 50%);
+  background-size: 100% 4px;
+}
+
+.font-stencil {
+  font-family: 'Barlow Condensed', 'Chakra Petch', 'Segoe UI', sans-serif;
+  letter-spacing: 0.05em;
+}
+
+.font-mono-mil {
+  font-family: 'Share Tech Mono', 'JetBrains Mono', Consolas, monospace;
+}
+
+.font-boot-stencil {
+  font-family: 'Black Ops One', 'Chakra Petch', 'Barlow Condensed', sans-serif;
+  letter-spacing: 0.08em;
 }
 
 .bg-desert {

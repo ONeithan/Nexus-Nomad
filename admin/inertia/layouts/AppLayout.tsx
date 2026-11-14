@@ -3,12 +3,12 @@ import Footer from '~/components/Footer'
 import ChatButton from '~/components/chat/ChatButton'
 import ChatModal from '~/components/chat/ChatModal'
 import ThemeToggle from '~/components/ThemeToggle'
-import TacticalBootGate from '~/components/TacticalBootGate'
+import TacticalBootGate, { lockTacticalConsole } from '~/components/TacticalBootGate'
 import useServiceInstalledStatus from '~/hooks/useServiceInstalledStatus'
 import { useThemeContext } from '~/providers/ThemeProvider'
 import { SERVICE_NAMES } from '../../constants/service_names'
 import { Link, router } from '@inertiajs/react'
-import { IconArrowLeft, IconLock, IconPalette, IconServer } from '@tabler/icons-react'
+import { IconArrowLeft, IconLock, IconServer } from '@tabler/icons-react'
 import classNames from 'classnames'
 
 export default function AppLayout({
@@ -24,7 +24,6 @@ export default function AppLayout({
   compact?: boolean
 }) {
   const [isChatOpen, setIsChatOpen] = useState(false)
-  const [lockTrigger, setLockTrigger] = useState(0)
   const aiAssistantInstalled = useServiceInstalledStatus(SERVICE_NAMES.OLLAMA)
   const { effectiveTacticalHome } = useThemeContext()
   const isHome =
@@ -34,7 +33,7 @@ export default function AppLayout({
   const hideClassicBranding = isHome && effectiveTacticalHome
 
   return (
-    <TacticalBootGate forceLoginTrigger={lockTrigger}>
+    <TacticalBootGate>
       <div className="min-h-screen flex flex-col">
         {/* Barra superior com seletor instantâneo de Temas e acesso aos Discos & Armazenamento */}
         <div className="w-full bg-surface-primary border-b border-border-subtle px-4 py-2.5 flex flex-wrap items-center justify-between gap-3">
@@ -58,14 +57,6 @@ export default function AppLayout({
           <div className="flex flex-wrap items-center gap-2">
             <ThemeToggle direction="down" />
             <Link
-              href="/settings/themes"
-              title="Abrir painel de Temas & Aparência"
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-border-default bg-surface-secondary hover:border-desert-green text-xs font-semibold text-text-primary transition-colors"
-            >
-              <IconPalette size={16} className="text-desert-green" />
-              <span className="hidden sm:inline">Temas</span>
-            </Link>
-            <Link
               href="/settings/system#discos"
               title="Ver discos físicos conectados, partições e armazenamento do servidor"
               className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-md border border-desert-green bg-desert-green text-white hover:opacity-90 text-xs sm:text-sm font-semibold shadow-sm transition-opacity"
@@ -75,7 +66,7 @@ export default function AppLayout({
             </Link>
             <button
               type="button"
-              onClick={() => setLockTrigger((prev) => prev + 1)}
+              onClick={() => lockTacticalConsole()}
               title="Bloquear terminal e retornar à tela de Login / Boot Tático"
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-border-default bg-surface-secondary hover:border-status-warning text-xs font-semibold text-text-secondary hover:text-status-warning transition-colors cursor-pointer"
             >

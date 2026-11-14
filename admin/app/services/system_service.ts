@@ -21,6 +21,7 @@ import env from '#start/env'
 import KVStore from '#models/kv_store'
 import { KV_STORE_SCHEMA, KVStoreKey } from '../../types/kv_store.js'
 import { isNewerVersion } from '../utils/version.js'
+import { fetchLatestNexusVersion } from '../utils/github_fetch.js'
 import { isUnresolvedGpuModel } from '../utils/gpu_model.js'
 import {
   classifyOllamaComputeBackend,
@@ -709,39 +710,18 @@ export class SystemService {
 
       const earlyAccess = (await KVStore.getValue('system.earlyAccess')) ?? false
 
-      let latestVersion: string = currentVersion.trim()
+      let latestVersion: string
       try {
-        if (earlyAccess) {
-          const response = await axios.get(
-            'https://api.github.com/repos/ONeithan/Nexus-Nomad/releases',
-            { headers: { Accept: 'application/vnd.github+json' }, timeout: 5000 }
-          )
-          if (response?.data?.length) {
-            latestVersion = response.data[0].tag_name.replace(/^v/, '').trim()
-          }
-        } else {
-          const response = await axios.get(
-            'https://api.github.com/repos/ONeithan/Nexus-Nomad/releases/latest',
-            { headers: { Accept: 'application/vnd.github+json' }, timeout: 5000 }
-          )
-          if (response?.data?.tag_name) {
-            latestVersion = response.data.tag_name.replace(/^v/, '').trim()
-          }
-        }
+        latestVersion = await fetchLatestNexusVersion(Boolean(earlyAccess))
       } catch (err: any) {
-        // Fallback: tentar listar tags caso ainda não exista uma Release formal publicada
-        try {
-          const tagsResp = await axios.get(
-            'https://api.github.com/repos/ONeithan/Nexus-Nomad/tags',
-            { headers: { Accept: 'application/vnd.github+json' }, timeout: 5000 }
-          )
-          if (tagsResp?.data?.[0]?.name) {
-            latestVersion = tagsResp.data[0].name.replace(/^v/, '').trim()
-          }
-        } catch {
-          // Mantém latestVersion como currentVersion
-        }
         logger.warn(`[SystemService] Unable to fetch latest release from GitHub: ${err?.message || err}`)
+        return {
+          success: false,
+          updateAvailable: cachedUpdateAvailable ?? false,
+          currentVersion,
+          latestVersion: cachedLatestVersion || currentVersion,
+          message: `Não foi possível consultar o GitHub para verificar novas versões: ${err?.message || err}`,
+        }
       }
 
       logger.info(`Current version: ${currentVersion}, Latest version: ${latestVersion}`)

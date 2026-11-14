@@ -226,6 +226,12 @@ export default function SystemUpdatePage(props: { system: Props }) {
     mutationFn: () => api.checkLatestVersion(true),
     onSuccess: (data) => {
       if (data) {
+        if (data.success === false) {
+          const msg = data.message || 'Falha ao consultar o GitHub para verificar atualizações'
+          setError(msg)
+          addNotification({ type: 'error', message: msg })
+          return
+        }
         setVersionInfo({
           updateAvailable: data.updateAvailable,
           latestVersion: data.latestVersion,

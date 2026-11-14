@@ -31,9 +31,10 @@ import Alert from '~/components/Alert'
 import WhatsNewBanner from '~/components/WhatsNewBanner'
 import { SERVICE_NAMES } from '../../constants/service_names'
 import LinkTileModal from '~/components/LinkTileModal'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { linkTileColor } from '../../constants/link_tile_colors'
 import { useThemeContext } from '~/providers/ThemeProvider'
+import { getActiveOperator } from '~/components/TacticalBootGate'
 
 // Maps is a Core Capability (display_order: 4)
 const MAPS_ITEM = {
@@ -163,6 +164,17 @@ export default function Home(props: {
   const [pendingDelete, setPendingDelete] = useState<string | null>(null)
   const [linkError, setLinkError] = useState<string | null>(null)
   const [kiwixQuery, setKiwixQuery] = useState('')
+  const [activeOperator, setActiveOperator] = useState<{ username: string; level: string }>({
+    username: 'OPERADOR',
+    level: 'NÍVEL 05 // COMANDO-GERAL',
+  })
+
+  useEffect(() => {
+    const syncOp = () => setActiveOperator(getActiveOperator())
+    syncOp()
+    window.addEventListener('nomad:operator-updated', syncOp)
+    return () => window.removeEventListener('nomad:operator-updated', syncOp)
+  }, [])
 
   const refreshServices = () => router.reload({ only: ['system'] })
 
@@ -318,7 +330,7 @@ export default function Home(props: {
            ==================================================================== */
         <div className="max-w-[1440px] mx-auto px-4 sm:px-6 py-5 space-y-5">
           {/* 1. CABEÇALHO DE COMANDO TÁTICO */}
-          <header className="chamfer-box relative p-5">
+          <header className="chamfer-box relative p-5 border-l-4 border-l-desert-tan">
             <div className="rivet absolute top-2.5 left-2.5" />
             <div className="rivet absolute top-2.5 right-2.5" />
             <div className="rivet absolute bottom-2.5 left-2.5" />
@@ -326,7 +338,7 @@ export default function Home(props: {
 
             <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 px-2">
               <div className="space-y-1.5">
-                <div className="flex flex-wrap items-center gap-2 text-[11px] font-mono tracking-wider">
+                <div className="flex flex-wrap items-center gap-2 text-[11px] font-mono-mil tracking-wider">
                   <span className="px-2 py-0.5 bg-surface-secondary border border-border-default text-desert-green font-bold">
                     CLASSIFICAÇÃO: RESTRITO // OPERACIONAL
                   </span>
@@ -334,7 +346,7 @@ export default function Home(props: {
                     MODO: OPERAÇÃO AUTÔNOMA (OFF-GRID)
                   </span>
                   <span className="text-text-secondary">
-                    TEMA: <strong className="text-desert-tan">{currentThemeDef.shortName.toUpperCase()}</strong>
+                    DOUTRINA: <strong className="text-desert-tan">MIL-STD-810H</strong>
                   </span>
                 </div>
 
@@ -344,21 +356,24 @@ export default function Home(props: {
                     alt="Logo NOMAD"
                     className="h-11 w-11 object-contain shrink-0"
                   />
-                  <h1 className="text-2xl sm:text-3xl md:text-4xl font-extrabold tracking-wider uppercase text-text-primary">
+                  <h1 className="text-3xl sm:text-4xl font-extrabold font-stencil tracking-wider uppercase text-text-primary leading-none">
                     <span className="text-desert-tan">N.O.M.A.D.</span>{' '}
                     <span className="text-border-default font-light mx-1">|</span> CENTRO DE COMANDO
                     &amp; OPERAÇÕES
                   </h1>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-mono text-text-secondary">
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-mono-mil text-text-secondary">
                   <span>
-                    AUTORIZAÇÃO: <strong className="text-desert-olive">NÍVEL 05</strong>
+                    AUTORIZAÇÃO:{' '}
+                    <strong className="text-desert-olive">{activeOperator.level}</strong>
                   </span>
                   <span>•</span>
                   <span>
-                    OPERADOR: <strong className="text-text-primary">OPERADOR</strong>{' '}
-                    <span className="text-text-muted">[COMANDO-GERAL]</span>
+                    OPERADOR:{' '}
+                    <strong className="text-text-primary">
+                      {activeOperator.username.toUpperCase()}
+                    </strong>
                   </span>
                   <span>•</span>
                   <span>
@@ -374,35 +389,31 @@ export default function Home(props: {
               {/* Telemetria Rápida no Topo */}
               <div className="chamfer-inner flex flex-wrap items-center gap-4 px-4 py-3">
                 <div className="text-right">
-                  <div className="text-[10px] font-mono text-text-muted uppercase">
+                  <div className="text-[10px] font-mono-mil text-text-muted uppercase">
                     Divisões na Home
                   </div>
-                  <div className="text-sm font-mono font-bold text-desert-olive">
+                  <div className="text-sm font-mono-mil font-bold text-desert-olive">
                     {items.length} // ATIVAS
                   </div>
                 </div>
                 <div className="h-7 w-[1px] bg-border-default" />
                 <div className="text-right">
-                  <div className="text-[10px] font-mono text-text-muted uppercase">
+                  <div className="text-[10px] font-mono-mil text-text-muted uppercase">
                     Apps Instalados
                   </div>
-                  <div className="text-sm font-mono font-bold text-desert-tan">
+                  <div className="text-sm font-mono-mil font-bold text-desert-tan">
                     {installedAppCount} SERVIÇOS
                   </div>
                 </div>
                 <div className="h-7 w-[1px] bg-border-default" />
                 <div className="text-right">
-                  <div className="text-[10px] font-mono text-text-muted uppercase">Integridade</div>
-                  <div className="text-sm font-mono font-bold text-text-primary">100% NOMINAL</div>
+                  <div className="text-[10px] font-mono-mil text-text-muted uppercase">
+                    Integridade
+                  </div>
+                  <div className="text-sm font-mono-mil font-bold text-text-primary">
+                    100% NOMINAL
+                  </div>
                 </div>
-                <div className="h-7 w-[1px] bg-border-default hidden sm:block" />
-                <Link
-                  href="/settings/themes"
-                  className="mil-tactical-btn px-3 py-1.5 text-xs font-mono inline-flex items-center gap-1.5"
-                >
-                  <IconPalette size={14} />
-                  <span>TEMAS</span>
-                </Link>
               </div>
             </div>
           </header>
@@ -418,11 +429,11 @@ export default function Home(props: {
               <div className="flex items-center justify-between mb-3 pb-2 border-b border-border-default px-2">
                 <div className="flex items-center gap-2">
                   <span className="w-2 h-2 bg-desert-tan inline-block" />
-                  <h2 className="text-sm font-bold tracking-widest uppercase text-desert-tan">
+                  <h2 className="text-sm font-bold font-stencil tracking-widest uppercase text-desert-tan">
                     SITUAÇÃO OPERACIONAL DOS SUBSISTEMAS REAIS
                   </h2>
                 </div>
-                <span className="text-[11px] font-mono text-text-muted">
+                <span className="text-[11px] font-mono-mil text-text-muted">
                   ACESSO DIRETO AOS MÓDULOS DO SERVIDOR
                 </span>
               </div>
@@ -432,13 +443,13 @@ export default function Home(props: {
                   href="/settings/zim"
                   className="chamfer-inner p-3 text-center hover:border-desert-tan transition-colors block"
                 >
-                  <div className="text-[10px] font-mono text-text-secondary uppercase">
+                  <div className="text-[10px] font-mono-mil text-text-secondary uppercase">
                     Acervo de Sobrevivência
                   </div>
-                  <div className="text-lg font-mono font-bold text-text-primary mt-1">
+                  <div className="text-lg font-mono-mil font-bold text-text-primary mt-1">
                     KIWIX / ZIM
                   </div>
-                  <div className="text-[10px] font-mono text-desert-olive mt-0.5">
+                  <div className="text-[10px] font-mono-mil text-desert-olive mt-0.5">
                     GERENCIAR BIBLIOTECA
                   </div>
                 </Link>
@@ -447,13 +458,13 @@ export default function Home(props: {
                   href="/chat"
                   className="chamfer-inner p-3 text-center hover:border-desert-tan transition-colors block"
                 >
-                  <div className="text-[10px] font-mono text-text-secondary uppercase">
+                  <div className="text-[10px] font-mono-mil text-text-secondary uppercase">
                     Assistente Tático
                   </div>
-                  <div className="text-lg font-mono font-bold text-desert-tan mt-1">
+                  <div className="text-lg font-mono-mil font-bold text-desert-tan mt-1">
                     OLLAMA RAG
                   </div>
-                  <div className="text-[10px] font-mono text-text-secondary mt-0.5">
+                  <div className="text-[10px] font-mono-mil text-text-secondary mt-0.5">
                     ABRIR CHAT IA LOCAL
                   </div>
                 </Link>
@@ -462,13 +473,13 @@ export default function Home(props: {
                   href="/maps"
                   className="chamfer-inner p-3 text-center hover:border-desert-tan transition-colors block"
                 >
-                  <div className="text-[10px] font-mono text-text-secondary uppercase">
+                  <div className="text-[10px] font-mono-mil text-text-secondary uppercase">
                     Cartografia Offline
                   </div>
-                  <div className="text-lg font-mono font-bold text-text-primary mt-1">
+                  <div className="text-lg font-mono-mil font-bold text-text-primary mt-1">
                     TERRESTRE
                   </div>
-                  <div className="text-[10px] font-mono text-desert-olive mt-0.5">
+                  <div className="text-[10px] font-mono-mil text-desert-olive mt-0.5">
                     MAPAS VETORIAIS
                   </div>
                 </Link>
@@ -477,13 +488,13 @@ export default function Home(props: {
                   href="/supply-depot"
                   className="chamfer-inner p-3 text-center hover:border-desert-tan transition-colors block"
                 >
-                  <div className="text-[10px] font-mono text-text-secondary uppercase">
+                  <div className="text-[10px] font-mono-mil text-text-secondary uppercase">
                     Central de Aplicativos
                   </div>
-                  <div className="text-lg font-mono font-bold text-desert-orange-light mt-1">
+                  <div className="text-lg font-mono-mil font-bold text-desert-orange-light mt-1">
                     {installedAppCount} ATIVOS
                   </div>
-                  <div className="text-[10px] font-mono text-text-secondary mt-0.5">
+                  <div className="text-[10px] font-mono-mil text-text-secondary mt-0.5">
                     CATÁLOGO &amp; PORTAINER
                   </div>
                 </Link>
@@ -497,13 +508,13 @@ export default function Home(props: {
               <div className="rivet absolute bottom-2 right-2" />
 
               <div className="flex items-center justify-between mb-2 pb-2 border-b border-border-default px-2">
-                <span className="text-sm font-bold tracking-widest uppercase text-desert-tan">
+                <span className="text-sm font-bold font-stencil tracking-widest uppercase text-desert-tan">
                   LOG DE EVENTOS
                 </span>
                 <span className="w-2 h-2 rounded-full bg-desert-olive" />
               </div>
 
-              <div className="chamfer-inner p-2.5 font-mono text-[11px] space-y-1 text-text-secondary">
+              <div className="chamfer-inner p-2.5 font-mono-mil text-[11px] space-y-1 text-text-secondary">
                 <div>
                   <span className="text-desert-tan">[SISTEMA]</span> NÓ NEXUS-01 OPERACIONAL
                 </div>
@@ -518,7 +529,7 @@ export default function Home(props: {
                 <div className="text-desert-olive">&gt; PRONTO PARA OPERAÇÃO EM CAMPO...</div>
               </div>
 
-              <div className="flex items-center justify-between text-[10px] font-mono text-text-muted pt-2 px-1">
+              <div className="flex items-center justify-between text-[10px] font-mono-mil text-text-muted pt-2 px-1">
                 <span>HOST: NEXUS-NOMAD</span>
                 <span className="text-desert-olive font-bold">STATUS: ONLINE</span>
               </div>
@@ -529,12 +540,12 @@ export default function Home(props: {
           <section className="space-y-3">
             <div className="flex items-center justify-between border-b border-border-default pb-2">
               <div className="flex items-center gap-2">
-                <span className="text-desert-tan font-mono text-sm">►</span>
-                <h2 className="text-lg font-bold tracking-widest uppercase text-text-primary">
+                <span className="text-desert-tan font-mono-mil text-sm">►</span>
+                <h2 className="text-lg font-bold font-stencil tracking-widest uppercase text-text-primary">
                   DIVISÕES OPERACIONAIS DO SISTEMA
                 </h2>
               </div>
-              <span className="text-xs font-mono text-text-muted">
+              <span className="text-xs font-mono-mil text-text-muted">
                 TODOS OS MÓDULOS E FUNÇÕES REAIS DO SERVIDOR NOMAD
               </span>
             </div>
@@ -560,14 +571,14 @@ export default function Home(props: {
                       {/* Top Division Metadata Row */}
                       <div className="flex items-center justify-between gap-2 mb-3 pb-2 border-b border-border-default px-1">
                         <div className="flex items-center gap-2 min-w-0">
-                          <span className="px-2 py-0.5 bg-surface-secondary border border-desert-tan/40 text-desert-tan text-[10px] font-mono font-bold shrink-0">
+                          <span className="px-2 py-0.5 bg-surface-secondary border border-desert-tan/40 text-desert-tan text-[10px] font-mono-mil font-bold shrink-0">
                             {divisionNum} // DIVISÃO
                           </span>
-                          <span className="text-[11px] font-mono font-bold uppercase tracking-wider text-desert-olive truncate">
+                          <span className="text-[11px] font-mono-mil font-bold uppercase tracking-wider text-desert-olive truncate">
                             {item.categoryTag || 'MÓDULO NOMAD'}
                           </span>
                         </div>
-                        <span className="text-[10px] font-mono text-text-muted shrink-0">
+                        <span className="text-[10px] font-mono-mil text-text-muted shrink-0">
                           {item.portLabel || item.to.toUpperCase()}
                         </span>
                       </div>
@@ -584,11 +595,11 @@ export default function Home(props: {
                           {item.icon}
                         </div>
                         <div className="min-w-0">
-                          <h3 className="text-xl font-bold uppercase tracking-wide text-text-primary group-hover:text-desert-tan transition-colors">
+                          <h3 className="text-xl font-bold font-stencil uppercase tracking-wide text-text-primary group-hover:text-desert-tan transition-colors">
                             {item.label}
                           </h3>
                           {item.poweredBy && (
-                            <div className="text-[11px] font-mono text-desert-olive mt-0.5">
+                            <div className="text-[11px] font-mono-mil text-desert-olive mt-0.5">
                               MOTOR: {item.poweredBy}
                             </div>
                           )}
@@ -619,12 +630,12 @@ export default function Home(props: {
                               }
                             }}
                             placeholder="Buscar no acervo Kiwix..."
-                            className="bg-transparent text-xs font-mono text-text-primary focus:outline-none w-full placeholder:text-text-muted"
+                            className="bg-transparent text-xs font-mono-mil text-text-primary focus:outline-none w-full placeholder:text-text-muted"
                           />
                           <button
                             type="button"
                             onClick={() => window.open(item.to, '_blank', 'noopener,noreferrer')}
-                            className="mil-tactical-btn px-2.5 py-1 text-[10px] font-mono shrink-0 cursor-pointer"
+                            className="mil-tactical-btn px-2.5 py-1 text-[10px] font-mono-mil shrink-0 cursor-pointer"
                           >
                             ABRIR
                           </button>
@@ -633,7 +644,7 @@ export default function Home(props: {
                     </div>
 
                     {/* Footer Action Row */}
-                    <div className="flex items-center justify-between text-[11px] font-mono text-text-muted pt-3 mt-4 border-t border-border-default px-1">
+                    <div className="flex items-center justify-between text-[11px] font-mono-mil text-text-muted pt-3 mt-4 border-t border-border-default px-1">
                       <span>STATUS: PRONTO</span>
                       <span className="text-desert-tan font-bold group-hover:underline inline-flex items-center gap-1">
                         <span>ACESSAR MÓDULO</span>

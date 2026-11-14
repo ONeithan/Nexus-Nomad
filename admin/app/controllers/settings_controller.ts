@@ -167,7 +167,7 @@ export default class SettingsController {
   }
 
   async update({ inertia }: HttpContext) {
-    const updateInfo = await this.systemService.checkLatestVersion()
+    const updateInfo = await this.systemService.checkLatestVersion(true)
     return inertia.render('settings/update', {
       system: {
         updateAvailable: updateInfo.updateAvailable,
