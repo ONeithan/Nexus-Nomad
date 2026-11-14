@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react'
+import { usePage } from '@inertiajs/react'
 
 export interface TacticalOperator {
   username: string
@@ -16,28 +17,89 @@ interface NomadAuthDBState {
     level: string
     remember: boolean
   } | null
+  lockedExplicitly?: boolean
 }
 
 const AUTH_STORAGE_KEY = 'nomad_tactical_auth_v4'
+const LEGACY_STORAGE_KEYS = ['nomad_tactical_auth_v4', 'nomad_auth_db_v3', 'nomad_auth_db_v2']
 const SESSION_UNLOCKED_KEY = 'nomad_session_unlocked_v4'
 
-function loadAuthDB(): NomadAuthDBState {
-  if (typeof window === 'undefined') {
-    return { setupCompleted: false, operators: [], activeSession: null }
-  }
+// Flag em memória do documento: é false ao abrir o site ou dar F5 (reload),
+// e passa a true após exibir a tela rápida "INICIALIZANDO NEXUS N.O.M.A.D. OS..."
+// para que a navegação interna entre páginas não repita o boot.
+let hasBootedInCurrentDocument = false
+
+function parseAuthState(raw: string | null | undefined): NomadAuthDBState | null {
+  if (!raw || typeof raw !== 'string') return null
   try {
-    const raw = localStorage.getItem(AUTH_STORAGE_KEY)
-    if (!raw) {
-      return { setupCompleted: false, operators: [], activeSession: null }
-    }
     const parsed = JSON.parse(raw)
+    if (!parsed || typeof parsed !== 'object') return null
+    const operators = Array.isArray(parsed.operators) ? parsed.operators : []
     return {
-      setupCompleted: Boolean(parsed.setupCompleted),
-      operators: Array.isArray(parsed.operators) ? parsed.operators : [],
+      setupCompleted: Boolean(parsed.setupCompleted) || operators.length > 0,
+      operators,
       activeSession: parsed.activeSession || null,
+      lockedExplicitly: Boolean(parsed.lockedExplicitly),
     }
   } catch {
-    return { setupCompleted: false, operators: [], activeSession: null }
+    return null
+  }
+}
+
+function loadAuthDB(serverRaw?: string | null): NomadAuthDBState {
+  const mergedOps: TacticalOperator[] = []
+  let setupCompleted = false
+  let activeSession: NomadAuthDBState['activeSession'] = null
+  let lockedExplicitly = false
+
+  const mergeFrom = (state: NomadAuthDBState | null) => {
+    if (!state) return
+    if (state.setupCompleted) setupCompleted = true
+    if (state.lockedExplicitly) lockedExplicitly = true
+    if (state.activeSession && !activeSession) {
+      activeSession = state.activeSession
+    }
+    for (const op of state.operators) {
+      if (
+        op &&
+        op.username &&
+        !mergedOps.some((existing) => existing.username.toLowerCase() === op.username.toLowerCase())
+      ) {
+        mergedOps.push(op)
+      }
+    }
+  }
+
+  // 1. Prioriza o banco de dados SQLite do servidor (KVStore 'auth.operators')
+  mergeFrom(parseAuthState(serverRaw))
+
+  // 2. Mescla com localStorage (incluindo chaves de versões anteriores para nunca perder dados)
+  if (typeof window !== 'undefined') {
+    for (const key of LEGACY_STORAGE_KEYS) {
+      try {
+        mergeFrom(parseAuthState(localStorage.getItem(key)))
+      } catch {
+        // ignore
+      }
+    }
+  }
+
+  if (mergedOps.length > 0) {
+    setupCompleted = true
+    if (!activeSession && !lockedExplicitly) {
+      activeSession = {
+        username: mergedOps[0].username,
+        level: mergedOps[0].level,
+        remember: true,
+      }
+    }
+  }
+
+  return {
+    setupCompleted,
+    operators: mergedOps,
+    activeSession,
+    lockedExplicitly,
   }
 }
 
@@ -56,10 +118,12 @@ async function syncAuthDBToServer(state: NomadAuthDBState) {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        key: 'ui.tactical_operators',
+        key: 'auth.operators',
         value: JSON.stringify({
           setupCompleted: state.setupCompleted,
           operators: state.operators,
+          activeSession: state.activeSession,
+          lockedExplicitly: Boolean(state.lockedExplicitly),
         }),
       }),
     })
@@ -92,7 +156,9 @@ export function lockTacticalConsole() {
   if (typeof window === 'undefined') return
   const db = loadAuthDB()
   db.activeSession = null
+  db.lockedExplicitly = true
   saveAuthDB(db)
+  syncAuthDBToServer(db)
   sessionStorage.removeItem(SESSION_UNLOCKED_KEY)
   window.dispatchEvent(new CustomEvent('nomad:lock-console'))
 }
@@ -387,10 +453,19 @@ const BOOT_SCOPED_CSS = `
 `
 
 export default function TacticalBootGate({ children }: { children: React.ReactNode }) {
-  const [stage, setStage] = useState<BootStage>('UNLOCKED')
+  const { tacticalAuth } = usePage<{ tacticalAuth?: string | null }>().props
+
+  const [stage, setStage] = useState<BootStage>(() => {
+    if (hasBootedInCurrentDocument) return 'UNLOCKED'
+    const initialDb = loadAuthDB(tacticalAuth)
+    if (initialDb.setupCompleted && initialDb.operators.length > 0) {
+      return initialDb.lockedExplicitly ? 'LOGIN_SCREEN' : 'CLEAN_BOOT_OS'
+    }
+    return 'CRT_POWERON'
+  })
   const [recoveryStep, setRecoveryStep] = useState<RecoverySubStep>('AWAIT_HELP')
   const [bootPct, setBootPct] = useState(0)
-  const [bootStatus, setBootStatus] = useState('INICIALIZANDO SISTEMA OPERACIONAL...')
+  const [bootStatus, setBootStatus] = useState('INICIALIZANDO NEXUS N.O.M.A.D. OS...')
   const [bootLogs, setBootLogs] = useState<Array<{ msg: string; color: string }>>([])
   const [introLines, setIntroLines] = useState<string[]>([])
   const [recoveryLogs, setRecoveryLogs] = useState<string[]>([])
@@ -440,23 +515,16 @@ export default function TacticalBootGate({ children }: { children: React.ReactNo
   useEffect(() => {
     let mounted = true
     async function initGate() {
-      let db = loadAuthDB()
+      let db = loadAuthDB(tacticalAuth)
 
+      // Se não veio no sharedData nem no localStorage, consulta a API do banco SQLite com query param correto (?key=auth.operators)
       if (db.operators.length === 0) {
         try {
-          const res = await fetch('/api/settings/ui.tactical_operators')
+          const res = await fetch('/api/settings?key=auth.operators')
           if (res.ok) {
             const data = await res.json()
             if (data?.value) {
-              const serverState = JSON.parse(data.value)
-              if (Array.isArray(serverState.operators) && serverState.operators.length > 0) {
-                db = {
-                  setupCompleted: Boolean(serverState.setupCompleted),
-                  operators: serverState.operators,
-                  activeSession: db.activeSession,
-                }
-                saveAuthDB(db)
-              }
+              db = loadAuthDB(data.value)
             }
           }
         } catch {
@@ -466,14 +534,29 @@ export default function TacticalBootGate({ children }: { children: React.ReactNo
 
       if (!mounted) return
 
-      const sessionUnlocked = sessionStorage.getItem(SESSION_UNLOCKED_KEY) === 'true'
+      // Garante sincronização bidirecional imediata: salva no localStorage e no SQLite do servidor
+      if (db.operators.length > 0) {
+        saveAuthDB(db)
+        if (!tacticalAuth) {
+          syncAuthDBToServer(db)
+        }
+        window.dispatchEvent(new CustomEvent('nomad:operator-updated'))
+      }
+
       if (db.setupCompleted && db.operators.length > 0) {
-        if ((db.activeSession && db.activeSession.remember) || sessionUnlocked) {
-          setStage('UNLOCKED')
-        } else {
+        if (db.lockedExplicitly) {
+          hasBootedInCurrentDocument = true
           setStage('LOGIN_SCREEN')
+        } else if (!hasBootedInCurrentDocument) {
+          // Ao dar F5 ou abrir o site: roda APENAS a tela "INICIALIZANDO NEXUS N.O.M.A.D. OS..."
+          // um pouco mais rápido (480ms por passo) e entra direto no painel sem pedir login ou recovery!
+          hasBootedInCurrentDocument = true
+          runCleanStabilizedOSBoot('UNLOCKED', 480)
+        } else {
+          setStage('UNLOCKED')
         }
       } else {
+        hasBootedInCurrentDocument = true
         startColdBootSequence()
       }
     }
@@ -754,7 +837,7 @@ export default function TacticalBootGate({ children }: { children: React.ReactNo
     setTimeout(() => {
       setTpmPct(90)
       setTpmStatus('SELANDO CHAVE MESTRE NO CHIP TPM...')
-      const db = loadAuthDB()
+      const db = loadAuthDB(tacticalAuth)
       const newOp: TacticalOperator = {
         username: user,
         passwordHash: btoa(unescape(encodeURIComponent(regPass))),
@@ -766,6 +849,13 @@ export default function TacticalBootGate({ children }: { children: React.ReactNo
         newOp,
         ...db.operators.filter((o) => o.username.toLowerCase() !== user.toLowerCase()),
       ]
+      db.setupCompleted = true
+      db.activeSession = {
+        username: newOp.username,
+        level: newOp.level,
+        remember: true,
+      }
+      db.lockedExplicitly = false
       saveAuthDB(db)
       syncAuthDBToServer(db)
     }, 950)
@@ -842,13 +932,16 @@ export default function TacticalBootGate({ children }: { children: React.ReactNo
             <span style="font-size: 11px; color: #8fa692;">Reinicializando o sistema NEXUS com vídeo estabilizado...</span>
           </div>
         `)
-        setTimeout(runCleanStabilizedOSBoot, 1300)
+        setTimeout(() => runCleanStabilizedOSBoot('LOGIN_SCREEN', 550), 1200)
       }
     }
     setTimeout(nextRepair, 450)
   }
 
-  function runCleanStabilizedOSBoot() {
+  function runCleanStabilizedOSBoot(
+    targetAfterBoot: 'LOGIN_SCREEN' | 'UNLOCKED' = 'UNLOCKED',
+    stepIntervalMs = 480
+  ) {
     setStage('CLEAN_BOOT_OS')
     setBootPct(0)
     setBootLogs([])
@@ -872,12 +965,21 @@ export default function TacticalBootGate({ children }: { children: React.ReactNo
       },
       {
         pct: 90,
-        status: 'INICIALIZANDO INTERFACE DE LOGIN...',
-        msg: '[ OK ] SUBSISTEMA DE AUTENTICAÇÃO PRONTO',
+        status:
+          targetAfterBoot === 'UNLOCKED'
+            ? 'RESTAURANDO SESSÃO DO OPERADOR DE COMANDO...'
+            : 'INICIALIZANDO INTERFACE DE LOGIN...',
+        msg:
+          targetAfterBoot === 'UNLOCKED'
+            ? '[ OK ] CREDENCIAL DE COMANDO VALIDADA NO BANCO LOCAL'
+            : '[ OK ] SUBSISTEMA DE AUTENTICAÇÃO PRONTO',
       },
       {
         pct: 100,
-        status: 'SISTEMA PRONTO // ABRINDO LOGIN...',
+        status:
+          targetAfterBoot === 'UNLOCKED'
+            ? 'SISTEMA PRONTO // ABRINDO CENTRO DE COMANDO...'
+            : 'SISTEMA PRONTO // ABRINDO LOGIN...',
         msg: '[ 100% ] BEM-VINDO AO NEXUS N.O.M.A.D. OS',
       },
     ]
@@ -890,21 +992,25 @@ export default function TacticalBootGate({ children }: { children: React.ReactNo
         setBootStatus(s.status)
         setBootLogs((prev) => [...prev, { msg: s.msg, color: '#4ade80' }])
         idx++
-        setTimeout(nextStep, 650)
+        setTimeout(nextStep, stepIntervalMs)
       } else {
         setTimeout(() => {
-          setLoginUser('')
-          setLoginPass('')
-          setStage('LOGIN_SCREEN')
-        }, 700)
+          if (targetAfterBoot === 'UNLOCKED') {
+            setStage('UNLOCKED')
+          } else {
+            setLoginUser('')
+            setLoginPass('')
+            setStage('LOGIN_SCREEN')
+          }
+        }, 450)
       }
     }
-    setTimeout(nextStep, 350)
+    setTimeout(nextStep, 220)
   }
 
   function handleMainLogin(e: React.FormEvent) {
     e.preventDefault()
-    const db = loadAuthDB()
+    const db = loadAuthDB(tacticalAuth)
     const user = loginUser.trim()
     const encodedPass = btoa(unescape(encodeURIComponent(loginPass)))
 
@@ -921,21 +1027,19 @@ export default function TacticalBootGate({ children }: { children: React.ReactNo
     }
 
     setLoginError('')
-    const wasSetupCompleted = db.setupCompleted
+    db.setupCompleted = true
+    db.lockedExplicitly = false
     db.activeSession = {
       username: matched.username,
       level: matched.level,
       remember: rememberSession,
     }
     saveAuthDB(db)
+    syncAuthDBToServer(db)
     sessionStorage.setItem(SESSION_UNLOCKED_KEY, 'true')
     window.dispatchEvent(new CustomEvent('nomad:operator-updated'))
 
-    if (!wasSetupCompleted) {
-      runFinalizingStage()
-    } else {
-      setStage('UNLOCKED')
-    }
+    setStage('UNLOCKED')
   }
 
   function runFinalizingStage() {
@@ -959,8 +1063,9 @@ export default function TacticalBootGate({ children }: { children: React.ReactNo
 
       if (p >= 100) {
         clearInterval(inv)
-        const db = loadAuthDB()
+        const db = loadAuthDB(tacticalAuth)
         db.setupCompleted = true
+        db.lockedExplicitly = false
         saveAuthDB(db)
         syncAuthDBToServer(db)
         setTimeout(() => {
@@ -975,7 +1080,7 @@ export default function TacticalBootGate({ children }: { children: React.ReactNo
     const name = subOpName.trim()
     if (!name || !subOpPass) return
 
-    const db = loadAuthDB()
+    const db = loadAuthDB(tacticalAuth)
     const newOp: TacticalOperator = {
       username: name,
       passwordHash: btoa(unescape(encodeURIComponent(subOpPass))),
@@ -988,6 +1093,7 @@ export default function TacticalBootGate({ children }: { children: React.ReactNo
       newOp,
     ]
     db.setupCompleted = true
+    db.lockedExplicitly = false
     saveAuthDB(db)
     syncAuthDBToServer(db)
 
@@ -1003,8 +1109,16 @@ export default function TacticalBootGate({ children }: { children: React.ReactNo
 
   function resetFullBootSimulation() {
     if (typeof window === 'undefined') return
-    localStorage.removeItem(AUTH_STORAGE_KEY)
+    for (const key of LEGACY_STORAGE_KEYS) {
+      localStorage.removeItem(key)
+    }
     sessionStorage.removeItem(SESSION_UNLOCKED_KEY)
+    syncAuthDBToServer({
+      setupCompleted: false,
+      operators: [],
+      activeSession: null,
+      lockedExplicitly: false,
+    })
     startColdBootSequence()
   }
 
@@ -1152,7 +1266,7 @@ export default function TacticalBootGate({ children }: { children: React.ReactNo
                   fontWeight: 'bold',
                 }}
               >
-                PROJETO N.O.M.A.D. OS v1.0.13
+                PROJETO N.O.M.A.D. OS v1.0.14
               </div>
             </div>
 
