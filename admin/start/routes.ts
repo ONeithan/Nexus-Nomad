@@ -138,6 +138,7 @@ router
 router
   .group(() => {
     router.get('/system', [SettingsController, 'system'])
+    router.get('/themes', [SettingsController, 'themes'])
     router.get('/servers', [SettingsController, 'servers'])
     router.on('/apps').redirectToPath('/supply-depot') // superseded by Supply Depot
     router.get('/legal', [SettingsController, 'legal'])

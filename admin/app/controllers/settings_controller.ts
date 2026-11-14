@@ -32,6 +32,13 @@ export default class SettingsController {
     })
   }
 
+  async themes({ inertia }: HttpContext) {
+    const currentTheme = await KVStore.getValue('ui.theme')
+    return inertia.render('settings/themes', {
+      currentTheme: currentTheme || 'tactical',
+    })
+  }
+
   async servers({ inertia }: HttpContext) {
     const [
       portainerStatus,

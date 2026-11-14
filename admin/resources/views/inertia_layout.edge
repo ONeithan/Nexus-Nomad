@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="pt-BR" data-theme="tactical">
 
 <head>
   <meta charset="utf-8">
@@ -14,10 +14,12 @@
   <script>
     (function() {
       try {
-        var theme = localStorage.getItem('nomad:theme');
-        if (theme === 'dark') {
-          document.documentElement.setAttribute('data-theme', 'dark');
-        }
+        var valid = ['tactical', 'light', 'dark', 'survival', 'stealth'];
+        var theme = localStorage.getItem('nomad:theme') || 'tactical';
+        if (valid.indexOf(theme) === -1) theme = 'tactical';
+        document.documentElement.setAttribute('data-theme', theme);
+        var layout = localStorage.getItem('nomad:home_layout') || 'auto';
+        document.documentElement.setAttribute('data-home-layout', layout);
       } catch(e) {}
     })();
   </script>
