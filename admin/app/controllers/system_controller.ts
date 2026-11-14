@@ -134,6 +134,18 @@ export default class SystemController {
 
     async forceReinstallService({ request, response }: HttpContext) {
         const payload = await request.validateUsing(installServiceValidator);
+        const portainerEnabled = await this.systemService.isPortainerEnabled();
+        const isRemote =
+            portainerEnabled &&
+            ((await this.systemService.portainerService.isDeployedRemotely(payload.service_name)) ||
+                ((await KVStore.getValue('portainer.deployTarget')) || 'portainer') === 'portainer');
+
+        if (isRemote) {
+            await this.systemService.portainerService.undeployService(payload.service_name, false).catch(() => {});
+            const result = await this.systemService.deployToPortainer(payload.service_name);
+            return response.send({ success: result.success, message: result.message });
+        }
+
         const result = await this.dockerService.forceReinstall(payload.service_name);
         if (!result) {
             response.internalServerError({ error: 'Failed to force reinstall service' });
@@ -392,10 +404,15 @@ export default class SystemController {
             if (meta?.minDiskMB) minDiskMB = meta.minDiskMB
         } catch {}
 
-        const [{ conflicts: portConflicts }, resourceWarnings] = await Promise.all([
+        const [{ conflicts: rawConflicts }, resourceWarnings] = await Promise.all([
             this.dockerService.checkPortConflicts(hostPorts),
             this.systemService.checkResourceWarnings(minMemoryMB, minDiskMB),
         ])
+        const portConflicts = rawConflicts.filter(
+            (c) =>
+                c.usedBy !== payload.service_name &&
+                c.usedBy !== `nomad-${payload.service_name}`
+        )
 
         return response.send({ portConflicts, resourceWarnings })
     }
@@ -529,14 +546,17 @@ export default class SystemController {
             return response.status(403).send({ error: 'Only custom apps can be deleted.' })
         }
 
+        await this.systemService.portainerService
+            .undeployService(payload.service_name, payload.remove_image ?? false)
+            .catch(() => {})
         await this.dockerService.removeCustomAppContainer(payload.service_name, payload.remove_image ?? false)
         await service.delete()
 
         return response.send({ success: true, message: `Custom app ${payload.service_name} deleted` })
     }
 
-    /** Uninstall a curated catalog app: stop + remove its container (optionally its image) and
-     * return the card to the available catalog. App data under the storage path stays on disk,
+    /** Uninstall a curated catalog app: stop + remove its container and Portainer stack (optionally its image)
+     * and return the card to the available catalog. App data under the storage path stays on disk,
      * so a later reinstall picks it back up. Custom apps are removed via deleteCustomApp instead,
      * which also drops their DB record. */
     async uninstallService({ request, response }: HttpContext) {
@@ -552,21 +572,14 @@ export default class SystemController {
         if (service.is_dependency_service) {
             return response.status(403).send({ error: 'Dependency services cannot be uninstalled directly.' })
         }
-        if (!service.installed) {
-            return response.status(409).send({ error: `Service ${payload.service_name} is not installed` })
-        }
 
-        const isRemote = (await this.systemService.isPortainerEnabled()) && (await this.systemService.portainerService.isDeployedRemotely(payload.service_name));
-        if (isRemote) {
-            const result = await this.systemService.portainerService.undeployService(
-                payload.service_name,
-                payload.remove_image ?? false
-            );
-            if (!result.success) {
-                return response.status(500).send({ success: false, message: result.message });
-            }
-            return response.send({ success: true, message: result.message });
-        }
+        // Always clean up both Portainer (stack + remote containers) AND local Docker containers
+        // so that clicking "Desinstalar" in NOMAD guarantees full removal from Portainer and Docker.
+        await this.systemService.portainerService
+            .undeployService(payload.service_name, payload.remove_image ?? false)
+            .catch((err) => {
+                logger.warn(`[SystemController] Portainer undeploy warning for ${payload.service_name}: ${err?.message}`)
+            })
 
         const result = await this.dockerService.uninstallService(
             payload.service_name,

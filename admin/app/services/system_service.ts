@@ -372,7 +372,10 @@ export class SystemService {
   }
 
   async deployToPortainer(serviceName: string) {
-    return await this.portainerService.deployService(serviceName)
+    await this.dockerService._removeServiceContainer(serviceName).catch(() => {})
+    const preinstall = await this.dockerService.prepareServicePreinstall(serviceName)
+    this.dockerService.invalidateServicesStatusCache()
+    return await this.portainerService.deployService(serviceName, preinstall)
   }
 
   async getTruenasStatus(url?: string, apiKey?: string) {

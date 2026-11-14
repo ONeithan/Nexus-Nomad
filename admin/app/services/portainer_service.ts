@@ -445,34 +445,17 @@ export class PortainerService {
     const { client, apiKey } = await this.getClient()
     const endpointId = await this.getEndpointId()
 
-    // 1. Enrich existing catalog services already deployed to Portainer
-    for (const deployedName of deployedServices) {
-      const index = services.findIndex((s) => s.service_name === deployedName)
-      if (index !== -1) {
-        const item = services[index]
-        const port = item.ui_location ? item.ui_location.replace(/^https?:/, '').replace(/^.*?:/, '') : '8090'
-        const remoteUrl = `http://${hostIp}:${port}`
-        services[index] = {
-          ...item,
-          installed: true,
-          status: 'running',
-          node: 'portainer',
-          node_label: 'Servidor Portainer',
-          ui_location: remoteUrl,
-          custom_url: remoteUrl,
-        }
-      }
-    }
-
-    // 2. Fetch live stacks and containers from Portainer if API Key is available
-    let liveStacks: Array<{ Id: number; Name: string; Status?: number }> = []
+    // 1. Fetch live stacks and containers from Portainer FIRST if API Key is available
+    let liveStacks: Array<{ Id: number; Name: string; Status?: number; EndpointId?: number }> = []
     let liveContainers: Array<{
+      fullId: string
       id: string
       name: string
       projectName: string
       state: string
       publicPort?: number
     }> = []
+    let portainerReachable = false
 
     if (apiKey) {
       try {
@@ -486,6 +469,7 @@ export class PortainerService {
           .catch(() => null)
 
         if (Array.isArray(containersResp?.data)) {
+          portainerReachable = true
           liveContainers = containersResp.data.map((c: any) => {
             const rawName = (c.Names && c.Names[0]) || ''
             const cleanName = rawName.replace(/^\//, '')
@@ -495,6 +479,7 @@ export class PortainerService {
               cleanName
             const publicPort = (c.Ports || []).find((p: any) => p.PublicPort)?.PublicPort
             return {
+              fullId: c.Id || '',
               id: c.Id ? c.Id.slice(0, 12) : '',
               name: cleanName,
               projectName: projectName.toLowerCase(),
@@ -505,6 +490,107 @@ export class PortainerService {
         }
       } catch (err: any) {
         logger.debug(`[PortainerService] Dynamic stack discovery: ${err?.message}`)
+      }
+    }
+
+    // Auto-clean any orphaned '-init' containers or broken 'nomad-*' stacks with no main container
+    if (portainerReachable) {
+      for (const initCont of liveContainers.filter((c) => c.name.endsWith('-init') && c.state !== 'running')) {
+        await client
+          .delete(`/api/endpoints/${endpointId}/docker/containers/${initCont.fullId}?force=true&v=true`, { timeout: 5000 })
+          .catch(() => {})
+      }
+      for (const stack of liveStacks) {
+        const sName = (stack.Name || '').toLowerCase()
+        if (sName.startsWith('nomad-')) {
+          const hasMainCont = liveContainers.some(
+            (c) =>
+              !c.name.endsWith('-init') &&
+              (c.name.toLowerCase() === sName || c.projectName.toLowerCase() === sName)
+          )
+          if (!hasMainCont) {
+            const sEpId = stack.EndpointId || endpointId
+            await client
+              .delete(`/api/stacks/${stack.Id}?endpointId=${sEpId}`, { timeout: 8000 })
+              .catch(() => {})
+          }
+        }
+      }
+    }
+
+    // 2. Reconcile & Enrich catalog services deployed to Portainer
+    const deployedSet = new Set(deployedServices)
+
+    // Also auto-discover any catalog service whose `nomad-<service_name>` container exists on Portainer
+    if (portainerReachable) {
+      for (const svc of services) {
+        const targetContName = `nomad-${svc.service_name}`.toLowerCase()
+        const found = liveContainers.find(
+          (c) => !c.name.endsWith('-init') && c.name.toLowerCase() === targetContName
+        )
+        if (found && !deployedSet.has(svc.service_name)) {
+          deployedSet.add(svc.service_name)
+          await this.markAsDeployedRemotely(svc.service_name)
+        }
+      }
+    }
+
+    for (const deployedName of Array.from(deployedSet)) {
+      const index = services.findIndex((s) => s.service_name === deployedName)
+      const matchedCont = liveContainers.find(
+        (c) =>
+          !c.name.endsWith('-init') &&
+          (c.name.toLowerCase() === `nomad-${deployedName.toLowerCase()}` ||
+            c.name.toLowerCase() === deployedName.toLowerCase() ||
+            c.projectName.toLowerCase() === `nomad-${deployedName.toLowerCase()}`)
+      )
+
+      // If Portainer is reachable and the container no longer exists (e.g. removed by user or failed deploy),
+      // automatically unmark it so NOMAD shows "Instalar" instead of a phantom "Ativo" card!
+      if (portainerReachable && !matchedCont) {
+        const isCurrentlyInstalling = index !== -1 && services[index].installation_status === 'installing'
+        if (!isCurrentlyInstalling) {
+          await this.unmarkDeployedRemotely(deployedName)
+          await Service.query()
+            .where('service_name', deployedName)
+            .update({ installed: false, installation_status: 'idle', custom_url: null })
+            .catch(() => {})
+          if (index !== -1) {
+            services[index] = {
+              ...services[index],
+              installed: false,
+              status: 'unknown',
+              custom_url: null,
+            }
+          }
+          continue
+        }
+      }
+
+      if (index !== -1) {
+        const item = services[index]
+        const scheme = /^https:/i.test(item.ui_location || '') ? 'https' : 'http'
+        const rawPort = item.ui_location
+          ? item.ui_location.replace(/^https?:/, '').replace(/^.*?:/, '')
+          : '8090'
+        const defaultPort = rawPort === '8080' ? PortainerService.PORT_REMAPS['8080'] || '8095' : rawPort
+        const resolvedPort = matchedCont?.publicPort ? String(matchedCont.publicPort) : defaultPort
+        const remoteUrl = `${scheme}://${hostIp}:${resolvedPort}`
+        const realStatus = matchedCont
+          ? matchedCont.state === 'running'
+            ? 'running'
+            : 'stopped'
+          : 'running'
+
+        services[index] = {
+          ...item,
+          installed: true,
+          status: realStatus,
+          node: 'portainer',
+          node_label: 'Servidor Portainer',
+          ui_location: remoteUrl,
+          custom_url: remoteUrl,
+        }
       }
     }
 
@@ -593,8 +679,10 @@ export class PortainerService {
       const rawStackName = stack.Name || ''
       const lowerStackName = rawStackName.toLowerCase()
 
-      // Skip stacks that are already matched by catalog or known remote services
+      // Skip NOMAD-managed catalog stacks or stacks already matched by catalog or known remote services
       const alreadyHandled =
+        lowerStackName.startsWith('nomad-') ||
+        lowerStackName.startsWith('nomad_') ||
         existingServiceNames.has(lowerStackName) ||
         existingServiceNames.has(`${lowerStackName}-nexus`) ||
         existingServiceNames.has(`nomad-${lowerStackName}`) ||
@@ -710,18 +798,46 @@ export class PortainerService {
   }
 
   /**
-   * Build a production-grade Docker Compose definition for deploying apps via Portainer Stacks API.
-   * Parses all ports, volumes and env from container_config to support 100% of catalog services.
+   * Rewrite storage bind paths when Portainer shares the same Docker host as NOMAD
+   * so apps like Kiwix, Calibre-Web, Jellyfin, Vaultwarden, and FileBrowser share the
+   * exact `/opt/project-nomad/storage/...` directories managed by NOMAD.
+   */
+  private rewriteBindsForHostStorage(
+    rawBinds: string[],
+    hostStorageRoot: string | null
+  ): { binds: string[]; usesHostBinds: boolean } {
+    if (!rawBinds || rawBinds.length === 0 || !hostStorageRoot) {
+      return { binds: rawBinds || [], usesHostBinds: false }
+    }
+    const defaultPrefix = '/opt/project-nomad/storage'
+    const rewritten = rawBinds.map((b) => {
+      const firstColon = b.indexOf(':')
+      if (firstColon < 0) return b
+      const hostSrc = b.slice(0, firstColon)
+      const rest = b.slice(firstColon)
+      if (hostSrc === defaultPrefix || hostSrc.startsWith(defaultPrefix + '/')) {
+        return `${hostStorageRoot}${hostSrc.slice(defaultPrefix.length)}${rest}`
+      }
+      return b
+    })
+    return { binds: rewritten, usesHostBinds: true }
+  }
+
+  /**
+   * Build a clean, single-service Docker Compose definition for deploying apps via Portainer Stacks API.
+   * Avoids multi-container `depends_on: service_completed_successfully` sidecars (`init-library`, `init-ssl`)
+   * which cause Portainer standalone stacks to stall in `created` or report `Error` state.
    */
   private buildComposeFile(
     serviceName: string,
     image: string,
     primaryHostPort: string,
     config: any,
-    cmd: string | null = null
+    cmd: string | null = null,
+    hostStorageRoot: string | null = null,
+    extraEnv: string[] = []
   ): string {
     const isKiwix = serviceName.toLowerCase().includes('kiwix')
-    const isVaultwarden = serviceName.toLowerCase().includes('vaultwarden')
 
     // 1. Build Ports List
     const portsList: string[] = []
@@ -753,20 +869,29 @@ export class PortainerService {
     const volumeMounts: string[] = []
     const declaredNamedVolumes = new Set<string>()
 
-    const rawBinds = config?.HostConfig?.Binds || []
-    if (rawBinds.length > 0) {
-      for (const bind of rawBinds) {
-        const parts = bind.split(':')
-        const targetPath = parts[1] || '/data'
-        const mode = parts[2] ? `:${parts[2]}` : ''
-        const cleanName =
-          targetPath
-            .replace(/^\//, '')
-            .replace(/[^a-zA-Z0-9_-]/g, '-')
-            .toLowerCase() || 'data'
-        const volName = `nomad-${serviceName}-${cleanName}`
-        volumeMounts.push(`- ${volName}:${targetPath}${mode}`)
-        declaredNamedVolumes.add(volName)
+    const rawBinds: string[] = config?.HostConfig?.Binds || []
+    const { binds: resolvedBinds, usesHostBinds } = this.rewriteBindsForHostStorage(
+      rawBinds,
+      hostStorageRoot
+    )
+
+    if (resolvedBinds.length > 0) {
+      for (const bind of resolvedBinds) {
+        if (usesHostBinds && bind.startsWith('/')) {
+          volumeMounts.push(`- ${bind}`)
+        } else {
+          const parts = bind.split(':')
+          const targetPath = parts[1] || '/data'
+          const mode = parts[2] ? `:${parts[2]}` : ''
+          const cleanName =
+            targetPath
+              .replace(/^\//, '')
+              .replace(/[^a-zA-Z0-9_-]/g, '-')
+              .toLowerCase() || 'data'
+          const volName = `nomad-${serviceName}-${cleanName}`
+          volumeMounts.push(`- ${volName}:${targetPath}${mode}`)
+          declaredNamedVolumes.add(volName)
+        }
       }
     } else {
       const defaultVol = `nomad-${serviceName}-data`
@@ -777,6 +902,7 @@ export class PortainerService {
     // 3. Environment Variables
     const envVars = [
       ...(config?.Env || []),
+      ...extraEnv,
       'LANG=pt_BR.UTF-8',
       'LC_ALL=pt_BR.UTF-8',
       'TZ=America/Sao_Paulo',
@@ -784,83 +910,24 @@ export class PortainerService {
 
     const portsBlock = portsList.map((p) => `      - ${p}`).join('\n')
     const volumesBlock = volumeMounts.map((v) => `      ${v}`).join('\n')
-    const envBlock = envVars.map((e) => `      - ${e}`).join('\n')
-    const cmdBlock = cmd ? `    command: ${cmd}\n` : ''
-    const namedVolumesBlock = Array.from(declaredNamedVolumes)
-      .map((v) => `  ${v}:`)
-      .join('\n')
+    const envBlock = envVars.map((e) => `      - ${JSON.stringify(e)}`).join('\n')
+    const userLine = config?.User ? `    user: "${config.User}"\n` : ''
 
-    // 4. Special Handlers for Services needing bootstrap init
+    let cmdBlock = ''
     if (isKiwix) {
-      return `version: '3.8'
-
-services:
-  init-library:
-    image: alpine:latest
-    container_name: nomad-kiwix-init
-    restart: "no"
-    volumes:
-      - nomad-${serviceName}-data:/data
-    command: >
-      sh -c "if [ ! -f /data/kiwix-library.xml ]; then
-               echo '<?xml version=\\"1.0\\" encoding=\\"UTF-8\\"?><library version=\\"20110515\\"/>' > /data/kiwix-library.xml;
-             fi"
-
-  ${serviceName}:
-    image: ${image}
-    container_name: nomad-${serviceName}
-    restart: unless-stopped
-    depends_on:
-      init-library:
-        condition: service_completed_successfully
-    ports:
-${portsBlock}
-    volumes:
-${volumesBlock}
-    command: ["--library", "/data/kiwix-library.xml", "--monitorLibrary", "--address=0.0.0.0"]
-
-volumes:
-${namedVolumesBlock}
-`
+      cmdBlock = `    command: ["--library", "/data/kiwix-library.xml", "--monitorLibrary", "--address=all"]\n`
+    } else if (cmd && cmd.trim()) {
+      const parts = cmd.trim().split(/\s+/).map((s) => JSON.stringify(s))
+      cmdBlock = `    command: [${parts.join(', ')}]\n`
     }
 
-    if (isVaultwarden) {
-      return `version: '3.8'
+    const topLevelVolumesBlock =
+      declaredNamedVolumes.size > 0
+        ? `\nvolumes:\n${Array.from(declaredNamedVolumes)
+            .map((v) => `  ${v}:`)
+            .join('\n')}\n`
+        : ''
 
-services:
-  init-ssl:
-    image: alpine:latest
-    container_name: nomad-vaultwarden-init
-    restart: "no"
-    volumes:
-      - nomad-${serviceName}-data:/data
-    command: >
-      sh -c "apk add --no-cache openssl >/dev/null 2>&1;
-             if [ ! -f /data/cert.pem ] || [ ! -f /data/key.pem ]; then
-               openssl req -x509 -newkey rsa:2048 -nodes -keyout /data/key.pem -out /data/cert.pem -days 3650 -subj '/CN=vaultwarden';
-               chmod 600 /data/key.pem;
-             fi"
-
-  ${serviceName}:
-    image: ${image}
-    container_name: nomad-${serviceName}
-    restart: unless-stopped
-    depends_on:
-      init-ssl:
-        condition: service_completed_successfully
-    ports:
-${portsBlock}
-    volumes:
-${volumesBlock}
-    environment:
-${envBlock}
-
-volumes:
-${namedVolumesBlock}
-`
-    }
-
-    // Default compose for all other standard catalog apps
     return `version: '3.8'
 
 services:
@@ -868,36 +935,257 @@ services:
     image: ${image}
     container_name: nomad-${serviceName}
     restart: unless-stopped
-    ports:
+${userLine}    ports:
 ${portsBlock}
     volumes:
 ${volumesBlock}
     environment:
 ${envBlock}
-${cmdBlock}volumes:
-${namedVolumesBlock}
-`
+${cmdBlock}${topLevelVolumesBlock}`
+  }
+
+  /**
+   * Inspect the Portainer endpoint's containers to check if `nomad_admin` runs on the same
+   * Docker daemon. If so, returns the host path backing `/app/storage` (e.g. `/opt/project-nomad/storage`).
+   */
+  private async detectEndpointHostStorageRoot(
+    client: AxiosInstance,
+    endpointId: number,
+    fallbackRoot?: string
+  ): Promise<string | null> {
+    try {
+      const listResp = await client
+        .get(`/api/endpoints/${endpointId}/docker/containers/json?all=1`, { timeout: 10000 })
+        .catch(() => null)
+      const containers: any[] = Array.isArray(listResp?.data) ? listResp.data : []
+      const adminCont = containers.find((c: any) =>
+        c.Names?.some((n: string) => n === '/nomad_admin' || n.includes('nomad_admin'))
+      )
+      if (!adminCont) {
+        return null
+      }
+      const inspectResp = await client
+        .get(`/api/endpoints/${endpointId}/docker/containers/${adminCont.Id}/json`, {
+          timeout: 8000,
+        })
+        .catch(() => null)
+      const mounts: any[] = inspectResp?.data?.Mounts || []
+      const storageMount = mounts.find(
+        (m: any) => m.Type === 'bind' && m.Destination === '/app/storage'
+      )
+      if (storageMount?.Source) {
+        return storageMount.Source
+      }
+      return fallbackRoot || '/opt/project-nomad/storage'
+    } catch {
+      return fallbackRoot || null
+    }
+  }
+
+  /**
+   * Resolve all candidate Portainer endpoint IDs (active endpoints from `/api/endpoints` + configured ID).
+   */
+  private async resolveCandidateEndpointIds(
+    client: AxiosInstance,
+    defaultEndpointId: number
+  ): Promise<number[]> {
+    const ids = new Set<number>([defaultEndpointId, 1])
+    try {
+      const epResp = await client.get('/api/endpoints', { timeout: 8000 }).catch(() => null)
+      let endpoints: any[] = []
+      if (Array.isArray(epResp?.data)) {
+        endpoints = epResp.data
+      } else if (epResp?.data && Array.isArray(epResp.data.values)) {
+        endpoints = epResp.data.values
+      }
+      for (const ep of endpoints) {
+        if (typeof ep?.Id === 'number' && ep.Id > 0) {
+          ids.add(ep.Id)
+        }
+      }
+    } catch {}
+    return Array.from(ids)
+  }
+
+  /**
+   * Clean up any existing Portainer stack AND any conflicting containers for `serviceName`
+   * before deploying or when uninstalling, preventing Docker `409 Conflict` and ensuring
+   * complete removal from Portainer.
+   */
+  private async cleanupBeforeRemoteDeploy(
+    client: AxiosInstance,
+    endpointId: number,
+    serviceName: string,
+    stackName: string
+  ): Promise<void> {
+    const lowerStack = stackName.toLowerCase()
+    const lowerService = serviceName.toLowerCase()
+    const altStack = `nomad-${lowerService.replace(/^nomad[-_]/, '')}`
+    const candidateEpIds = await this.resolveCandidateEndpointIds(client, endpointId)
+
+    const deleteMatchingStacks = async () => {
+      const stacksResp = await client.get('/api/stacks', { timeout: 10000 }).catch(() => null)
+      const stacks: any[] = Array.isArray(stacksResp?.data) ? stacksResp.data : []
+      for (const s of stacks) {
+        const sName = (s.Name || '').toLowerCase()
+        if (sName === lowerStack || sName === lowerService || sName === altStack) {
+          const sEpId = s.EndpointId || candidateEpIds[0] || endpointId
+          logger.info(
+            `[PortainerService] Removing Portainer stack ${s.Name} (ID ${s.Id}, endpoint ${sEpId})...`
+          )
+          await client
+            .delete(`/api/stacks/${s.Id}?endpointId=${sEpId}`, { timeout: 20000 })
+            .catch(async () => {
+              await client
+                .delete(`/api/stacks/${s.Id}?endpointId=${sEpId}&external=false`, { timeout: 15000 })
+                .catch(() => {})
+              await client
+                .delete(`/api/stacks/${s.Id}?endpointId=${sEpId}&external=true`, { timeout: 15000 })
+                .catch(() => {})
+            })
+        }
+      }
+    }
+
+    const deleteMatchingContainers = async () => {
+      const targetNames = new Set([
+        `/${lowerStack}`,
+        `/${lowerService}`,
+        `/${altStack}`,
+        ...(lowerService.includes('kiwix') ? ['/nomad-kiwix-init'] : []),
+        ...(lowerService.includes('vaultwarden') ? ['/nomad-vaultwarden-init'] : []),
+      ])
+
+      for (const epId of candidateEpIds) {
+        const listResp = await client
+          .get(`/api/endpoints/${epId}/docker/containers/json?all=1`, { timeout: 10000 })
+          .catch(() => null)
+        const containers: any[] = Array.isArray(listResp?.data) ? listResp.data : []
+
+        for (const c of containers) {
+          const cNames: string[] = (c.Names || []).map((n: string) => n.toLowerCase())
+          const proj = (c.Labels?.['com.docker.compose.project'] || '').toLowerCase()
+          const comSvc = (c.Labels?.['com.docker.compose.service'] || '').toLowerCase()
+          const isMatch =
+            cNames.some(
+              (n) =>
+                targetNames.has(n) ||
+                n.startsWith(`/${lowerStack}-`) ||
+                n.startsWith(`/${lowerStack}_`) ||
+                n.startsWith(`/${lowerService}-`) ||
+                n.startsWith(`/${lowerService}_`)
+            ) ||
+            proj === lowerStack ||
+            proj === lowerService ||
+            proj === altStack ||
+            comSvc === lowerService ||
+            comSvc === lowerStack
+
+          if (isMatch && c.Id) {
+            logger.info(
+              `[PortainerService] Removing container ${cNames.join(',')} (${c.Id.slice(0, 12)}) on endpoint ${epId}...`
+            )
+            await client
+              .post(`/api/endpoints/${epId}/docker/containers/${c.Id}/stop`, null, { timeout: 8000 })
+              .catch(() => {})
+            await client
+              .delete(`/api/endpoints/${epId}/docker/containers/${c.Id}?force=true&v=true`, {
+                timeout: 15000,
+              })
+              .catch(() => {})
+          }
+        }
+      }
+    }
+
+    try {
+      // 1. Delete stacks first
+      await deleteMatchingStacks()
+      await new Promise((r) => setTimeout(r, 600))
+      // 2. Force-remove any remaining containers (including stuck 'created' sidecars)
+      await deleteMatchingContainers()
+      await new Promise((r) => setTimeout(r, 400))
+      // 3. Second pass on stacks in case a stuck container prevented stack deletion on pass 1
+      await deleteMatchingStacks()
+    } catch (err: any) {
+      logger.warn(`[PortainerService] Cleanup warning for ${serviceName}: ${err?.message}`)
+    }
+  }
+
+  /**
+   * If deploying to a truly separate remote host (where host bind storage isn't shared with `nomad_admin`),
+   * initialize named volume `nomad-<serviceName>-data` via a temporary one-shot container that is
+   * immediately deleted before the stack is created.
+   */
+  private async initNamedVolumeIfRemoteOnly(
+    client: AxiosInstance,
+    endpointId: number,
+    serviceName: string
+  ): Promise<void> {
+    const isKiwix = serviceName.toLowerCase().includes('kiwix')
+    const isVaultwarden = serviceName.toLowerCase().includes('vaultwarden')
+    if (!isKiwix && !isVaultwarden) return
+
+    const initContName = `nomad-tmp-init-${Date.now()}`
+    const volName = `nomad-${serviceName}-data`
+    try {
+      await client
+        .post(`/api/endpoints/${endpointId}/docker/images/create?fromImage=alpine%3Alatest`, null, {
+          timeout: 60000,
+        })
+        .catch(() => {})
+
+      const shellCmd = isKiwix
+        ? 'if [ ! -f /data/kiwix-library.xml ]; then echo \'<?xml version="1.0" encoding="UTF-8"?><library version="20110515"/>\' > /data/kiwix-library.xml; fi'
+        : "apk add --no-cache openssl >/dev/null 2>&1; if [ ! -f /data/cert.pem ] || [ ! -f /data/key.pem ]; then openssl req -x509 -newkey rsa:2048 -nodes -keyout /data/key.pem -out /data/cert.pem -days 3650 -subj '/CN=vaultwarden'; chmod 600 /data/key.pem; fi"
+
+      const createResp = await client.post(
+        `/api/endpoints/${endpointId}/docker/containers/create?name=${initContName}`,
+        {
+          Image: 'alpine:latest',
+          Cmd: ['sh', '-c', shellCmd],
+          HostConfig: {
+            Binds: [`${volName}:/data`],
+          },
+        },
+        { timeout: 15000 }
+      )
+      const cid = createResp.data?.Id
+      if (cid) {
+        await client.post(`/api/endpoints/${endpointId}/docker/containers/${cid}/start`, null, {
+          timeout: 15000,
+        })
+        await new Promise((r) => setTimeout(r, 3000))
+        await client
+          .delete(`/api/endpoints/${endpointId}/docker/containers/${cid}?force=true`, {
+            timeout: 10000,
+          })
+          .catch(() => {})
+      }
+    } catch (err: any) {
+      logger.debug(`[PortainerService] Remote volume init skipped/failed: ${err?.message}`)
+    }
   }
 
   /**
    * Deploy a NOMAD service to remote Portainer.
    * Validates API authentication upfront so failures give immediate actionable feedback.
    */
-  public async deployService(serviceName: string): Promise<{ success: boolean; message: string }> {
+  public async deployService(
+    serviceName: string,
+    preinstall?: { hostStorageRoot?: string; extraEnv?: string[] }
+  ): Promise<{ success: boolean; message: string }> {
     const service = await Service.query().where('service_name', serviceName).first()
     if (!service) {
       return { success: false, message: `Serviço "${serviceName}" não encontrado no catálogo.` }
-    }
-
-    if (service.installed) {
-      return { success: false, message: `Serviço "${serviceName}" já está instalado.` }
     }
 
     const hostIp = (await this.getTargetHost()) || PortainerService.DEFAULT_TARGET_HOST
     const apiKey = await this.getApiKey()
 
     if (!apiKey) {
-      const err = 'Chave de API do Portainer não configurada. Acesse Configurações > Servidores e informe o token de acesso (API Key) para permitir instalações remotas.'
+      const err =
+        'Chave de API do Portainer não configurada. Acesse Configurações > Servidores e informe o token de acesso (API Key) para permitir instalações remotas.'
       this.broadcast(serviceName, 'error', err)
       service.installation_status = 'error'
       await service.save()
@@ -940,14 +1228,21 @@ ${namedVolumesBlock}
     await service.save()
 
     // Execute remote deploy asynchronously
-    this.executeRemoteDeploy(service, config, hostPort, hostIp, client, apiKey, endpointId).catch(
-      async (err) => {
-        logger.error(`Remote deploy error for ${serviceName}: ${err.message}`)
-        service.installation_status = 'error'
-        await service.save()
-        this.broadcast(serviceName, 'error', `Falha na instalação remota: ${err.message}`)
-      }
-    )
+    this.executeRemoteDeploy(
+      service,
+      config,
+      hostPort,
+      hostIp,
+      client,
+      apiKey,
+      endpointId,
+      preinstall
+    ).catch(async (err) => {
+      logger.error(`Remote deploy error for ${serviceName}: ${err.message}`)
+      service.installation_status = 'error'
+      await service.save()
+      this.broadcast(serviceName, 'error', `Falha na instalação remota: ${err.message}`)
+    })
 
     return {
       success: true,
@@ -962,11 +1257,14 @@ ${namedVolumesBlock}
     hostIp: string,
     client: AxiosInstance,
     _apiKey: string,
-    endpointId: number
+    endpointId: number,
+    preinstall?: { hostStorageRoot?: string; extraEnv?: string[] }
   ): Promise<void> {
     const serviceName = service.service_name
-    const targetUrl = `http://${hostIp}:${hostPort}`
+    const scheme = /^https:/i.test(service.ui_location || '') ? 'https' : 'http'
+    const targetUrl = `${scheme}://${hostIp}:${hostPort}`
     const stackName = `nomad-${serviceName}`
+    const extraEnv = preinstall?.extraEnv || []
 
     try {
       // 1. Resolve real active endpointId if available
@@ -984,7 +1282,26 @@ ${namedVolumesBlock}
         }
       } catch {}
 
-      // 2. Resolve internal port
+      // 2. Clean up any existing conflicting containers or broken stacks BEFORE deploying
+      this.broadcast(
+        serviceName,
+        'initializing',
+        `Limpando contêineres ou stacks anteriores de ${stackName} no Portainer...`
+      )
+      await this.cleanupBeforeRemoteDeploy(client, endpointId, serviceName, stackName)
+
+      // 3. Detect if Portainer shares the same Docker host as NOMAD (to bind-mount real ZIM/data folders)
+      const endpointStorageRoot = await this.detectEndpointHostStorageRoot(
+        client,
+        endpointId,
+        preinstall?.hostStorageRoot
+      )
+
+      if (!endpointStorageRoot) {
+        await this.initNamedVolumeIfRemoteOnly(client, endpointId, serviceName)
+      }
+
+      // 4. Resolve internal port
       let internalPort = '8080'
       if (config?.HostConfig?.PortBindings) {
         const keys = Object.keys(config.HostConfig.PortBindings)
@@ -1000,70 +1317,65 @@ ${namedVolumesBlock}
 
       const envVars = [
         ...(config?.Env || []),
+        ...extraEnv,
         'LANG=pt_BR.UTF-8',
         'LC_ALL=pt_BR.UTF-8',
         'TZ=America/Sao_Paulo',
       ]
 
+      // 5. Pull Docker image on Portainer endpoint first so stack creation doesn't time out
       this.broadcast(
         serviceName,
         'pulling',
-        `Preparando stack ${stackName} e imagem ${service.container_image} no Portainer...`
+        `Baixando imagem ${service.container_image} no Portainer...`
       )
+      await client
+        .post(
+          `/api/endpoints/${endpointId}/docker/images/create?fromImage=${encodeURIComponent(service.container_image)}`,
+          null,
+          { timeout: 300000 }
+        )
+        .catch(() => {})
 
-      // 3. Build Docker Compose configuration
+      // 6. Build clean single-service Docker Compose configuration
       const composeContent = this.buildComposeFile(
         serviceName,
         service.container_image,
         hostPort,
         config,
-        service.container_command
+        service.container_command,
+        endpointStorageRoot,
+        extraEnv
       )
 
-      // 4. Check if stack already exists in Portainer
+      // 7. Create fresh stack in Portainer
       this.broadcast(
         serviceName,
         'creating',
-        `Enviando Stack "${stackName}" para o Portainer...`
+        `Implantando Stack "${stackName}" no Portainer...`
       )
 
       let deployedViaStack = false
-      const stacksResp = await client.get('/api/stacks', { timeout: 15000 }).catch(() => null)
-      const existingStack = (stacksResp?.data || []).find(
-        (s: any) => s.Name?.toLowerCase() === stackName.toLowerCase()
-      )
-
       try {
-        if (existingStack?.Id) {
-          logger.info(`[PortainerService] Stack ${stackName} exists (ID ${existingStack.Id}). Updating...`)
-          await client.put(
-            `/api/stacks/${existingStack.Id}?endpointId=${endpointId}`,
-            {
-              stackFileContent: composeContent,
-              prune: false,
-            },
-            { timeout: 120000 }
-          )
-        } else {
-          logger.info(`[PortainerService] Creating standalone stack ${stackName}...`)
-          await client.post(
-            `/api/stacks/create/standalone/string?endpointId=${endpointId}`,
-            {
-              name: stackName,
-              stackFileContent: composeContent,
-              env: [],
-            },
-            { timeout: 120000 }
-          )
-        }
+        logger.info(`[PortainerService] Creating standalone stack ${stackName}...`)
+        await client.post(
+          `/api/stacks/create/standalone/string?endpointId=${endpointId}`,
+          {
+            name: stackName,
+            stackFileContent: composeContent,
+            env: [],
+          },
+          { timeout: 120000 }
+        )
         deployedViaStack = true
       } catch (stackErr: any) {
         logger.warn(
-          `[PortainerService] Stacks API failed (${stackErr?.message}). Falling back to Docker Container API...`
+          `[PortainerService] Stacks API failed (${stackErr?.response?.data?.message || stackErr?.message}). Cleaning up partial stack and falling back to Docker Container API...`
         )
+        await this.cleanupBeforeRemoteDeploy(client, endpointId, serviceName, stackName)
       }
 
-      // 5. Fallback: If Stacks API was unavailable, deploy container directly via Docker Engine Proxy
+      // 8. Fallback: If Stacks API was unavailable, deploy container directly via Docker Engine Proxy
       if (!deployedViaStack) {
         this.broadcast(
           serviceName,
@@ -1071,31 +1383,38 @@ ${namedVolumesBlock}
           `Implantando contêiner ${stackName} via Docker Engine do Portainer...`
         )
 
-        // Pull image
-        await client
-          .post(
-            `/api/endpoints/${endpointId}/docker/images/create?fromImage=${encodeURIComponent(service.container_image)}`,
-            null,
-            { timeout: 300000 }
-          )
-          .catch(() => {})
+        const rawBinds: string[] = config?.HostConfig?.Binds || []
+        const { binds: resolvedBinds, usesHostBinds } = this.rewriteBindsForHostStorage(
+          rawBinds,
+          endpointStorageRoot
+        )
 
         const defaultBinds =
-          config?.HostConfig?.Binds && config.HostConfig.Binds.length > 0
-            ? config.HostConfig.Binds.map((b: string) => {
-                if (b.startsWith('/')) {
+          resolvedBinds.length > 0
+            ? resolvedBinds.map((b: string) => {
+                if (!usesHostBinds && b.startsWith('/')) {
                   const parts = b.split(':')
                   const targetPath = parts[1] || '/data'
-                  return `nomad-${serviceName}-data:${targetPath}`
+                  const mode = parts[2] ? `:${parts[2]}` : ''
+                  return `nomad-${serviceName}-data:${targetPath}${mode}`
                 }
                 return b
               })
             : [`nomad-${serviceName}-data:/data`]
 
+        const isKiwix = serviceName.toLowerCase().includes('kiwix')
+        const cmdArray = isKiwix
+          ? ['--library', '/data/kiwix-library.xml', '--monitorLibrary', '--address=all']
+          : service.container_command
+            ? service.container_command.trim().split(/\s+/)
+            : undefined
+
         const containerPayload: any = {
           Image: service.container_image,
           name: stackName,
           Env: envVars,
+          ...(config?.User ? { User: config.User } : {}),
+          ...(cmdArray ? { Cmd: cmdArray } : {}),
           ExposedPorts: {
             [`${internalPort}/tcp`]: {},
           },
@@ -1108,73 +1427,81 @@ ${namedVolumesBlock}
           },
         }
 
-        if (service.container_command) {
-          containerPayload.Cmd = service.container_command.split(' ')
-        }
-
-        let containerId: string | undefined
-        try {
-          const createResp = await client.post(
-            `/api/endpoints/${endpointId}/docker/containers/create?name=${stackName}`,
-            containerPayload,
-            { timeout: 30000 }
-          )
-          containerId = createResp.data?.Id
-        } catch (createErr: any) {
-          if (createErr.response?.status === 409) {
-            const listResp = await client.get(`/api/endpoints/${endpointId}/docker/containers/json?all=1`, { timeout: 15000 })
-            const existing = (listResp.data || []).find((c: any) =>
-              c.Names?.some((n: string) => n.includes(stackName))
-            )
-            if (existing?.Id) {
-              await client.delete(`/api/endpoints/${endpointId}/docker/containers/${existing.Id}?force=true`, { timeout: 30000 }).catch(() => {})
-              const retryResp = await client.post(
-                `/api/endpoints/${endpointId}/docker/containers/create?name=${stackName}`,
-                containerPayload,
-                { timeout: 30000 }
-              )
-              containerId = retryResp.data?.Id
-            }
-          } else {
-            throw createErr
-          }
-        }
+        const createResp = await client.post(
+          `/api/endpoints/${endpointId}/docker/containers/create?name=${stackName}`,
+          containerPayload,
+          { timeout: 30000 }
+        )
+        const containerId = createResp.data?.Id
 
         if (containerId) {
           this.broadcast(serviceName, 'starting', `Iniciando contêiner no servidor Portainer...`)
-          await client.post(`/api/endpoints/${endpointId}/docker/containers/${containerId}/start`, null, { timeout: 30000 })
+          await client.post(
+            `/api/endpoints/${endpointId}/docker/containers/${containerId}/start`,
+            null,
+            { timeout: 30000 }
+          )
         }
       }
 
-      // 6. Verification: Check that the container is actually running
+      // 9. Verification: Check that the main container is actually running
       this.broadcast(serviceName, 'starting', `Verificando saúde do serviço no Portainer...`)
-      await new Promise((r) => setTimeout(r, 4000))
+      await new Promise((r) => setTimeout(r, 3500))
 
       const verifyResp = await client
         .get(`/api/endpoints/${endpointId}/docker/containers/json?all=1`, { timeout: 15000 })
         .catch(() => null)
 
-      const runningCont = (verifyResp?.data || []).find((c: any) =>
-        c.Names?.some((n: string) => n.includes(stackName) || n.includes(serviceName))
+      const runningCont = (verifyResp?.data || []).find(
+        (c: any) =>
+          !c.Names?.some((n: string) => n.endsWith('-init')) &&
+          c.Names?.some(
+            (n: string) =>
+              n.toLowerCase() === `/${stackName.toLowerCase()}` ||
+              n.toLowerCase() === `/${serviceName.toLowerCase()}` ||
+              n.toLowerCase().includes(stackName.toLowerCase())
+          )
       )
 
-      if (runningCont && runningCont.State !== 'running') {
-        let logs = ''
-        try {
-          const logsResp = await client.get(
-            `/api/endpoints/${endpointId}/docker/containers/${runningCont.Id}/logs?stderr=1&stdout=1&tail=20`,
-            { timeout: 10000 }
-          )
-          logs = typeof logsResp?.data === 'string' ? logsResp.data : ''
-        } catch {}
-        throw new Error(`Contêiner parou após iniciar. ${logs ? `Logs: ${logs.slice(0, 150)}` : ''}`)
+      if (!runningCont) {
+        throw new Error(`O contêiner ${stackName} não foi encontrado após a implantação no Portainer.`)
       }
 
-      // 7. Mark as installed and linked to remote server
+      if (runningCont.State !== 'running') {
+        // Attempt to start it once if it was left in 'created' state
+        await client
+          .post(`/api/endpoints/${endpointId}/docker/containers/${runningCont.Id}/start`, null, {
+            timeout: 15000,
+          })
+          .catch(() => {})
+        await new Promise((r) => setTimeout(r, 2500))
+
+        const recheckResp = await client
+          .get(`/api/endpoints/${endpointId}/docker/containers/${runningCont.Id}/json`, {
+            timeout: 10000,
+          })
+          .catch(() => null)
+
+        if (!recheckResp?.data?.State?.Running) {
+          let logs = ''
+          try {
+            const logsResp = await client.get(
+              `/api/endpoints/${endpointId}/docker/containers/${runningCont.Id}/logs?stderr=1&stdout=1&tail=20`,
+              { timeout: 10000 }
+            )
+            logs = typeof logsResp?.data === 'string' ? logsResp.data : ''
+          } catch {}
+          await this.cleanupBeforeRemoteDeploy(client, endpointId, serviceName, stackName)
+          throw new Error(
+            `Contêiner parou após iniciar. ${logs ? `Logs: ${logs.replace(/[^\x20-\x7E\n]/g, '').slice(0, 200)}` : ''}`
+          )
+        }
+      }
+
+      // 10. Mark as installed and linked to remote server
       await this.markAsDeployedRemotely(serviceName)
       service.installed = true
       service.installation_status = 'idle'
-      service.ui_location = targetUrl
       service.custom_url = targetUrl
       await service.save()
 
@@ -1185,9 +1512,11 @@ ${namedVolumesBlock}
       )
     } catch (apiErr: any) {
       logger.error(`Portainer remote deploy failed for ${serviceName}: ${apiErr.message}`)
-      this.broadcast(serviceName, 'error', `Falha ao implantar no Portainer: ${apiErr.message}`)
+      await this.unmarkDeployedRemotely(serviceName)
+      service.installed = false
       service.installation_status = 'error'
       await service.save()
+      this.broadcast(serviceName, 'error', `Falha ao implantar no Portainer: ${apiErr.message}`)
     }
   }
 
@@ -1206,26 +1535,14 @@ ${namedVolumesBlock}
 
     if (apiKey) {
       try {
-        // 1. Try deleting stack if it exists
-        const stacksResp = await client.get('/api/stacks', { timeout: 15000 }).catch(() => null)
-        const existingStack = (stacksResp?.data || []).find(
-          (s: any) => s.Name?.toLowerCase() === stackName.toLowerCase()
-        )
-        if (existingStack?.Id) {
-          await client.delete(`/api/stacks/${existingStack.Id}?endpointId=${endpointId}`, { timeout: 30000 }).catch(() => {})
-        }
-
-        // 2. Also remove direct container if lingering
-        const listResp = await client.get(`/api/endpoints/${endpointId}/docker/containers/json?all=1`, { timeout: 15000 })
-        const existing = (listResp.data || []).find((c: any) =>
-          c.Names?.some((n: string) => n.includes(stackName) || n.includes(`/${serviceName}`))
-        )
-        if (existing?.Id) {
-          await client.post(`/api/endpoints/${endpointId}/docker/containers/${existing.Id}/stop`, null, { timeout: 15000 }).catch(() => {})
-          await client.delete(`/api/endpoints/${endpointId}/docker/containers/${existing.Id}?force=true`, { timeout: 15000 }).catch(() => {})
-        }
+        await this.cleanupBeforeRemoteDeploy(client, endpointId, serviceName, stackName)
         if (removeImage && service.container_image) {
-          await client.delete(`/api/endpoints/${endpointId}/docker/images/${encodeURIComponent(service.container_image)}?force=true`, { timeout: 15000 }).catch(() => {})
+          await client
+            .delete(
+              `/api/endpoints/${endpointId}/docker/images/${encodeURIComponent(service.container_image)}?force=true`,
+              { timeout: 15000 }
+            )
+            .catch(() => {})
         }
       } catch (err: any) {
         logger.warn(`[PortainerService] Undeploy remote container error: ${err.message}`)
@@ -1238,8 +1555,15 @@ ${namedVolumesBlock}
     service.custom_url = null
     await service.save()
 
-    this.broadcast(serviceName, 'uninstalled', `Serviço ${service.friendly_name || serviceName} desinstalado do servidor remoto.`)
-    return { success: true, message: `Serviço ${service.friendly_name || serviceName} desinstalado com sucesso.` }
+    this.broadcast(
+      serviceName,
+      'uninstalled',
+      `Serviço ${service.friendly_name || serviceName} desinstalado do servidor remoto.`
+    )
+    return {
+      success: true,
+      message: `Serviço ${service.friendly_name || serviceName} desinstalado com sucesso.`,
+    }
   }
 
   public async affectRemoteContainer(
@@ -1255,26 +1579,53 @@ ${namedVolumesBlock}
     }
 
     try {
-      // 1. Try stack action if stack exists
+      // 1. Direct container action (works reliably for both Stack containers and standalone containers)
+      const listResp = await client
+        .get(`/api/endpoints/${endpointId}/docker/containers/json?all=1`, { timeout: 15000 })
+        .catch(() => null)
+      const existing = (listResp?.data || []).find(
+        (c: any) =>
+          !c.Names?.some((n: string) => n.endsWith('-init')) &&
+          c.Names?.some(
+            (n: string) =>
+              n.toLowerCase() === `/${stackName.toLowerCase()}` ||
+              n.toLowerCase() === `/${serviceName.toLowerCase()}` ||
+              n.toLowerCase().includes(stackName.toLowerCase())
+          )
+      )
+      if (existing?.Id) {
+        await client.post(
+          `/api/endpoints/${endpointId}/docker/containers/${existing.Id}/${action}`,
+          null,
+          { timeout: 30000 }
+        )
+        return {
+          success: true,
+          message: `Serviço ${serviceName} executou ${action} com sucesso no servidor Portainer.`,
+        }
+      }
+
+      // 2. Fallback to stack action if stack exists
       const stacksResp = await client.get('/api/stacks', { timeout: 15000 }).catch(() => null)
       const existingStack = (stacksResp?.data || []).find(
         (s: any) => s.Name?.toLowerCase() === stackName.toLowerCase()
       )
       if (existingStack?.Id && (action === 'start' || action === 'stop')) {
-        await client.post(`/api/stacks/${existingStack.Id}/${action}?endpointId=${endpointId}`, null, { timeout: 30000 })
-        return { success: true, message: `Stack ${stackName} executou ${action} com sucesso no Portainer.` }
+        await client.post(
+          `/api/stacks/${existingStack.Id}/${action}?endpointId=${endpointId}`,
+          null,
+          { timeout: 30000 }
+        )
+        return {
+          success: true,
+          message: `Stack ${stackName} executou ${action} com sucesso no Portainer.`,
+        }
       }
 
-      // 2. Direct container action
-      const listResp = await client.get(`/api/endpoints/${endpointId}/docker/containers/json?all=1`, { timeout: 15000 })
-      const existing = (listResp.data || []).find((c: any) =>
-        c.Names?.some((n: string) => n.includes(stackName) || n.includes(`/${serviceName}`))
-      )
-      if (!existing?.Id) {
-        return { success: false, message: `Contêiner nomad-${serviceName} não encontrado no Portainer.` }
+      return {
+        success: false,
+        message: `Contêiner ${stackName} não encontrado no Portainer.`,
       }
-      await client.post(`/api/endpoints/${endpointId}/docker/containers/${existing.Id}/${action}`, null, { timeout: 30000 })
-      return { success: true, message: `Serviço ${serviceName} executou ${action} com sucesso no servidor Portainer.` }
     } catch (err: any) {
       return { success: false, message: `Falha ao executar ${action} no Portainer: ${err.message}` }
     }
@@ -1338,42 +1689,31 @@ ${namedVolumesBlock}
         }
       } catch {}
 
+      const endpointStorageRoot = await this.detectEndpointHostStorageRoot(client, endpointId)
+
       // 2. Build updated compose definition
       const composeContent = this.buildComposeFile(
         serviceName,
         newImage,
         hostPort,
         config,
-        service.container_command
+        service.container_command,
+        endpointStorageRoot
       )
 
-      // 3. Update stack in Portainer
-      const stacksResp = await client.get('/api/stacks', { timeout: 15000 }).catch(() => null)
-      const existingStack = (stacksResp?.data || []).find(
-        (s: any) => s.Name?.toLowerCase() === stackName.toLowerCase()
-      )
+      // 3. Clean up old stack/containers and recreate stack in Portainer
+      this.broadcast(serviceName, 'recreating', `Atualizando Stack ${stackName} no Portainer...`)
+      await this.cleanupBeforeRemoteDeploy(client, endpointId, serviceName, stackName)
 
-      if (existingStack?.Id) {
-        this.broadcast(serviceName, 'recreating', `Atualizando Stack ${stackName} no Portainer...`)
-        await client.put(
-          `/api/stacks/${existingStack.Id}?endpointId=${endpointId}`,
-          {
-            stackFileContent: composeContent,
-            prune: false,
-          },
-          { timeout: 120000 }
-        )
-      } else {
-        await client.post(
-          `/api/stacks/create/standalone/string?endpointId=${endpointId}`,
-          {
-            name: stackName,
-            stackFileContent: composeContent,
-            env: [],
-          },
-          { timeout: 120000 }
-        )
-      }
+      await client.post(
+        `/api/stacks/create/standalone/string?endpointId=${endpointId}`,
+        {
+          name: stackName,
+          stackFileContent: composeContent,
+          env: [],
+        },
+        { timeout: 120000 }
+      )
 
       // 4. Verify health
       await new Promise((r) => setTimeout(r, 4000))

@@ -311,7 +311,21 @@ export default function SupplyDepotPage(props: {
     const result = await api.forceReinstallService(service.service_name)
     setModal(null)
     setLoading(false)
-    if (!result?.success) showError(result?.message || 'Falha ao iniciar a reinstalação.')
+    if (!result?.success) {
+      showError(result?.message || 'Falha ao iniciar a reinstalação.')
+    } else {
+      setServices((prev) =>
+        prev.map((s) =>
+          s.service_name === service.service_name
+            ? { ...s, installation_status: 'installing' }
+            : s
+        )
+      )
+      addNotification({
+        message: result.message || `Reinstalação de ${service.friendly_name} iniciada!`,
+        type: 'success',
+      })
+    }
   }
 
   async function handleDelete(service: ServiceSlim) {

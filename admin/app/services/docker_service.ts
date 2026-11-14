@@ -101,8 +101,7 @@ export class DockerService {
         }
       }
 
-      const containers = await this.docker.listContainers({ all: true })
-      const container = containers.find((c) => c.Names.includes(`/${serviceName}`))
+      const container = await this._findContainerByName(serviceName)
       if (!container) {
         return {
           success: false,
@@ -207,9 +206,18 @@ export class DockerService {
       const containers = await this.docker.listContainers({ all: true })
       const containerMap = new Map<string, Docker.ContainerInfo>()
       containers.forEach((container) => {
-        const name = container.Names[0]?.replace('/', '')
-        if (name && name.startsWith('nomad_')) {
-          containerMap.set(name, container)
+        for (const raw of container.Names || []) {
+          const clean = raw.replace(/^\//, '')
+          if (!clean || clean.endsWith('-init')) continue
+          const normalized = clean.startsWith('nomad-nomad_')
+            ? clean.replace(/^nomad-/, '')
+            : clean
+          if (normalized.startsWith('nomad_')) {
+            const prev = containerMap.get(normalized)
+            if (!prev || container.State === 'running') {
+              containerMap.set(normalized, container)
+            }
+          }
         }
       })
 
@@ -293,14 +301,19 @@ export class DockerService {
     }
 
     if (service.installed) {
-      return {
-        success: false,
-        message: `Service ${serviceName} is already installed`,
+      const existingCont = await this._findContainerByName(serviceName)
+      if (existingCont && existingCont.State === 'running') {
+        return {
+          success: false,
+          message: `Service ${serviceName} is already installed`,
+        }
       }
+      service.installed = false
+      await service.save()
     }
 
     // Check if installation is already in progress (database-level)
-    if (service.installation_status === 'installing') {
+    if (service.installation_status === 'installing' && this.activeInstallations.has(serviceName)) {
       return {
         success: false,
         message: `Service ${serviceName} installation is already in progress`,
@@ -320,18 +333,10 @@ export class DockerService {
     service.installation_status = 'installing'
     await service.save()
 
-    // Check if a service wasn't marked as installed but has an existing container
-    // This can happen if the service was created but not properly installed
-    // or if the container was removed manually without updating the service status.
-    // if (await this._checkIfServiceContainerExists(serviceName)) {
-    //   const removeResult = await this._removeServiceContainer(serviceName);
-    //   if (!removeResult.success) {
-    //     return {
-    //       success: false,
-    //       message: `Failed to remove existing container for service ${serviceName}: ${removeResult.message}`,
-    //     };
-    //   }
-    // }
+    // Always clean up any leftover or stopped container with the same name before installing
+    if (await this._checkIfServiceContainerExists(serviceName)) {
+      await this._removeServiceContainer(serviceName).catch(() => {})
+    }
 
     const containerConfig = this._parseContainerConfig(service.container_config)
 
@@ -1010,10 +1015,43 @@ export class DockerService {
     }
   }
 
+  /**
+   * Run service-specific host storage pre-install preparation (e.g. seeding Kiwix ZIM/XML,
+   * Calibre metadata.db, Vaultwarden/MeshCore TLS certs, Jellyfin folders, Homebox pepper)
+   * and return the resolved host storage root + any runtime-generated environment variables.
+   * Used by both local Docker installs and Portainer stack deployments.
+   */
+  public async prepareServicePreinstall(
+    serviceName: string
+  ): Promise<{ hostStorageRoot: string; extraEnv: string[] }> {
+    const hostStorageRoot = await this._resolveHostStorageRoot()
+    const extraEnv: string[] = []
+
+    try {
+      if (serviceName === SERVICE_NAMES.KIWIX) {
+        await this._runPreinstallActions__KiwixServe()
+      } else if (serviceName === SERVICE_NAMES.CALIBREWEB) {
+        await this._runPreinstallActions__CalibreWeb()
+      } else if (serviceName === SERVICE_NAMES.VAULTWARDEN) {
+        await this._runPreinstallActions__Vaultwarden()
+      } else if (serviceName === SERVICE_NAMES.JELLYFIN) {
+        await this._runPreinstallActions__Jellyfin()
+      } else if (serviceName === SERVICE_NAMES.MESHCORE_WEB) {
+        await this._runPreinstallActions__MeshCoreWeb()
+      } else if (serviceName === SERVICE_NAMES.HOMEBOX) {
+        extraEnv.push(`HBOX_AUTH_API_KEY_PEPPER=${await this._resolveHomeboxPepper()}`)
+      }
+    } catch (err: any) {
+      logger.warn(`[DockerService] prepareServicePreinstall warning for ${serviceName}: ${err?.message}`)
+    }
+
+    return { hostStorageRoot, extraEnv }
+  }
+
   async _checkIfServiceContainerExists(serviceName: string): Promise<boolean> {
     try {
-      const containers = await this.docker.listContainers({ all: true })
-      return containers.some((container) => container.Names.includes(`/${serviceName}`))
+      const container = await this._findContainerByName(serviceName)
+      return Boolean(container)
     } catch (error: any) {
       logger.error(`Error checking if service container exists: ${error.message}`)
       return false
@@ -1024,14 +1062,40 @@ export class DockerService {
     serviceName: string
   ): Promise<{ success: boolean; message: string }> {
     try {
+      const lowerService = serviceName.toLowerCase()
+      const lowerStack = `nomad-${lowerService}`
       const containers = await this.docker.listContainers({ all: true })
-      const container = containers.find((c) => c.Names.includes(`/${serviceName}`))
-      if (!container) {
+      const matching = containers.filter((c) => {
+        const cNames = (c.Names || []).map((n) => n.toLowerCase())
+        const proj = (c.Labels?.['com.docker.compose.project'] || '').toLowerCase()
+        const comSvc = (c.Labels?.['com.docker.compose.service'] || '').toLowerCase()
+        return (
+          cNames.some(
+            (n) =>
+              n === `/${lowerService}` ||
+              n === `/${lowerStack}` ||
+              n.startsWith(`/${lowerStack}-`) ||
+              n.startsWith(`/${lowerService}-`) ||
+              (lowerService.includes('kiwix') && (n === '/nomad-kiwix-init' || n.includes('kiwix-init'))) ||
+              (lowerService.includes('vaultwarden') &&
+                (n === '/nomad-vaultwarden-init' || n.includes('vaultwarden-init')))
+          ) ||
+          proj === lowerStack ||
+          proj === lowerService ||
+          comSvc === lowerService
+        )
+      })
+      if (matching.length === 0) {
         return { success: false, message: `Container for service ${serviceName} not found` }
       }
 
-      const dockerContainer = this.docker.getContainer(container.Id)
-      await dockerContainer.remove({ force: true })
+      for (const c of matching) {
+        const dockerContainer = this.docker.getContainer(c.Id)
+        if (c.State === 'running') {
+          await dockerContainer.stop({ t: 5 }).catch(() => {})
+        }
+        await dockerContainer.remove({ force: true, v: true }).catch(() => {})
+      }
 
       return { success: true, message: `Service ${serviceName} container removed successfully` }
     } catch (error: any) {
@@ -2147,15 +2211,12 @@ export class DockerService {
     removeImage = false
   ): Promise<{ success: boolean; message: string }> {
     try {
-      const containers = await this.docker.listContainers({ all: true })
-      const container = containers.find((c) => c.Names.includes(`/${serviceName}`))
+      const container = await this._findContainerByName(serviceName)
+      const imageRef = container?.Image
 
-      if (!container) return { success: true, message: 'No container found — nothing to remove' }
-
-      const imageRef = container.Image
-      const c = this.docker.getContainer(container.Id)
-      if (container.State === 'running') await c.stop()
-      await c.remove({ force: true })
+      // Always invoke _removeServiceContainer even when _findContainerByName is null,
+      // so orphaned sidecars (e.g. /nomad-kiwix-init) or compose project containers are removed too.
+      await this._removeServiceContainer(serviceName)
 
       if (removeImage && imageRef) {
         try {
@@ -2185,8 +2246,8 @@ export class DockerService {
     removeImage = false
   ): Promise<{ success: boolean; message: string }> {
     const service = await Service.query().where('service_name', serviceName).first()
-    if (!service || !service.installed) {
-      return { success: false, message: `Service ${serviceName} not found or not installed` }
+    if (!service) {
+      return { success: false, message: `Service ${serviceName} not found` }
     }
 
     // Container/image removal is shared with custom-app deletion — the lookup is by container
@@ -2196,16 +2257,21 @@ export class DockerService {
 
     service.installed = false
     service.installation_status = 'idle'
+    service.custom_url = null
     await service.save()
     this.invalidateServicesStatusCache()
 
-    return { success: true, message: `Service ${serviceName} uninstalled` }
+    return { success: true, message: `Serviço ${service.friendly_name || serviceName} desinstalado com sucesso.` }
   }
 
-  /** Find a container by its managed service name (`/serviceName`), or null. */
+  /** Find a container by its managed service name (`/serviceName` or `/nomad-serviceName`), or null. */
   private async _findContainerByName(serviceName: string) {
     const containers = await this.docker.listContainers({ all: true })
-    return containers.find((c) => c.Names.includes(`/${serviceName}`)) ?? null
+    return (
+      containers.find((c) => c.Names.includes(`/${serviceName}`)) ??
+      containers.find((c) => c.Names.includes(`/nomad-${serviceName}`)) ??
+      null
+    )
   }
 
   /**
