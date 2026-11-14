@@ -453,7 +453,14 @@ const BOOT_SCOPED_CSS = `
 `
 
 export default function TacticalBootGate({ children }: { children: React.ReactNode }) {
-  const { tacticalAuth } = usePage<{ tacticalAuth?: string | null }>().props
+  const { tacticalAuth, appVersion } = usePage<{
+    tacticalAuth?: string | null
+    appVersion?: string
+  }>().props
+  const displayVersion =
+    appVersion && appVersion !== '0.0.0' && appVersion !== 'dev'
+      ? `v${appVersion.replace(/^v/i, '').replace(/-nexus$/i, '')}`
+      : 'v1.0.16'
 
   const [stage, setStage] = useState<BootStage>(() => {
     if (hasBootedInCurrentDocument) return 'UNLOCKED'
@@ -1266,7 +1273,7 @@ export default function TacticalBootGate({ children }: { children: React.ReactNo
                   fontWeight: 'bold',
                 }}
               >
-                PROJETO N.O.M.A.D. OS v1.0.14
+                PROJETO N.O.M.A.D. OS {displayVersion}
               </div>
             </div>
 

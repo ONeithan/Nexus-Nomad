@@ -1,4 +1,7 @@
 import https from 'node:https'
+import os from 'node:os'
+import { readFile } from 'node:fs/promises'
+import { join } from 'node:path'
 import axios, { type AxiosInstance } from 'axios'
 import env from '#start/env'
 import logger from '@adonisjs/core/services/logger'
@@ -924,7 +927,7 @@ export class PortainerService {
     const topLevelVolumesBlock =
       declaredNamedVolumes.size > 0
         ? `\nvolumes:\n${Array.from(declaredNamedVolumes)
-            .map((v) => `  ${v}:`)
+            .map((v) => `  ${v}:\n    external: true`)
             .join('\n')}\n`
         : ''
 
@@ -958,27 +961,39 @@ ${cmdBlock}${topLevelVolumesBlock}`
         .get(`/api/endpoints/${endpointId}/docker/containers/json?all=1`, { timeout: 10000 })
         .catch(() => null)
       const containers: any[] = Array.isArray(listResp?.data) ? listResp.data : []
-      const adminCont = containers.find((c: any) =>
-        c.Names?.some((n: string) => n === '/nomad_admin' || n.includes('nomad_admin'))
-      )
-      if (!adminCont) {
-        return null
+      const selfHostname = os.hostname()
+
+      // Match by container ID (os.hostname inside Docker), known admin name, or any container mounting /app/storage
+      const adminCont =
+        containers.find((c: any) => selfHostname && c.Id?.startsWith(selfHostname)) ||
+        containers.find((c: any) =>
+          c.Names?.some(
+            (n: string) =>
+              n === '/nomad_admin' ||
+              n.includes('nomad_admin') ||
+              n.includes('nomad-admin')
+          )
+        )
+
+      if (adminCont) {
+        const inspectResp = await client
+          .get(`/api/endpoints/${endpointId}/docker/containers/${adminCont.Id}/json`, {
+            timeout: 8000,
+          })
+          .catch(() => null)
+        const mounts: any[] = inspectResp?.data?.Mounts || []
+        const storageMount = mounts.find(
+          (m: any) => m.Type === 'bind' && m.Destination === '/app/storage'
+        )
+        if (storageMount?.Source) {
+          return storageMount.Source
+        }
+        return fallbackRoot || '/opt/project-nomad/storage'
       }
-      const inspectResp = await client
-        .get(`/api/endpoints/${endpointId}/docker/containers/${adminCont.Id}/json`, {
-          timeout: 8000,
-        })
-        .catch(() => null)
-      const mounts: any[] = inspectResp?.data?.Mounts || []
-      const storageMount = mounts.find(
-        (m: any) => m.Type === 'bind' && m.Destination === '/app/storage'
-      )
-      if (storageMount?.Source) {
-        return storageMount.Source
-      }
-      return fallbackRoot || '/opt/project-nomad/storage'
+
+      return null
     } catch {
-      return fallbackRoot || null
+      return null
     }
   }
 
@@ -1113,31 +1128,157 @@ ${cmdBlock}${topLevelVolumesBlock}`
   }
 
   /**
-   * If deploying to a truly separate remote host (where host bind storage isn't shared with `nomad_admin`),
-   * initialize named volume `nomad-<serviceName>-data` via a temporary one-shot container that is
-   * immediately deleted before the stack is created.
+   * Build a minimal POSIX ustar tar archive in memory for a single file,
+   * used to upload bundled assets (e.g. ZIM sample, Calibre metadata.db)
+   * directly into a remote Portainer container volume via Docker Archive API.
+   */
+  private buildSingleFileTar(filename: string, content: Buffer): Buffer {
+    const header = Buffer.alloc(512, 0)
+    const nameBuf = Buffer.from(filename, 'utf8')
+    nameBuf.copy(header, 0, 0, Math.min(nameBuf.length, 100))
+    header.write('0000644\0', 100, 8, 'ascii')
+    header.write('0000000\0', 108, 8, 'ascii')
+    header.write('0000000\0', 116, 8, 'ascii')
+    header.write(content.length.toString(8).padStart(11, '0') + '\0', 124, 12, 'ascii')
+    header.write(Math.floor(Date.now() / 1000).toString(8).padStart(11, '0') + '\0', 136, 12, 'ascii')
+    header.fill(0x20, 148, 156) // checksum field as spaces
+    header.write('0', 156, 1, 'ascii') // regular file
+    header.write('ustar\0', 257, 6, 'ascii')
+    header.write('00', 263, 2, 'ascii')
+
+    let chksum = 0
+    for (let i = 0; i < 512; i++) chksum += header[i]
+    header.write(chksum.toString(8).padStart(6, '0') + '\0 ', 148, 8, 'ascii')
+
+    const padLen = (512 - (content.length % 512)) % 512
+    return Buffer.concat([header, content, Buffer.alloc(padLen, 0), Buffer.alloc(1024, 0)])
+  }
+
+  /**
+   * Ensure all named volumes required by `serviceName` exist on the remote Docker endpoint
+   * (so `external: true` in Compose never fails), and seed initial data/configs for apps
+   * that crash if their volume starts empty (Kiwix, Calibre-Web, Vaultwarden, MeshCore).
    */
   private async initNamedVolumeIfRemoteOnly(
     client: AxiosInstance,
     endpointId: number,
-    serviceName: string
+    serviceName: string,
+    config: any,
+    serviceImage: string
   ): Promise<void> {
-    const isKiwix = serviceName.toLowerCase().includes('kiwix')
-    const isVaultwarden = serviceName.toLowerCase().includes('vaultwarden')
-    if (!isKiwix && !isVaultwarden) return
+    const rawBinds: string[] = config?.HostConfig?.Binds || []
+    const volumeDefs: Array<{ volName: string; targetPath: string }> = []
 
+    if (rawBinds.length > 0) {
+      for (const bind of rawBinds) {
+        const parts = bind.split(':')
+        const targetPath = parts[1] || '/data'
+        const cleanName =
+          targetPath
+            .replace(/^\//, '')
+            .replace(/[^a-zA-Z0-9_-]/g, '-')
+            .toLowerCase() || 'data'
+        volumeDefs.push({ volName: `nomad-${serviceName}-${cleanName}`, targetPath })
+      }
+    } else {
+      volumeDefs.push({ volName: `nomad-${serviceName}-data`, targetPath: '/data' })
+    }
+
+    // 1. Explicitly create every named volume on the Portainer Docker endpoint
+    for (const v of volumeDefs) {
+      await client
+        .post(`/api/endpoints/${endpointId}/docker/volumes/create`, { Name: v.volName }, { timeout: 10000 })
+        .catch(() => {})
+    }
+
+    const lowerName = serviceName.toLowerCase()
+    const isKiwix = lowerName.includes('kiwix')
+    const isCalibre = lowerName.includes('calibre')
+    const isVaultwarden = lowerName.includes('vaultwarden')
+    const isMeshcore = lowerName.includes('meshcore')
+    if (!isKiwix && !isCalibre && !isVaultwarden && !isMeshcore) return
+
+    const primaryVol = volumeDefs[0]?.volName || `nomad-${serviceName}-data`
+    const primaryTarget = volumeDefs[0]?.targetPath || '/data'
     const initContName = `nomad-tmp-init-${Date.now()}`
-    const volName = `nomad-${serviceName}-data`
+
     try {
+      if (isKiwix) {
+        // Use the Kiwix image itself (already pulled) so `kiwix-manage` is available!
+        const initScript =
+          'if ! ls /data/*.zim >/dev/null 2>&1; then wget -q -O /data/wikipedia_en_100_mini_2026-01.zim "https://github.com/Crosstalk-Solutions/project-nomad/raw/refs/heads/main/install/wikipedia_en_100_mini_2026-01.zim" || true; fi; ' +
+          'if ls /data/*.zim >/dev/null 2>&1; then rm -f /data/kiwix-library.xml && kiwix-manage /data/kiwix-library.xml add /data/*.zim; fi; ' +
+          'if [ ! -s /data/kiwix-library.xml ]; then echo \'<?xml version="1.0" encoding="UTF-8"?><library version="20110515"/>\' > /data/kiwix-library.xml; fi'
+
+        const createResp = await client.post(
+          `/api/endpoints/${endpointId}/docker/containers/create?name=${initContName}`,
+          {
+            Image: serviceImage,
+            Entrypoint: ['sh', '-c'],
+            Cmd: [initScript],
+            HostConfig: {
+              Binds: [`${primaryVol}:/data`],
+            },
+          },
+          { timeout: 15000 }
+        )
+        const cid = createResp.data?.Id
+        if (cid) {
+          // Upload bundled ZIM directly into /data before starting so it works even 100% offline
+          try {
+            const zimFilename = 'wikipedia_en_100_mini_2026-01.zim'
+            const localAsset = join(process.cwd(), 'assets/kiwix', zimFilename)
+            const localStorage = join(process.cwd(), 'storage/zim', zimFilename)
+            let zimBuf: Buffer | null = null
+            try {
+              zimBuf = await readFile(localStorage)
+            } catch {
+              try {
+                zimBuf = await readFile(localAsset)
+              } catch {}
+            }
+            if (zimBuf) {
+              const tarBuf = this.buildSingleFileTar(zimFilename, zimBuf)
+              await client.put(
+                `/api/endpoints/${endpointId}/docker/containers/${cid}/archive?path=/data`,
+                tarBuf,
+                { headers: { 'Content-Type': 'application/x-tar' }, timeout: 60000 }
+              )
+            }
+          } catch (uploadErr: any) {
+            logger.debug(`[PortainerService] ZIM archive upload skipped: ${uploadErr?.message}`)
+          }
+
+          await client.post(`/api/endpoints/${endpointId}/docker/containers/${cid}/start`, null, {
+            timeout: 15000,
+          })
+          // Wait up to 45s for kiwix-manage to finish
+          for (let i = 0; i < 30; i++) {
+            await new Promise((r) => setTimeout(r, 1500))
+            const insp = await client
+              .get(`/api/endpoints/${endpointId}/docker/containers/${cid}/json`, { timeout: 8000 })
+              .catch(() => null)
+            if (insp?.data?.State?.Running === false) break
+          }
+          await client
+            .delete(`/api/endpoints/${endpointId}/docker/containers/${cid}?force=true`, { timeout: 10000 })
+            .catch(() => {})
+        }
+        return
+      }
+
+      // Alpine-based init for Calibre-Web / Vaultwarden / MeshCore
       await client
         .post(`/api/endpoints/${endpointId}/docker/images/create?fromImage=alpine%3Alatest`, null, {
           timeout: 60000,
         })
         .catch(() => {})
 
-      const shellCmd = isKiwix
-        ? 'if [ ! -f /data/kiwix-library.xml ]; then echo \'<?xml version="1.0" encoding="UTF-8"?><library version="20110515"/>\' > /data/kiwix-library.xml; fi'
-        : "apk add --no-cache openssl >/dev/null 2>&1; if [ ! -f /data/cert.pem ] || [ ! -f /data/key.pem ]; then openssl req -x509 -newkey rsa:2048 -nodes -keyout /data/key.pem -out /data/cert.pem -days 3650 -subj '/CN=vaultwarden'; chmod 600 /data/key.pem; fi"
+      const booksVol = volumeDefs.find((v) => v.targetPath === '/books')?.volName || primaryVol
+      const mountSpec = isCalibre ? `${booksVol}:/books` : `${primaryVol}:${primaryTarget}`
+      const shellCmd = isCalibre
+        ? 'chown -R 1000:1000 /books && chmod -R u+rwX /books'
+        : `apk add --no-cache openssl >/dev/null 2>&1; if [ ! -f ${primaryTarget}/cert.pem ] || [ ! -f ${primaryTarget}/key.pem ]; then openssl req -x509 -newkey rsa:2048 -nodes -keyout ${primaryTarget}/key.pem -out ${primaryTarget}/cert.pem -days 3650 -subj '/CN=${lowerName}'; chmod 644 ${primaryTarget}/cert.pem ${primaryTarget}/key.pem; fi`
 
       const createResp = await client.post(
         `/api/endpoints/${endpointId}/docker/containers/create?name=${initContName}`,
@@ -1145,21 +1286,37 @@ ${cmdBlock}${topLevelVolumesBlock}`
           Image: 'alpine:latest',
           Cmd: ['sh', '-c', shellCmd],
           HostConfig: {
-            Binds: [`${volName}:/data`],
+            Binds: [mountSpec],
           },
         },
         { timeout: 15000 }
       )
       const cid = createResp.data?.Id
       if (cid) {
+        if (isCalibre) {
+          try {
+            const dbBuf = await readFile(join(process.cwd(), 'assets/calibre/metadata.db'))
+            const tarBuf = this.buildSingleFileTar('metadata.db', dbBuf)
+            await client.put(
+              `/api/endpoints/${endpointId}/docker/containers/${cid}/archive?path=/books`,
+              tarBuf,
+              { headers: { 'Content-Type': 'application/x-tar' }, timeout: 30000 }
+            )
+          } catch {}
+        }
+
         await client.post(`/api/endpoints/${endpointId}/docker/containers/${cid}/start`, null, {
           timeout: 15000,
         })
-        await new Promise((r) => setTimeout(r, 3000))
+        for (let i = 0; i < 20; i++) {
+          await new Promise((r) => setTimeout(r, 1500))
+          const insp = await client
+            .get(`/api/endpoints/${endpointId}/docker/containers/${cid}/json`, { timeout: 8000 })
+            .catch(() => null)
+          if (insp?.data?.State?.Running === false) break
+        }
         await client
-          .delete(`/api/endpoints/${endpointId}/docker/containers/${cid}?force=true`, {
-            timeout: 10000,
-          })
+          .delete(`/api/endpoints/${endpointId}/docker/containers/${cid}?force=true`, { timeout: 10000 })
           .catch(() => {})
       }
     } catch (err: any) {
@@ -1286,22 +1443,11 @@ ${cmdBlock}${topLevelVolumesBlock}`
       this.broadcast(
         serviceName,
         'initializing',
-        `Limpando contêineres ou stacks anteriores de ${stackName} no Portainer...`
+        `[1/5] Limpando contêineres ou stacks anteriores de ${stackName} no Portainer...`
       )
       await this.cleanupBeforeRemoteDeploy(client, endpointId, serviceName, stackName)
 
-      // 3. Detect if Portainer shares the same Docker host as NOMAD (to bind-mount real ZIM/data folders)
-      const endpointStorageRoot = await this.detectEndpointHostStorageRoot(
-        client,
-        endpointId,
-        preinstall?.hostStorageRoot
-      )
-
-      if (!endpointStorageRoot) {
-        await this.initNamedVolumeIfRemoteOnly(client, endpointId, serviceName)
-      }
-
-      // 4. Resolve internal port
+      // 3. Resolve internal port & env
       let internalPort = '8080'
       if (config?.HostConfig?.PortBindings) {
         const keys = Object.keys(config.HostConfig.PortBindings)
@@ -1323,11 +1469,11 @@ ${cmdBlock}${topLevelVolumesBlock}`
         'TZ=America/Sao_Paulo',
       ]
 
-      // 5. Pull Docker image on Portainer endpoint first so stack creation doesn't time out
+      // 4. Pull Docker image on Portainer endpoint first so stack creation & volume init use it immediately
       this.broadcast(
         serviceName,
         'pulling',
-        `Baixando imagem ${service.container_image} no Portainer...`
+        `[2/5] Baixando imagem ${service.container_image} no Portainer...`
       )
       await client
         .post(
@@ -1336,6 +1482,28 @@ ${cmdBlock}${topLevelVolumesBlock}`
           { timeout: 300000 }
         )
         .catch(() => {})
+
+      // 5. Detect if Portainer shares the same Docker host as NOMAD; if remote-only, seed named volumes
+      this.broadcast(
+        serviceName,
+        'preinstall',
+        `[3/5] Preparando armazenamento e biblioteca de ${service.friendly_name || serviceName}...`
+      )
+      const endpointStorageRoot = await this.detectEndpointHostStorageRoot(
+        client,
+        endpointId,
+        preinstall?.hostStorageRoot
+      )
+
+      if (!endpointStorageRoot) {
+        await this.initNamedVolumeIfRemoteOnly(
+          client,
+          endpointId,
+          serviceName,
+          config,
+          service.container_image
+        )
+      }
 
       // 6. Build clean single-service Docker Compose configuration
       const composeContent = this.buildComposeFile(
@@ -1352,7 +1520,7 @@ ${cmdBlock}${topLevelVolumesBlock}`
       this.broadcast(
         serviceName,
         'creating',
-        `Implantando Stack "${stackName}" no Portainer...`
+        `[4/5] Implantando Stack "${stackName}" no Portainer...`
       )
 
       let deployedViaStack = false
@@ -1444,9 +1612,13 @@ ${cmdBlock}${topLevelVolumesBlock}`
         }
       }
 
-      // 9. Verification: Check that the main container is actually running
-      this.broadcast(serviceName, 'starting', `Verificando saúde do serviço no Portainer...`)
-      await new Promise((r) => setTimeout(r, 3500))
+      // 9. Verification: Check that the main container stays running without crash-looping (`restarting`)
+      this.broadcast(
+        serviceName,
+        'starting',
+        `[5/5] Verificando inicialização e saúde do serviço no Portainer...`
+      )
+      await new Promise((r) => setTimeout(r, 4500))
 
       const verifyResp = await client
         .get(`/api/endpoints/${endpointId}/docker/containers/json?all=1`, { timeout: 15000 })
@@ -1468,34 +1640,38 @@ ${cmdBlock}${topLevelVolumesBlock}`
       }
 
       if (runningCont.State !== 'running') {
-        // Attempt to start it once if it was left in 'created' state
         await client
           .post(`/api/endpoints/${endpointId}/docker/containers/${runningCont.Id}/start`, null, {
             timeout: 15000,
           })
           .catch(() => {})
         await new Promise((r) => setTimeout(r, 2500))
+      }
 
-        const recheckResp = await client
-          .get(`/api/endpoints/${endpointId}/docker/containers/${runningCont.Id}/json`, {
-            timeout: 10000,
-          })
-          .catch(() => null)
+      const inspectCheck = await client
+        .get(`/api/endpoints/${endpointId}/docker/containers/${runningCont.Id}/json`, {
+          timeout: 10000,
+        })
+        .catch(() => null)
 
-        if (!recheckResp?.data?.State?.Running) {
-          let logs = ''
-          try {
-            const logsResp = await client.get(
-              `/api/endpoints/${endpointId}/docker/containers/${runningCont.Id}/logs?stderr=1&stdout=1&tail=20`,
-              { timeout: 10000 }
-            )
-            logs = typeof logsResp?.data === 'string' ? logsResp.data : ''
-          } catch {}
-          await this.cleanupBeforeRemoteDeploy(client, endpointId, serviceName, stackName)
-          throw new Error(
-            `Contêiner parou após iniciar. ${logs ? `Logs: ${logs.replace(/[^\x20-\x7E\n]/g, '').slice(0, 200)}` : ''}`
+      const cState = inspectCheck?.data?.State
+      const restartCount = inspectCheck?.data?.RestartCount ?? 0
+      const isHealthyRunning =
+        Boolean(cState?.Running) && !cState?.Restarting && restartCount === 0
+
+      if (!isHealthyRunning) {
+        let logs = ''
+        try {
+          const logsResp = await client.get(
+            `/api/endpoints/${endpointId}/docker/containers/${runningCont.Id}/logs?stderr=1&stdout=1&tail=25`,
+            { timeout: 10000 }
           )
-        }
+          logs = typeof logsResp?.data === 'string' ? logsResp.data : ''
+        } catch {}
+        await this.cleanupBeforeRemoteDeploy(client, endpointId, serviceName, stackName)
+        throw new Error(
+          `Contêiner não permaneceu ativo (estado: ${cState?.Status || runningCont.State}, reinícios: ${restartCount}). ${logs ? `Logs: ${logs.replace(/[^\x20-\x7E\n]/g, '').slice(0, 220)}` : ''}`
+        )
       }
 
       // 10. Mark as installed and linked to remote server

@@ -253,6 +253,13 @@ export default function SupplyDepotPage(props: {
   const installedServices = filteredServices.filter((s) => s.installed)
   const availableServices = filteredServices.filter((s) => !s.installed)
 
+  const latestActivityByService = installActivity.reduce<Record<string, { message: string; type: string }>>((acc, item) => {
+    if (item.service_name) {
+      acc[item.service_name] = { message: item.message, type: item.type }
+    }
+    return acc
+  }, {})
+
   // Whether the new Kolibri (Gen 2) install exists — gates the "Migrate content to Gen 2" action on
   // the legacy Kolibri card. Computed from the full (unfiltered) list so a search filter can't hide it.
   const educationGen2Installed = services.some(
@@ -592,6 +599,7 @@ export default function SupplyDepotPage(props: {
                       onSetUrl={() => handleSetUrl(service)}
                       onUpdate={() => handleUpdate(service)}
                       onUpdateVersion={() => setModal({ type: 'update', service })}
+                      liveProgressMessage={latestActivityByService[service.service_name]?.message}
                       autoUpdateEnabled={
                         autoUpdateOverrides[service.service_name] ?? service.auto_update_enabled
                       }
@@ -629,6 +637,7 @@ export default function SupplyDepotPage(props: {
                       onSetUrl={() => handleSetUrl(service)}
                       onUpdate={() => handleUpdate(service)}
                       onUpdateVersion={() => setModal({ type: 'update', service })}
+                      liveProgressMessage={latestActivityByService[service.service_name]?.message}
                     />
                   ))}
                 </div>
@@ -999,6 +1008,7 @@ interface AppCardProps {
   onSetUrl: () => void
   onUpdate: () => void
   onUpdateVersion: () => void
+  liveProgressMessage?: string
   // Installed-only: per-app auto-update preference + toggle handler.
   autoUpdateEnabled?: boolean
   // Global master switch (Settings → Updates). When off, per-app toggles are inert.
@@ -1026,6 +1036,7 @@ function AppCard({
   onSetUrl,
   onUpdate,
   onUpdateVersion,
+  liveProgressMessage,
   autoUpdateEnabled,
   autoUpdateMasterEnabled,
   onToggleAutoUpdate,
@@ -1191,6 +1202,19 @@ function AppCard({
           </button>
         )}
       </div>
+
+      {/* Live installation progress banner inside card */}
+      {service.installation_status === 'installing' && (
+        <div className="mb-3 rounded-lg bg-desert-orange/10 border border-desert-orange/30 px-3 py-2 text-[11px] text-text-primary space-y-1.5">
+          <div className="flex items-center gap-2 font-medium text-desert-orange">
+            <span className="animate-spin inline-block w-3 h-3 border-2 border-desert-orange border-t-transparent rounded-full flex-shrink-0" />
+            <span className="truncate">{liveProgressMessage || 'Preparando instalação...'}</span>
+          </div>
+          <div className="w-full h-1 bg-surface-secondary rounded-full overflow-hidden">
+            <div className="h-full bg-desert-orange animate-pulse w-2/3 rounded-full" />
+          </div>
+        </div>
+      )}
 
       {/* Action buttons */}
       <div className="flex items-center gap-2">
