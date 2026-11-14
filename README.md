@@ -5,8 +5,8 @@
 ### Conhecimento Que Nunca Fica Offline
 
 [![Idioma](https://img.shields.io/badge/Idioma-Português%20(PT--BR)-green)](https://github.com/ONeithan/Nexus-Nomad)
-[![Licença](https://img.shields.io/badge/Licença-Apache%202.0-blue)](LICENSE)
-[![Base](https://img.shields.io/badge/Base-Project%20NOMAD-olive)](https://www.projectnomad.us)
+[![Licença](https://img.shields.io/badge/Licença-Uso%20Não%20Comercial-red)](LICENSE)
+[![Projeto](https://img.shields.io/badge/Projeto-Pessoal%20%2F%20Open%20Source-blue)](https://github.com/ONeithan/Nexus-Nomad)
 
 </div>
 
@@ -109,7 +109,8 @@ sudo bash /opt/project-nomad/update_nomad.sh
 
 O NOMAD foi projetado para uso local/offline na sua rede confiável (LAN) e **não** deve ser exposto diretamente para a internet pública sem camada de autenticação/VPN apropriada.
 
-## Licença e Créditos
+## Licença e Autoria
 
-- Licenciado sob a [Apache License 2.0](LICENSE).
-- Baseado no excelente [Project NOMAD](https://github.com/Crosstalk-Solutions/project-nomad) por [Crosstalk Solutions](https://www.projectnomad.us).
+- **Projeto Pessoal e Independente:** O **Nexus N.O.M.A.D** é mantido e desenvolvido de forma independente, com novas funcionalidades, motor de temas em tempo real, integração com Portainer, sistema de autenticação tática e tradução completa para Português Brasileiro (PT-BR).
+- **Licença Aberta Não Comercial:** Código aberto para estudo e uso pessoal/educacional sem fins lucrativos. **É estritamente proibida a venda, revenda ou qualquer uso comercial desta versão.** Consulte o arquivo [LICENSE](LICENSE) para os termos completos.
+- **Base Original:** Construído sobre a base do [Project NOMAD](https://github.com/Crosstalk-Solutions/project-nomad) (Apache 2.0).
