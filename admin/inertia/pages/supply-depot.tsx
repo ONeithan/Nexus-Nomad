@@ -33,6 +33,7 @@ import CustomAppModal, { CustomAppInitial } from '~/components/CustomAppModal'
 import PortainerConfigModal from '~/components/PortainerConfigModal'
 import AppUrlModal from '~/components/AppUrlModal'
 import ServiceLogsModal from '~/components/ServiceLogsModal'
+import { setPendingAppAction } from '~/components/TacticalBootGate'
 import ServiceStatsModal from '~/components/ServiceStatsModal'
 import StyledSectionHeader from '~/components/StyledSectionHeader'
 import UpdateServiceModal from '~/components/UpdateServiceModal'
@@ -120,7 +121,16 @@ export default function SupplyDepotPage(props: {
   const appAutoUpdateMasterEnabled = appAutoUpdateStatus?.enabled ?? false
 
   const [activeCategory, setActiveCategory] = useState('all')
+  const [hidePortainerOnly, setHidePortainerOnly] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false
+    try {
+      return localStorage.getItem('nomad:hide_portainer_only') === 'true'
+    } catch {
+      return false
+    }
+  })
   const [search, setSearch] = useState('')
+  const pendingActionRef = useRef<'install' | 'reinstall'>('install')
   const [services, setServices] = useState<ServiceSlim[]>(props.system.services || [])
   const [modal, setModal] = useState<Modal>(null)
   const [loading, setLoading] = useState(false)
@@ -154,6 +164,15 @@ export default function SupplyDepotPage(props: {
     if (!installActivity.length) return
     const last = installActivity[installActivity.length - 1]
     if (last.type === 'completed' || last.type === 'update-complete') {
+      const targetSvc = services.find((s) => s.service_name === last.service_name)
+      setPendingAppAction({
+        action: pendingActionRef.current,
+        appName: targetSvc?.friendly_name || last.service_name || 'Aplicativo',
+        target:
+          targetSvc?.node === 'portainer' || targetSvc?.node === 'dell-micro'
+            ? 'portainer'
+            : installTarget,
+      })
       setServices((prev) =>
         prev.map((s) =>
           s.service_name === last.service_name
@@ -222,6 +241,9 @@ export default function SupplyDepotPage(props: {
 
   // ── Filtering ─────────────────────────────────────────────────────────────
   const filteredServices = services.filter((s) => {
+    if (hidePortainerOnly && (s.is_unmanaged || s.service_name.startsWith('portainer-stack-'))) {
+      return false
+    }
     if (activeCategory === 'installed' && !s.installed) return false
     if (
       activeCategory === 'remote-server' &&
@@ -314,6 +336,7 @@ export default function SupplyDepotPage(props: {
   }
 
   async function handleForceReinstall(service: ServiceSlim) {
+    pendingActionRef.current = 'reinstall'
     setLoading(true)
     const result = await api.forceReinstallService(service.service_name)
     setModal(null)
@@ -344,6 +367,12 @@ export default function SupplyDepotPage(props: {
       setLoading(false)
       showError(result?.message || 'Falha ao excluir o aplicativo.')
     } else {
+      setPendingAppAction({
+        action: 'uninstall',
+        appName: service.friendly_name || service.service_name,
+        target:
+          service.node === 'portainer' || service.node === 'dell-micro' ? 'portainer' : 'local',
+      })
       setTimeout(() => window.location.reload(), 1000)
     }
   }
@@ -357,6 +386,12 @@ export default function SupplyDepotPage(props: {
       setLoading(false)
       showError(result?.message || 'Falha ao desinstalar o aplicativo.')
     } else {
+      setPendingAppAction({
+        action: 'uninstall',
+        appName: service.friendly_name || service.service_name,
+        target:
+          service.node === 'portainer' || service.node === 'dell-micro' ? 'portainer' : 'local',
+      })
       setTimeout(() => window.location.reload(), 1000)
     }
   }
@@ -547,19 +582,44 @@ export default function SupplyDepotPage(props: {
             </div>
 
             {/* Category filters */}
-            <div className="flex flex-wrap gap-2">
-              {CATEGORIES.map((cat) => (
-                <button
-                  key={cat.id}
-                  onClick={() => setActiveCategory(cat.id)}
-                  className={`px-3 py-1 rounded-full text-xs font-medium transition-colors cursor-pointer border ${activeCategory === cat.id
-                    ? 'bg-desert-green text-white border-desert-green'
-                    : 'bg-surface-secondary text-text-muted border-desert-stone-lighter hover:text-text-primary hover:border-desert-stone-light'
-                    }`}
-                >
-                  {cat.label}
-                </button>
-              ))}
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex flex-wrap gap-2">
+                {CATEGORIES.map((cat) => (
+                  <button
+                    key={cat.id}
+                    onClick={() => setActiveCategory(cat.id)}
+                    className={`px-3 py-1 rounded-full text-xs font-medium transition-colors cursor-pointer border ${activeCategory === cat.id
+                      ? 'bg-desert-green text-white border-desert-green'
+                      : 'bg-surface-secondary text-text-muted border-desert-stone-lighter hover:text-text-primary hover:border-desert-stone-light'
+                      }`}
+                  >
+                    {cat.label}
+                  </button>
+                ))}
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  const next = !hidePortainerOnly
+                  setHidePortainerOnly(next)
+                  try {
+                    localStorage.setItem('nomad:hide_portainer_only', String(next))
+                  } catch {
+                    // ignore
+                  }
+                }}
+                className={`px-3 py-1 rounded-full text-xs font-medium transition-colors cursor-pointer border ${
+                  hidePortainerOnly
+                    ? 'bg-desert-orange text-white border-desert-orange'
+                    : 'bg-surface-secondary text-text-muted border-desert-stone-lighter hover:text-text-primary'
+                }`}
+                title="Oculta contêineres avulsos do Portainer mantendo os apps do catálogo N.O.M.A.D."
+              >
+                {hidePortainerOnly
+                  ? 'Exibindo só catálogo N.O.M.A.D.'
+                  : 'Ocultar exclusivos do Portainer'}
+              </button>
             </div>
           </div>
 
@@ -1204,17 +1264,46 @@ function AppCard({
       </div>
 
       {/* Live installation progress banner inside card */}
-      {service.installation_status === 'installing' && (
-        <div className="mb-3 rounded-lg bg-desert-orange/10 border border-desert-orange/30 px-3 py-2 text-[11px] text-text-primary space-y-1.5">
-          <div className="flex items-center gap-2 font-medium text-desert-orange">
-            <span className="animate-spin inline-block w-3 h-3 border-2 border-desert-orange border-t-transparent rounded-full flex-shrink-0" />
-            <span className="truncate">{liveProgressMessage || 'Preparando instalação...'}</span>
+      {service.installation_status === 'installing' && (() => {
+        const msg = liveProgressMessage || ''
+        const stepMatch = msg.match(/\[(\d+)\/(\d+)\]/)
+        let progressPct = 10
+        if (stepMatch) {
+          const cur = Number(stepMatch[1])
+          const total = Math.max(1, Number(stepMatch[2]))
+          progressPct = Math.min(96, Math.max(12, Math.round((cur / total) * 100)))
+        } else {
+          const lower = msg.toLowerCase()
+          if (lower.includes('conclu') || lower.includes('sucesso') || lower.includes('pronto')) {
+            progressPct = 100
+          } else if (lower.includes('iniciando') || lower.includes('configur') || lower.includes('registr')) {
+            progressPct = 82
+          } else if (lower.includes('criando') || lower.includes('compose') || lower.includes('stack')) {
+            progressPct = 62
+          } else if (lower.includes('baixando') || lower.includes('imagem') || lower.includes('pull')) {
+            progressPct = 36
+          } else if (lower.includes('preparando') || lower.includes('verificando')) {
+            progressPct = 16
+          }
+        }
+        return (
+          <div className="mb-3 rounded-lg bg-desert-orange/10 border border-desert-orange/30 px-3 py-2 text-[11px] text-text-primary space-y-1.5">
+            <div className="flex items-center justify-between gap-2 font-medium text-desert-orange">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="animate-spin inline-block w-3 h-3 border-2 border-desert-orange border-t-transparent rounded-full flex-shrink-0" />
+                <span className="truncate">{msg || 'Preparando instalação...'}</span>
+              </div>
+              <span className="font-mono font-bold shrink-0">{progressPct}%</span>
+            </div>
+            <div className="w-full h-1.5 bg-surface-secondary rounded-full overflow-hidden">
+              <div
+                className="h-full bg-desert-orange rounded-full transition-all duration-500"
+                style={{ width: `${progressPct}%` }}
+              />
+            </div>
           </div>
-          <div className="w-full h-1 bg-surface-secondary rounded-full overflow-hidden">
-            <div className="h-full bg-desert-orange animate-pulse w-2/3 rounded-full" />
-          </div>
-        </div>
-      )}
+        )
+      })()}
 
       {/* Action buttons */}
       <div className="flex items-center gap-2">

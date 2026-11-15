@@ -13,6 +13,12 @@ import {
   IconExternalLink,
   IconArrowUpRight,
   IconSearch,
+  IconAdjustments,
+  IconArrowUp,
+  IconArrowDown,
+  IconEye,
+  IconEyeOff,
+  IconX,
 } from '@tabler/icons-react'
 import { Head, Link, router, usePage } from '@inertiajs/react'
 import AppLayout from '~/layouts/AppLayout'
@@ -25,7 +31,8 @@ import {
   useBenchmarkRerunBanner,
   BENCHMARK_RERUN_BANNER_QUERY_KEY,
 } from '~/hooks/useBenchmarkRerunBanner'
-import { useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import useDownloads from '~/hooks/useDownloads'
 import api from '~/lib/api'
 import Alert from '~/components/Alert'
 import WhatsNewBanner from '~/components/WhatsNewBanner'
@@ -164,10 +171,45 @@ export default function Home(props: {
   const [pendingDelete, setPendingDelete] = useState<string | null>(null)
   const [linkError, setLinkError] = useState<string | null>(null)
   const [kiwixQuery, setKiwixQuery] = useState('')
+  const [customizeModalOpen, setCustomizeModalOpen] = useState(false)
+  const [divisionsPrefs, setDivisionsPrefs] = useState<{ order: string[]; hidden: string[] }>(() => {
+    if (typeof window === 'undefined') return { order: [], hidden: [] }
+    try {
+      const raw = localStorage.getItem('nomad:home_divisions_prefs')
+      if (raw) return JSON.parse(raw)
+    } catch {
+      // ignore
+    }
+    return { order: [], hidden: [] }
+  })
   const [activeOperator, setActiveOperator] = useState<{ username: string; level: string }>({
     username: 'OPERADOR',
     level: 'NÍVEL 05 // COMANDO-GERAL',
   })
+
+  const saveDivisionsPrefs = (next: { order: string[]; hidden: string[] }) => {
+    setDivisionsPrefs(next)
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('nomad:home_divisions_prefs', JSON.stringify(next))
+      } catch {
+        // ignore
+      }
+    }
+  }
+
+  const { data: sysInfo } = useQuery({
+    queryKey: ['home-sys-info'],
+    queryFn: () => api.getSystemInfo(),
+    refetchInterval: 15000,
+  })
+  const { data: activeDownloads = [] } = useDownloads({})
+  const runningDownloads = activeDownloads.filter((d) => d.status !== 'completed')
+  const { data: remoteAiSetting } = useSystemSetting({ key: 'ai.remoteUrl' })
+  const ollamaInstalled = props.system.services.some(
+    (s) => s.service_name === SERVICE_NAMES.OLLAMA && s.installed
+  )
+  const aiConfigured = ollamaInstalled || Boolean(remoteAiSetting?.value)
 
   useEffect(() => {
     const syncOp = () => setActiveOperator(getActiveOperator())
@@ -339,7 +381,8 @@ export default function Home(props: {
             <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 px-2">
               <div className="space-y-1.5">
                 <div className="flex flex-wrap items-center gap-2 text-[11px] font-mono-mil tracking-wider">
-                  <span className="px-2 py-0.5 bg-surface-secondary border border-border-default text-desert-green font-bold">
+                  <span className="nomad-classified-badge px-2 py-0.5 bg-surface-secondary border border-border-default text-desert-green font-bold inline-flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-desert-green nomad-telemetry-dot" />
                     CLASSIFICAÇÃO: RESTRITO // OPERACIONAL
                   </span>
                   <span className="px-2 py-0.5 bg-desert-orange/15 border border-desert-orange/50 text-desert-orange-light font-bold">
@@ -455,8 +498,8 @@ export default function Home(props: {
                 </Link>
 
                 <Link
-                  href="/chat"
-                  className="chamfer-inner p-3 text-center hover:border-desert-tan transition-colors block"
+                  href={aiConfigured ? '/chat' : '/supply-depot'}
+                  className="chamfer-inner nomad-interactive-card p-3 text-center hover:border-desert-tan transition-colors block"
                 >
                   <div className="text-[10px] font-mono-mil text-text-secondary uppercase">
                     Assistente Tático
@@ -464,8 +507,12 @@ export default function Home(props: {
                   <div className="text-lg font-mono-mil font-bold text-desert-tan mt-1">
                     OLLAMA RAG
                   </div>
-                  <div className="text-[10px] font-mono-mil text-text-secondary mt-0.5">
-                    ABRIR CHAT IA LOCAL
+                  <div
+                    className={`text-[10px] font-mono-mil mt-0.5 font-bold ${
+                      aiConfigured ? 'text-desert-olive' : 'text-desert-orange'
+                    }`}
+                  >
+                    {aiConfigured ? 'CONECTADO • ABRIR CHAT IA' : 'NÃO CONFIGURADO • INSTALAR'}
                   </div>
                 </Link>
 
@@ -511,22 +558,36 @@ export default function Home(props: {
                 <span className="text-sm font-bold font-stencil tracking-widest uppercase text-desert-tan">
                   LOG DE EVENTOS
                 </span>
-                <span className="w-2 h-2 rounded-full bg-desert-olive" />
+                <span className="w-2 h-2 rounded-full bg-desert-olive nomad-telemetry-dot" />
               </div>
 
               <div className="chamfer-inner p-2.5 font-mono-mil text-[11px] space-y-1 text-text-secondary">
                 <div>
-                  <span className="text-desert-tan">[SISTEMA]</span> NÓ NEXUS-01 OPERACIONAL
+                  <span className="text-desert-tan">[TELEMETRIA]</span>{' '}
+                  {sysInfo?.cpu
+                    ? `CPU ${Math.round(sysInfo.cpu.usage ?? 0)}% • RAM ${
+                        sysInfo.memory?.percentage ? `${Math.round(sysInfo.memory.percentage)}%` : 'OK'
+                      }`
+                    : 'NÓ NEXUS-01 OPERACIONAL'}
                 </div>
                 <div>
-                  <span className="text-desert-tan">[SERVIÇOS]</span> {installedAppCount} CONTÊINERES
-                  SINCRONIZADOS
+                  <span className="text-desert-tan">[SERVIÇOS]</span> {installedAppCount} ATIVOS •{' '}
+                  {aiConfigured ? 'IA ONLINE' : 'IA NÃO CONFIGURADA'}
                 </div>
                 <div>
-                  <span className="text-desert-tan">[INTERFACE]</span> TEMA{' '}
-                  {currentThemeDef.shortName.toUpperCase()} ATIVO
+                  <span className="text-desert-tan">[FILA]</span>{' '}
+                  {runningDownloads.length > 0
+                    ? `${runningDownloads.length} DOWNLOAD(S) EM ANDAMENTO (${Math.round(
+                        runningDownloads[0]?.progress || 0
+                      )}%)`
+                    : 'NENHUM DOWNLOAD ATIVO NO MOMENTO'}
                 </div>
-                <div className="text-desert-olive">&gt; PRONTO PARA OPERAÇÃO EM CAMPO...</div>
+                <div className="text-desert-olive flex items-center justify-between">
+                  <span>&gt; TEMA {currentThemeDef.shortName.toUpperCase()} OPERACIONAL</span>
+                  <span className="opacity-75">
+                    {new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                </div>
               </div>
 
               <div className="flex items-center justify-between text-[10px] font-mono-mil text-text-muted pt-2 px-1">
@@ -538,20 +599,41 @@ export default function Home(props: {
 
           {/* 3. DIVISÕES OPERACIONAIS (100% DOS MÓDULOS REAIS DO SITE) */}
           <section className="space-y-3">
-            <div className="flex items-center justify-between border-b border-border-default pb-2">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border-default pb-2">
               <div className="flex items-center gap-2">
-                <span className="text-desert-tan font-mono-mil text-sm">►</span>
+                <span className="text-desert-tan font-mono-mil text-sm nomad-telemetry-dot">►</span>
                 <h2 className="text-lg font-bold font-stencil tracking-widest uppercase text-text-primary">
                   DIVISÕES OPERACIONAIS DO SISTEMA
                 </h2>
               </div>
-              <span className="text-xs font-mono-mil text-text-muted">
-                TODOS OS MÓDULOS E FUNÇÕES REAIS DO SERVIDOR NOMAD
-              </span>
+              <div className="flex items-center gap-3">
+                <span className="text-xs font-mono-mil text-text-muted hidden sm:inline">
+                  TODOS OS MÓDULOS E FUNÇÕES REAIS DO SERVIDOR NOMAD
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setCustomizeModalOpen(true)}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-mono-mil uppercase border border-border-default bg-surface-secondary hover:border-desert-tan text-text-primary rounded cursor-pointer"
+                >
+                  <IconAdjustments size={14} className="text-desert-tan" />
+                  <span>Personalizar</span>
+                </button>
+              </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {items.map((item, idx) => {
+              {(() => {
+                const ordered = [...items].sort((a, b) => {
+                  const idxA = divisionsPrefs.order.indexOf(a.label)
+                  const idxB = divisionsPrefs.order.indexOf(b.label)
+                  if (idxA === -1 && idxB === -1) return 0
+                  if (idxA === -1) return 1
+                  if (idxB === -1) return -1
+                  return idxA - idxB
+                })
+                const visible = ordered.filter((it) => !divisionsPrefs.hidden.includes(it.label))
+                return visible
+              })().map((item, idx) => {
                 const divisionNum = String(idx + 1).padStart(2, '0')
                 const isEasySetup = item.to === '/easy-setup'
                 const shouldHighlight = isEasySetup && shouldHighlightEasySetup
@@ -906,6 +988,132 @@ export default function Home(props: {
         }}
         showError={(msg) => setLinkError(msg)}
       />
+
+      {customizeModalOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/65 backdrop-blur-xs p-4"
+          onClick={() => setCustomizeModalOpen(false)}
+        >
+          <div
+            className="nomad-modal-animate w-full max-w-lg rounded-xl border border-border-default bg-surface-primary shadow-2xl overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-5 py-3.5 border-b border-border-subtle bg-surface-secondary flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <IconAdjustments size={18} className="text-desert-tan" />
+                <h3 className="text-sm font-bold uppercase tracking-wider text-text-primary">
+                  Personalizar Divisões Operacionais
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setCustomizeModalOpen(false)}
+                className="p-1 rounded hover:bg-surface-primary text-text-secondary cursor-pointer"
+              >
+                <IconX size={18} />
+              </button>
+            </div>
+
+            <div className="p-4 max-h-[60vh] overflow-y-auto themed-scrollbar space-y-2">
+              {(() => {
+                const orderedLabels = [...items]
+                  .sort((a, b) => {
+                    const idxA = divisionsPrefs.order.indexOf(a.label)
+                    const idxB = divisionsPrefs.order.indexOf(b.label)
+                    if (idxA === -1 && idxB === -1) return 0
+                    if (idxA === -1) return 1
+                    if (idxB === -1) return -1
+                    return idxA - idxB
+                  })
+                  .map((i) => i.label)
+
+                const moveItem = (index: number, delta: -1 | 1) => {
+                  const nextOrder = [...orderedLabels]
+                  const target = index + delta
+                  if (target < 0 || target >= nextOrder.length) return
+                  ;[nextOrder[index], nextOrder[target]] = [nextOrder[target], nextOrder[index]]
+                  saveDivisionsPrefs({ ...divisionsPrefs, order: nextOrder })
+                }
+
+                const toggleHidden = (label: string) => {
+                  const isHidden = divisionsPrefs.hidden.includes(label)
+                  const nextHidden = isHidden
+                    ? divisionsPrefs.hidden.filter((l) => l !== label)
+                    : [...divisionsPrefs.hidden, label]
+                  saveDivisionsPrefs({ ...divisionsPrefs, hidden: nextHidden })
+                }
+
+                return orderedLabels.map((label, idx) => {
+                  const isHidden = divisionsPrefs.hidden.includes(label)
+                  return (
+                    <div
+                      key={label}
+                      className={`flex items-center justify-between gap-3 px-3 py-2 rounded-lg border ${
+                        isHidden
+                          ? 'border-border-subtle bg-surface-secondary/50 opacity-60'
+                          : 'border-border-default bg-surface-secondary'
+                      }`}
+                    >
+                      <span className="text-xs font-medium text-text-primary truncate">
+                        {label}
+                      </span>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => moveItem(idx, -1)}
+                          disabled={idx === 0}
+                          title="Mover para cima"
+                          className="p-1 rounded border border-border-subtle bg-surface-primary text-text-secondary hover:text-text-primary disabled:opacity-30 cursor-pointer"
+                        >
+                          <IconArrowUp size={14} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => moveItem(idx, 1)}
+                          disabled={idx === orderedLabels.length - 1}
+                          title="Mover para baixo"
+                          className="p-1 rounded border border-border-subtle bg-surface-primary text-text-secondary hover:text-text-primary disabled:opacity-30 cursor-pointer"
+                        >
+                          <IconArrowDown size={14} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => toggleHidden(label)}
+                          title={isHidden ? 'Exibir divisão' : 'Ocultar divisão'}
+                          className={`p-1 rounded border cursor-pointer ${
+                            isHidden
+                              ? 'border-border-subtle bg-surface-primary text-text-muted'
+                              : 'border-desert-green bg-desert-green/15 text-desert-green'
+                          }`}
+                        >
+                          {isHidden ? <IconEyeOff size={14} /> : <IconEye size={14} />}
+                        </button>
+                      </div>
+                    </div>
+                  )
+                })
+              })()}
+            </div>
+
+            <div className="px-5 py-3 border-t border-border-subtle bg-surface-secondary flex items-center justify-between">
+              <button
+                type="button"
+                onClick={() => saveDivisionsPrefs({ order: [], hidden: [] })}
+                className="text-xs font-medium text-text-secondary hover:text-desert-orange cursor-pointer"
+              >
+                Restaurar padrão
+              </button>
+              <button
+                type="button"
+                onClick={() => setCustomizeModalOpen(false)}
+                className="px-4 py-1.5 rounded-md bg-desert-green text-white text-xs font-semibold hover:bg-btn-green-hover cursor-pointer"
+              >
+                Concluir
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </AppLayout>
   )
 }

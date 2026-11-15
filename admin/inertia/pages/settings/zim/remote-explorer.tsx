@@ -65,6 +65,8 @@ export default function ZimRemoteExplorer() {
   const { addNotification } = useNotifications()
   const { isOnline } = useInternetStatus()
   const { isInstalled } = useServiceInstalledStatus(SERVICE_NAMES.KIWIX)
+  const { isInstalled: kolibriInstalled } = useServiceInstalledStatus(SERVICE_NAMES.KOLIBRI)
+  const { data: zimDownloads = [] } = useDownloads({ filetype: 'zim' })
   const { debounce } = useDebounce()
 
   const [query, setQuery] = useState('')
@@ -350,6 +352,71 @@ export default function ZimRemoteExplorer() {
         <span>{label}</span>
         <Icon className={`size-4 ${active ? 'text-desert-orange' : 'text-text-muted opacity-50 group-hover:opacity-100'}`} />
       </button>
+    )
+  }
+
+  async function confirmDownloadAll() {
+    const activeUrls = new Set(
+      zimDownloads.filter((d) => d.status !== 'completed').map((d) => d.url)
+    )
+    const pendingItems = flatData.filter((item) => !activeUrls.has(item.download_url))
+    if (pendingItems.length === 0) {
+      addNotification({
+        message: 'Todos os arquivos exibidos já estão na fila ou sendo baixados.',
+        type: 'info',
+      })
+      return
+    }
+    const totalBytes = pendingItems.reduce((sum, item) => sum + (item.size_bytes || 0), 0)
+    const activeLangLabel =
+      language === 'all'
+        ? 'Todos os idiomas'
+        : catalogLanguages?.find((l) => l.code === language)?.label || language.toUpperCase()
+
+    openModal(
+      <StyledModal
+        title="Confirmar Download em Lote (Baixar Tudo)?"
+        onConfirm={async () => {
+          closeAllModals()
+          addNotification({
+            message: `Iniciando download de ${pendingItems.length} arquivo(s) ZIM (${formatBytes(totalBytes)})...`,
+            type: 'info',
+          })
+          for (const item of pendingItems) {
+            await downloadFile(item)
+          }
+        }}
+        onCancel={closeAllModals}
+        open={true}
+        confirmText={`Baixar Tudo (${pendingItems.length})`}
+        cancelText="Cancelar"
+        confirmVariant="primary"
+      >
+        <div className="space-y-3 text-sm text-text-primary">
+          <p>
+            Você está prestes a enfileirar{' '}
+            <strong>{pendingItems.length} arquivo(s) ZIM</strong> do catálogo visível.
+          </p>
+          <div className="p-3 rounded-lg bg-surface-secondary border border-border-default space-y-1 text-xs font-mono">
+            <div className="flex justify-between">
+              <span className="text-text-secondary">Idioma selecionado:</span>
+              <span className="font-bold text-text-primary">{activeLangLabel}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-text-secondary">Quantidade de arquivos:</span>
+              <span className="font-bold text-text-primary">{pendingItems.length}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-text-secondary">Tamanho total estimado:</span>
+              <span className="font-bold text-desert-orange">{formatBytes(totalBytes)}</span>
+            </div>
+          </div>
+          <p className="text-xs text-text-muted">
+            Certifique-se de ter espaço suficiente em disco antes de confirmar.
+          </p>
+        </div>
+      </StyledModal>,
+      'confirm-download-all-modal'
     )
   }
 
@@ -657,15 +724,27 @@ export default function ZimRemoteExplorer() {
           )}
 
           {/* Kiwix Library / Custom Library Browser */}
-          <div className="mt-12 mb-4 flex items-center justify-between">
+          <div className="mt-12 mb-4 flex flex-wrap items-center justify-between gap-3">
             <StyledSectionHeader title="Explorar Catálogo Kiwix" className="!mb-0" />
-            <StyledButton
-              onClick={() => setManageModalOpen(true)}
-              disabled={!isOnline}
-              icon="IconLibrary"
-            >
-              {hasCustomLibraries ? 'Gerenciar Bibliotecas' : 'Adicionar Biblioteca'}
-            </StyledButton>
+            <div className="flex flex-wrap items-center gap-2">
+              {selectedSource === 'default' && (
+                <StyledButton
+                  onClick={confirmDownloadAll}
+                  disabled={!isOnline || flatData.length === 0}
+                  variant="primary"
+                  icon="IconDownload"
+                >
+                  Baixar Tudo ({flatData.length})
+                </StyledButton>
+              )}
+              <StyledButton
+                onClick={() => setManageModalOpen(true)}
+                disabled={!isOnline}
+                icon="IconLibrary"
+              >
+                {hasCustomLibraries ? 'Gerenciar Bibliotecas' : 'Adicionar Biblioteca'}
+              </StyledButton>
+            </div>
           </div>
 
           {/* Source selector dropdown */}
@@ -795,6 +874,26 @@ export default function ZimRemoteExplorer() {
                     accessor: 'actions',
                     title: 'Ações',
                     render(record) {
+                      const activeJob = zimDownloads.find(
+                        (d) => d.status !== 'completed' && d.url === record.download_url
+                      )
+                      if (activeJob) {
+                        const pct = Math.min(100, Math.max(0, Math.round(activeJob.progress || 0)))
+                        return (
+                          <div className="w-36 space-y-1">
+                            <div className="flex items-center justify-between text-[11px] font-mono">
+                              <span className="text-desert-orange font-semibold">Baixando</span>
+                              <span className="font-bold text-text-primary">{pct}%</span>
+                            </div>
+                            <div className="w-full h-1.5 bg-surface-secondary rounded-full overflow-hidden">
+                              <div
+                                className="h-full bg-desert-orange transition-all duration-300 rounded-full"
+                                style={{ width: `${pct}%` }}
+                              />
+                            </div>
+                          </div>
+                        )
+                      }
                       return (
                         <div className="flex space-x-2">
                           <StyledButton
@@ -1012,6 +1111,142 @@ export default function ZimRemoteExplorer() {
               )}
             </div>
           )}
+          {/* Central de Conteúdo Kolibri (respeita idioma e prioriza PT-BR) */}
+          <div className="mt-12 mb-6">
+            <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+              <div>
+                <StyledSectionHeader title="Central de Conteúdo Kolibri" className="!mb-0" />
+                <p className="text-xs text-text-muted mt-1">
+                  Canais educacionais para importar diretamente na sua biblioteca Kolibri (prioridade PT-BR).
+                </p>
+              </div>
+              <span
+                className={`px-2.5 py-1 rounded-full text-xs font-semibold border ${
+                  kolibriInstalled
+                    ? 'bg-desert-green/15 text-desert-green border-desert-green/40'
+                    : 'bg-surface-secondary text-text-muted border-border-default'
+                }`}
+              >
+                {kolibriInstalled ? 'Kolibri Instalado' : 'Kolibri não instalado'}
+              </span>
+            </div>
+
+            {(() => {
+              const kolibriChannels = [
+                {
+                  id: 'khan-pt-br',
+                  title: 'Khan Academy em Português (Brasil)',
+                  lang: 'por',
+                  langLabel: 'PT-BR (Prioritário)',
+                  token: 'khan-academy-pt-br',
+                  size: '~18 GB (completo) / Modular',
+                  description:
+                    'Matemática, Ciências, Física, Química, Biologia e Programação completos em Português do Brasil.',
+                },
+                {
+                  id: 'wikipedia-escola-pt',
+                  title: 'Wikipédia para Escolas (PT-BR)',
+                  lang: 'por',
+                  langLabel: 'PT-BR (Prioritário)',
+                  token: 'wikipedia-pt',
+                  size: '~4.5 GB',
+                  description:
+                    'Seleção curada de artigos enciclopédicos em Português para ensino fundamental e médio offline.',
+                },
+                {
+                  id: 'phet-pt-br',
+                  title: 'Simulações Interativas PhET (PT-BR)',
+                  lang: 'por',
+                  langLabel: 'PT-BR (Prioritário)',
+                  token: 'phet-pt-br',
+                  size: '~650 MB',
+                  description:
+                    'Laboratórios virtuais interativos de Física, Química, Matemática e Ciências da Terra traduzidos.',
+                },
+                {
+                  id: 'pratham-pt',
+                  title: 'Leitura e Alfabetização StoryWeaver (PT-BR)',
+                  lang: 'por',
+                  langLabel: 'PT-BR (Prioritário)',
+                  token: 'storyweaver-pt',
+                  size: '~1.2 GB',
+                  description:
+                    'Livros ilustrados e materiais de alfabetização infantil e juvenil em Português.',
+                },
+                {
+                  id: 'khan-en',
+                  title: 'Khan Academy (English)',
+                  lang: 'eng',
+                  langLabel: 'EN',
+                  token: 'khan-academy-en',
+                  size: '~35 GB',
+                  description: 'Currículo completo da Khan Academy em Inglês.',
+                },
+              ]
+              const filteredChannels = kolibriChannels
+                .filter((ch) => {
+                  if (!language || language === 'all') return true
+                  return ch.lang === language || (language.startsWith('pt') && ch.lang === 'por')
+                })
+                .sort((a, b) => (a.lang === 'por' ? -1 : b.lang === 'por' ? 1 : 0))
+
+              return (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {filteredChannels.map((ch) => (
+                    <div
+                      key={ch.id}
+                      className="nomad-interactive-card p-4 rounded-xl border border-border-default bg-surface-primary flex flex-col justify-between gap-3"
+                    >
+                      <div>
+                        <div className="flex items-start justify-between gap-2">
+                          <h4 className="text-sm font-bold text-text-primary">{ch.title}</h4>
+                          <span
+                            className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ${
+                              ch.lang === 'por'
+                                ? 'bg-desert-green text-white'
+                                : 'bg-surface-secondary text-text-secondary border border-border-subtle'
+                            }`}
+                          >
+                            {ch.langLabel}
+                          </span>
+                        </div>
+                        <p className="text-xs text-text-secondary mt-1.5">{ch.description}</p>
+                      </div>
+                      <div className="flex flex-wrap items-center justify-between gap-2 pt-2.5 border-t border-border-subtle text-[11px]">
+                        <span className="font-mono text-text-muted">Tamanho: {ch.size}</span>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              navigator.clipboard?.writeText(ch.token)
+                              addNotification({
+                                message: `Identificador "${ch.token}" copiado! Cole em Dispositivo → Canais → Importar no Kolibri.`,
+                                type: 'success',
+                              })
+                            }}
+                            className="px-2.5 py-1 rounded border border-border-default bg-surface-secondary hover:border-desert-orange text-text-primary font-medium cursor-pointer"
+                          >
+                            Copiar Token
+                          </button>
+                          {kolibriInstalled && (
+                            <a
+                              href={`http://${typeof window !== 'undefined' ? window.location.hostname : 'localhost'}:8095`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="px-2.5 py-1 rounded bg-desert-green text-white hover:bg-btn-green-hover font-medium"
+                            >
+                              Abrir Kolibri
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )
+            })()}
+          </div>
+
           <ActiveDownloads filetype="zim" withHeader />
 
           {/* Manage Custom Libraries Modal */}

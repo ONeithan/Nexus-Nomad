@@ -2,7 +2,7 @@ import { useState } from 'react'
 import Footer from '~/components/Footer'
 import ChatButton from '~/components/chat/ChatButton'
 import ChatModal from '~/components/chat/ChatModal'
-import ThemeToggle from '~/components/ThemeToggle'
+import LeftDownloadsDrawer from '~/components/LeftDownloadsDrawer'
 import TacticalBootGate, { lockTacticalConsole } from '~/components/TacticalBootGate'
 import useServiceInstalledStatus from '~/hooks/useServiceInstalledStatus'
 import { useThemeContext } from '~/providers/ThemeProvider'
@@ -35,7 +35,8 @@ export default function AppLayout({
   return (
     <TacticalBootGate>
       <div className="min-h-screen flex flex-col">
-        {/* Barra superior com seletor instantâneo de Temas e acesso aos Discos & Armazenamento */}
+        <LeftDownloadsDrawer />
+        {/* Barra superior com logo de retorno rápido e acesso aos Discos & Armazenamento */}
         <div className="w-full bg-surface-primary border-b border-border-subtle px-4 py-2.5 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             {!isHome ? (
@@ -47,15 +48,30 @@ export default function AppLayout({
                 <span>Voltar ao Início</span>
               </Link>
             ) : (
-              <span className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-desert-green px-2.5 py-1 rounded-full bg-desert-green-lighter border border-desert-green-light">
-                <span className="h-2 w-2 rounded-full bg-desert-orange animate-pulse" />
-                Servidor Offline • PT-BR
-              </span>
+              <div className="flex items-center gap-3 flex-wrap">
+                <span className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-desert-green px-2.5 py-1 rounded-full bg-desert-green-lighter border border-desert-green-light">
+                  <span className="h-2 w-2 rounded-full bg-desert-orange animate-pulse" />
+                  Servidor Offline • PT-BR
+                </span>
+                <Link
+                  href="/home"
+                  title="Ir para o Início do Nexus N.O.M.A.D."
+                  className="inline-flex items-center gap-2 px-2.5 py-1 rounded-md border border-border-subtle bg-surface-secondary hover:border-desert-orange transition-colors"
+                >
+                  <img
+                    src="/nomad-primary.svg"
+                    alt="Nexus N.O.M.A.D."
+                    className="h-4 w-4 object-contain"
+                  />
+                  <span className="text-xs font-bold tracking-wider text-text-primary uppercase">
+                    Nexus N.O.M.A.D.
+                  </span>
+                </Link>
+              </div>
             )}
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            <ThemeToggle direction="down" />
             <Link
               href="/settings/system#discos"
               title="Ver discos físicos conectados, partições e armazenamento do servidor"

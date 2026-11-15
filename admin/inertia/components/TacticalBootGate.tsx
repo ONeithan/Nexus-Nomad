@@ -23,6 +23,38 @@ interface NomadAuthDBState {
 const AUTH_STORAGE_KEY = 'nomad_tactical_auth_v4'
 const LEGACY_STORAGE_KEYS = ['nomad_tactical_auth_v4', 'nomad_auth_db_v3', 'nomad_auth_db_v2']
 const SESSION_UNLOCKED_KEY = 'nomad_session_unlocked_v4'
+const PENDING_APP_ACTION_KEY = 'nomad:pending_app_action'
+
+export interface PendingAppAction {
+  action: 'install' | 'uninstall' | 'reinstall'
+  appName: string
+  target: 'local' | 'portainer'
+}
+
+export function setPendingAppAction(payload: PendingAppAction) {
+  if (typeof window === 'undefined') return
+  try {
+    sessionStorage.setItem(PENDING_APP_ACTION_KEY, JSON.stringify(payload))
+  } catch {
+    // ignore
+  }
+}
+
+function consumePendingAppAction(): PendingAppAction | null {
+  if (typeof window === 'undefined') return null
+  try {
+    const raw = sessionStorage.getItem(PENDING_APP_ACTION_KEY)
+    if (!raw) return null
+    sessionStorage.removeItem(PENDING_APP_ACTION_KEY)
+    const parsed = JSON.parse(raw)
+    if (parsed && parsed.appName && parsed.action) {
+      return parsed as PendingAppAction
+    }
+  } catch {
+    // ignore
+  }
+  return null
+}
 
 // Flag em memória do documento: é false ao abrir o site ou dar F5 (reload),
 // e passa a true após exibir a tela rápida "INICIALIZANDO NEXUS N.O.M.A.D. OS..."
@@ -949,47 +981,136 @@ export default function TacticalBootGate({ children }: { children: React.ReactNo
     targetAfterBoot: 'LOGIN_SCREEN' | 'UNLOCKED' = 'UNLOCKED',
     stepIntervalMs = 480
   ) {
+    const pendingApp = consumePendingAppAction()
     setStage('CLEAN_BOOT_OS')
     setBootPct(0)
     setBootLogs([])
-    setBootStatus('INICIALIZANDO NEXUS N.O.M.A.D. OS...')
 
-    const cleanSteps = [
-      {
-        pct: 20,
-        status: 'SINCRONIZANDO KERNEL ESTABILIZADO...',
-        msg: '[ OK ] KERNEL MIL-STD-810H INICIADO SEM ERROS',
-      },
-      {
-        pct: 45,
-        status: 'MONTANDO VOLUMES DE LEITURA/ESCRITA...',
-        msg: '[ OK ] /dev/nvme0n1 MONTADO EM MODO READ/WRITE',
-      },
-      {
-        pct: 70,
-        status: 'CONECTANDO BANCO DE AUTENTICAÇÃO...',
-        msg: '[ OK ] BANCO DE OPERADORES (nomad_auth_db) CARREGADO',
-      },
-      {
-        pct: 90,
-        status:
-          targetAfterBoot === 'UNLOCKED'
-            ? 'RESTAURANDO SESSÃO DO OPERADOR DE COMANDO...'
-            : 'INICIALIZANDO INTERFACE DE LOGIN...',
-        msg:
-          targetAfterBoot === 'UNLOCKED'
-            ? '[ OK ] CREDENCIAL DE COMANDO VALIDADA NO BANCO LOCAL'
-            : '[ OK ] SUBSISTEMA DE AUTENTICAÇÃO PRONTO',
-      },
-      {
-        pct: 100,
-        status:
-          targetAfterBoot === 'UNLOCKED'
-            ? 'SISTEMA PRONTO // ABRINDO CENTRO DE COMANDO...'
-            : 'SISTEMA PRONTO // ABRINDO LOGIN...',
-        msg: '[ 100% ] BEM-VINDO AO NEXUS N.O.M.A.D. OS',
-      },
-    ]
+    const targetLabel = pendingApp?.target === 'portainer' ? 'SERVIDOR PORTAINER' : 'NOMAD LOCAL'
+    const appUpper = pendingApp?.appName ? pendingApp.appName.toUpperCase() : ''
+
+    if (pendingApp) {
+      const actionTitle =
+        pendingApp.action === 'install'
+          ? `FINALIZANDO INSTALAÇÃO DE ${appUpper} (${targetLabel})...`
+          : pendingApp.action === 'uninstall'
+            ? `FINALIZANDO DESINSTALAÇÃO DE ${appUpper} (${targetLabel})...`
+            : `FINALIZANDO REINSTALAÇÃO DE ${appUpper} (${targetLabel})...`
+      setBootStatus(actionTitle)
+    } else {
+      setBootStatus('INICIALIZANDO NEXUS N.O.M.A.D. OS...')
+    }
+
+    const cleanSteps = pendingApp
+      ? pendingApp.action === 'install'
+        ? [
+            {
+              pct: 22,
+              status: `CONCLUINDO CONFIGURAÇÃO DE ${appUpper} NO ${targetLabel}...`,
+              msg: `[ OK ] APLICAÇÃO ${appUpper} PROVISIONADA NO ${targetLabel}`,
+            },
+            {
+              pct: 48,
+              status: `APLICANDO AJUSTES FINAIS DE REDE E VOLUMES (${targetLabel})...`,
+              msg: `[ OK ] PORTAS, VOLUMES E VARIÁVEIS DE AMBIENTE SINCRONIZADOS`,
+            },
+            {
+              pct: 76,
+              status: `REGISTRANDO ${appUpper} NO CENTRO DE COMANDO N.O.M.A.D...`,
+              msg: `[ OK ] SERVIÇO ${appUpper} INTEGRADO AO PAINEL PRINCIPAL`,
+            },
+            {
+              pct: 94,
+              status: `VERIFICANDO INTEGRIDADE DO SERVIÇO (${targetLabel})...`,
+              msg: `[ OK ] HEALTHCHECK NOMINAL PARA ${appUpper}`,
+            },
+            {
+              pct: 100,
+              status: `${appUpper} INSTALADO COM SUCESSO // ABRINDO PAINEL...`,
+              msg: `[ 100% ] INSTALAÇÃO DE ${appUpper} FINALIZADA NO ${targetLabel}`,
+            },
+          ]
+        : pendingApp.action === 'uninstall'
+          ? [
+              {
+                pct: 24,
+                status: `ENCERRANDO INSTÂNCIA DE ${appUpper} NO ${targetLabel}...`,
+                msg: `[ OK ] CONTÊINER DE ${appUpper} PARADO E DESACOPLADO (${targetLabel})`,
+              },
+              {
+                pct: 52,
+                status: `APAGANDO REGISTROS E STACKS RESIDUAIS DE ${appUpper}...`,
+                msg: `[ OK ] REGISTROS LOCAIS E ARQUIVOS DE COMPOSIÇÃO REMOVIDOS`,
+              },
+              {
+                pct: 80,
+                status: `ATUALIZANDO INVENTÁRIO DE APLICATIVOS (${targetLabel})...`,
+                msg: `[ OK ] CATÁLOGO SINCRONIZADO SEM ${appUpper}`,
+              },
+              {
+                pct: 100,
+                status: `DESINSTALAÇÃO DE ${appUpper} CONCLUÍDA // ABRINDO PAINEL...`,
+                msg: `[ 100% ] ${appUpper} REMOVIDO PERMANENTEMENTE DO ${targetLabel}`,
+              },
+            ]
+          : [
+              {
+                pct: 22,
+                status: `REINICIALIZANDO MÓDULOS DE ${appUpper} NO ${targetLabel}...`,
+                msg: `[ OK ] ANTIGA INSTÂNCIA DE ${appUpper} SUBSTITUÍDA (${targetLabel})`,
+              },
+              {
+                pct: 50,
+                status: `RECONFIGURANDO VOLUMES E PARÂMETROS DE ${appUpper}...`,
+                msg: `[ OK ] AJUSTES FINAIS DE REINSTALAÇÃO APLICADOS`,
+              },
+              {
+                pct: 78,
+                status: `VALIDANDO CONECTIVIDADE DE ${appUpper} NO ${targetLabel}...`,
+                msg: `[ OK ] SERVIÇO ${appUpper} RESPONDENDO CORRETAMENTE`,
+              },
+              {
+                pct: 100,
+                status: `${appUpper} REINSTALADO E PRONTO // ABRINDO PAINEL...`,
+                msg: `[ 100% ] REINSTALAÇÃO DE ${appUpper} CONCLUÍDA NO ${targetLabel}`,
+              },
+            ]
+      : [
+          {
+            pct: 20,
+            status: 'SINCRONIZANDO KERNEL ESTABILIZADO...',
+            msg: '[ OK ] KERNEL MIL-STD-810H INICIADO SEM ERROS',
+          },
+          {
+            pct: 45,
+            status: 'MONTANDO VOLUMES DE LEITURA/ESCRITA...',
+            msg: '[ OK ] /dev/nvme0n1 MONTADO EM MODO READ/WRITE',
+          },
+          {
+            pct: 70,
+            status: 'CONECTANDO BANCO DE AUTENTICAÇÃO...',
+            msg: '[ OK ] BANCO DE OPERADORES (nomad_auth_db) CARREGADO',
+          },
+          {
+            pct: 90,
+            status:
+              targetAfterBoot === 'UNLOCKED'
+                ? 'RESTAURANDO SESSÃO DO OPERADOR DE COMANDO...'
+                : 'INICIALIZANDO INTERFACE DE LOGIN...',
+            msg:
+              targetAfterBoot === 'UNLOCKED'
+                ? '[ OK ] CREDENCIAL DE COMANDO VALIDADA NO BANCO LOCAL'
+                : '[ OK ] SUBSISTEMA DE AUTENTICAÇÃO PRONTO',
+          },
+          {
+            pct: 100,
+            status:
+              targetAfterBoot === 'UNLOCKED'
+                ? 'SISTEMA PRONTO // ABRINDO CENTRO DE COMANDO...'
+                : 'SISTEMA PRONTO // ABRINDO LOGIN...',
+            msg: '[ 100% ] BEM-VINDO AO NEXUS N.O.M.A.D. OS',
+          },
+        ]
 
     let idx = 0
     const nextStep = () => {
@@ -1210,7 +1331,7 @@ export default function TacticalBootGate({ children }: { children: React.ReactNo
             className="boot-chamfer boot-box-panel"
             style={{
               width: '100%',
-              maxWidth: '720px',
+              maxWidth: 'min(92vw, 1080px)',
               background: '#0c120e',
               border: '2px solid #3d4d40',
               boxShadow: '0 0 60px rgba(0,0,0,0.95)',
@@ -2118,9 +2239,10 @@ export default function TacticalBootGate({ children }: { children: React.ReactNo
         <div
           className="boot-chamfer terminal-container"
           style={{
-            padding: '24px',
+            padding: '28px',
             textAlign: 'center',
-            maxWidth: '520px',
+            width: '100%',
+            maxWidth: 'min(92vw, 860px)',
             display: 'flex',
             flexDirection: 'column',
             gap: '14px',

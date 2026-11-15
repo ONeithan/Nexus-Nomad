@@ -388,6 +388,51 @@ export default function MapsManager(props: {
             }}
           />
 
+          {activeMapDownloads.filter((d) => d.status !== 'completed').length > 0 && (
+            <div className="mt-6 p-4 rounded-xl border border-desert-orange/40 bg-desert-orange/5 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-bold text-desert-orange uppercase tracking-wider">
+                  Downloads de Mapas em Andamento
+                </span>
+                <span className="text-xs font-mono text-text-secondary">
+                  {activeMapDownloads.filter((d) => d.status !== 'completed').length} ativo(s)
+                </span>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {activeMapDownloads
+                  .filter((d) => d.status !== 'completed')
+                  .map((dl) => {
+                    const pct = Math.min(100, Math.max(0, Math.round(dl.progress || 0)))
+                    return (
+                      <div
+                        key={dl.jobId}
+                        className="p-3 rounded-lg bg-surface-primary border border-border-default space-y-1.5"
+                      >
+                        <div className="flex items-center justify-between gap-2 text-xs">
+                          <span className="font-semibold text-text-primary truncate">
+                            {dl.filename || dl.url}
+                          </span>
+                          <span className="font-mono font-bold text-desert-orange shrink-0">
+                            {pct}%
+                          </span>
+                        </div>
+                        <div className="w-full h-1.5 bg-surface-secondary rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-desert-orange transition-all duration-300 rounded-full"
+                            style={{ width: `${pct}%` }}
+                          />
+                        </div>
+                        <div className="flex items-center justify-between text-[11px] font-mono text-text-muted">
+                          <span>{dl.downloadedBytes ? formatBytes(dl.downloadedBytes, 1) : '0 B'}</span>
+                          <span>{dl.totalBytes ? formatBytes(dl.totalBytes, 1) : 'Calculando...'}</span>
+                        </div>
+                      </div>
+                    )
+                  })}
+              </div>
+            </div>
+          )}
+
           <div className="mt-8 mb-6 flex items-center justify-between">
             <StyledSectionHeader title="Regiões de Mapas Curadas" className="!mb-0" />
             <StyledButton

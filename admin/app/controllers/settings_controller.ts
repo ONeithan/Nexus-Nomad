@@ -21,7 +21,7 @@ export default class SettingsController {
     private benchmarkService: BenchmarkService,
     private ollamaService: OllamaService,
     private contextWindowService: ContextWindowService
-  ) {}
+  ) { }
 
   async system({ inertia }: HttpContext) {
     const systemInfo = await this.systemService.getSystemInfo()

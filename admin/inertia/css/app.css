@@ -594,6 +594,173 @@ body {
   background: var(--color-surface-secondary);
 }
 
+/* Light Theme ("Padrão NOMAD") — explicit override so tactical tokens never leak dark values */
+[data-theme="light"] {
+  color-scheme: light;
+
+  --color-desert-white: #f6f6f4;
+  --color-desert-sand: #f7eedc;
+
+  --color-desert-green-darker: #2a2a15;
+  --color-desert-green-dark: #353518;
+  --color-desert-green: #424420;
+  --color-desert-green-light: #babaaa;
+  --color-desert-green-lighter: #e8e6dc;
+
+  --color-desert-orange-dark: #8a3d0f;
+  --color-desert-orange: #a84a12;
+  --color-desert-orange-light: #c85815;
+  --color-desert-orange-lighter: #f6e0cf;
+
+  --color-desert-tan-dark: #6b5d4f;
+  --color-desert-tan: #8b7355;
+  --color-desert-tan-light: #a8927a;
+  --color-desert-tan-lighter: #dfd3bf;
+
+  --color-desert-olive-dark: #5a5c3a;
+  --color-desert-olive: #6d7042;
+  --color-desert-olive-light: #858a55;
+  --color-desert-olive-lighter: #dde0cc;
+
+  --color-desert-stone-dark: #5c5c54;
+  --color-desert-stone: #75756a;
+  --color-desert-stone-light: #8f8f82;
+  --color-desert-stone-lighter: #d7d7ce;
+
+  --color-surface-primary: #ffffff;
+  --color-surface-secondary: #f5f2e8;
+  --color-surface-elevated: #ffffff;
+  --color-text-primary: #1c1f1a;
+  --color-text-secondary: #5c5c54;
+  --color-text-muted: #8f8f82;
+  --color-border-default: #d4d1c4;
+  --color-border-subtle: #e7e4d8;
+
+  --color-btn-green-hover: #353518;
+  --color-btn-green-active: #2a2a15;
+
+  /* Light-harmonized tactical HUD tokens */
+  --tactical-bg: #f7eedc;
+  --tactical-panel: #ffffff;
+  --tactical-panel-inner: #f5f1e6;
+  --tactical-border: #cfcbb8;
+  --tactical-accent: #8a3d0f;
+  --tactical-secondary: #424420;
+  --tactical-hazard: #a84a12;
+  --tactical-text: #1c1f1a;
+  --tactical-muted: #5c5c54;
+}
+
+/* ============================================================
+   Theme-Native Tactical Interactions & Subtle HUD Animations
+   ============================================================ */
+@keyframes nomad-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes nomad-modal-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.97) translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes nomad-classified-sweep {
+  0% {
+    transform: translateX(-110%);
+  }
+  45%,
+  100% {
+    transform: translateX(220%);
+  }
+}
+
+@keyframes nomad-telemetry-tick {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+
+.nomad-animate-in {
+  animation: nomad-fade-up 0.24s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.nomad-modal-animate {
+  animation: nomad-modal-pop 0.2s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* Crisp tactile feedback on interactive buttons/links */
+button:not(:disabled),
+a[href] {
+  transition:
+    transform 0.14s cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 0.18s ease,
+    background-color 0.18s ease,
+    color 0.18s ease,
+    box-shadow 0.18s ease;
+}
+
+button:not(:disabled):active {
+  transform: scale(0.982);
+}
+
+.nomad-interactive-card {
+  transition:
+    transform 0.2s cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.nomad-interactive-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 22px -12px rgba(0, 0, 0, 0.38);
+}
+
+.nomad-interactive-card:active {
+  transform: translateY(0) scale(0.992);
+}
+
+/* Subtle metallic/HUD sweep for "CLASSIFICAÇÃO: RESTRITO // OPERACIONAL" */
+.nomad-classified-badge {
+  position: relative;
+  overflow: hidden;
+}
+
+.nomad-classified-badge::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  width: 45%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, var(--tactical-accent, #c2a677) 22%, transparent),
+    transparent
+  );
+  transform: translateX(-110%);
+  animation: nomad-classified-sweep 6.5s ease-in-out infinite;
+  pointer-events: none;
+}
+
+.nomad-telemetry-dot {
+  animation: nomad-telemetry-tick 2.4s ease-in-out infinite;
+}
+
 /* Base (hidden scrollbar + fade hint) */
 .themed-scrollbar {
   scrollbar-width: none; /* Firefox */

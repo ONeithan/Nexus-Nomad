@@ -4,6 +4,7 @@ import classNames from 'classnames'
 import { IconCheck, IconDownload, IconWorld, IconAlertTriangle } from '@tabler/icons-react'
 import StyledButton from './StyledButton'
 import LoadingSpinner from './LoadingSpinner'
+import useDownloads from '~/hooks/useDownloads'
 
 export interface WikipediaSelectorProps {
   options: WikipediaOption[]
@@ -28,6 +29,8 @@ const WikipediaSelector: React.FC<WikipediaSelectorProps> = ({
 }) => {
   // Determine which option to highlight
   const highlightedOptionId = selectedOptionId ?? currentSelection?.optionId ?? null
+
+  const { data: zimDownloads = [] } = useDownloads({ filetype: 'zim' })
 
   // Check if current selection is downloading or failed
   const isDownloading = currentSelection?.status === 'downloading'
@@ -80,6 +83,14 @@ const WikipediaSelector: React.FC<WikipediaSelectorProps> = ({
             currentSelection?.optionId === option.id && currentSelection?.status === 'failed'
           const isPending = selectedOptionId === option.id && selectedOptionId !== currentSelection?.optionId
 
+          const matchingJob = zimDownloads.find(
+            (d) =>
+              d.status !== 'completed' &&
+              ((option.url && d.url === option.url) ||
+                (isCurrentDownloading && (d.filename || d.url).toLowerCase().includes('wikipedia')))
+          )
+          const dlPct = matchingJob ? Math.min(100, Math.max(0, Math.round(matchingJob.progress || 0))) : 0
+
           return (
             <div
               key={option.id}
@@ -110,9 +121,9 @@ const WikipediaSelector: React.FC<WikipediaSelectorProps> = ({
                   </span>
                 )}
                 {isCurrentDownloading && (
-                  <span className="text-xs bg-blue-500 text-white px-2 py-0.5 rounded-full flex items-center gap-1">
+                  <span className="text-xs bg-desert-orange text-white px-2 py-0.5 rounded-full flex items-center gap-1 font-mono">
                     <IconDownload size={12} />
-                    Baixando
+                    {matchingJob ? `Baixando ${dlPct}%` : 'Baixando...'}
                   </span>
                 )}
                 {isCurrentFailed && (
@@ -150,6 +161,39 @@ const WikipediaSelector: React.FC<WikipediaSelectorProps> = ({
                     {option.size_mb === 0 ? 'Sem download' : formatBytes(option.size_mb * 1024 * 1024, 1)}
                   </span>
                 </div>
+
+                {(isCurrentDownloading || matchingJob) && (
+                  <div className="mt-3 pt-2.5 border-t border-border-subtle space-y-1">
+                    <div className="flex items-center justify-between text-[11px] font-mono">
+                      <span className="text-desert-orange font-semibold">
+                        {matchingJob?.status === 'waiting' || matchingJob?.status === 'delayed'
+                          ? 'Na fila...'
+                          : 'Progresso do download'}
+                      </span>
+                      <span className="font-bold text-text-primary">{dlPct}%</span>
+                    </div>
+                    <div className="w-full h-1.5 bg-surface-secondary rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-desert-orange transition-all duration-300 rounded-full"
+                        style={{ width: `${dlPct}%` }}
+                      />
+                    </div>
+                    <div className="flex items-center justify-between text-[10px] font-mono text-text-muted">
+                      <span>
+                        {matchingJob?.downloadedBytes
+                          ? formatBytes(matchingJob.downloadedBytes, 1)
+                          : '0 B'}
+                      </span>
+                      <span>
+                        {matchingJob?.totalBytes
+                          ? formatBytes(matchingJob.totalBytes, 1)
+                          : option.size_mb > 0
+                            ? formatBytes(option.size_mb * 1024 * 1024, 1)
+                            : '—'}
+                      </span>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )
