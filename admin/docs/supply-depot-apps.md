@@ -60,7 +60,9 @@ Na primeira vez que fizer login após essa alteração, utilize o usuário `admi
 
 **Seus dados:** As configurações do aplicativo ficam salvas na pasta `storage/stirling-pdf` no seu NOMAD. Os arquivos PDF enviados para manipulação são processados na operação e baixados de volta para o seu dispositivo cliente. O Stirling não funciona como um repositório de documentos de longo prazo, de modo que ele não retém seus PDFs após o processamento.
 
-**De onde vêm seus PDFs (e por que os arquivos do NOMAD não aparecem diretamente nele):** O Stirling manipula arquivos a partir do dispositivo que você estiver utilizando — seu notebook, celular ou tablet. Você clica em "Abrir do computador", seleciona o PDF, faz as edições desejadas e baixa o resultado de volta para o seu aparelho. O Stirling não tem acesso direto aos arquivos armazenados em outras áreas do NOMAD, não exibindo suas pastas de livros, documentos da Base de Conhecimento ou itens do Gerenciador de Arquivos. Se o PDF desejado já estiver no NOMAD, baixe-o primeiro para o seu dispositivo (usando o Gerenciador de Arquivos, por exemplo) e depois abra-o no Stirling. É uma etapa adicional simples, mas é ela que garante que seus dados fiquem estritamente onde você os guardou, sem invasão entre aplicações.
+**De onde vêm seus PDFs (PC local + Pastas do NOMAD):**
+- **Do seu computador/celular:** Basta clicar em **"Selecionar arquivo"** ou arrastar o PDF direto para o navegador, editar e baixar o resultado de volta para o seu aparelho.
+- **Das pastas do servidor NOMAD:** O container do Stirling já monta automaticamente as pastas `books` e `kb_uploads` do NOMAD em `/customFiles/books` e `/customFiles/documentos`. Além disso, você pode ativar o **Samba** em **Configurações → Armazenamento & Samba** para abrir os PDFs do servidor direto pelo Windows Explorer/Finder e arrastar para o Stirling.
 
 **Funcionamento offline:** Todas as ferramentas de manipulação de PDF rodam localmente no seu NOMAD, operando 100% offline. Apenas alguns recursos secundários dependem de internet e não farão nada quando desconectado: a opção de importação do "Google Drive" e os links no rodapé (Pesquisa, Discord, GitHub). Nenhum deles é necessário para trabalhar com PDFs. O único recurso principal que possui componente online opcional é o OCR (reconhecimento óptico de caracteres em documentos escaneados), que já vem com suporte ao idioma inglês pré-instalado — a adição de pacotes de outros idiomas é a única parte que requer conexão temporária.
 
@@ -97,8 +99,8 @@ Um leitor e organizador de bibliotecas de e-books baseado na web para a sua cole
 **Primeira vez que você abre:** O Calibre-Web precisa apontar para um banco de dados de biblioteca, e o NOMAD cria automaticamente uma biblioteca vazia durante a instalação para evitar erros de configuração. Este é o fluxo de configuração inicial (executado uma única vez):
 
 1. Abra o Calibre-Web. Ele iniciará na tela de **Database Configuration** (Configuração do Banco de Dados).
-2. No campo **Location of Calibre Database** (Localização do Banco de Dados Calibre), digite `/books` e clique em **Save** (Salvar). Você verá a mensagem "Database Settings updated" e sua biblioteca (ainda vazia) será aberta.
-3. A configuração está concluída! Sua biblioteca está pronta para receber novos livros.
+2. Se aparecer a janela **"Choose File Location"** mostrando `/app/calibre-web`: clique **duas vezes em `..`** na lista de pastas para subir até a raiz `/`, entre na pasta **`books`** e clique no botão azul **Select** (ou feche a janela, digite `/books` diretamente no campo **Location of Calibre Database** e clique em **Save**).
+3. Você verá a mensagem *"Database Settings updated"* e sua biblioteca será aberta. A configuração está concluída!
 
 Se em algum momento for solicitado login, as credenciais padrão são `admin` / `admin123`. **Altere essa senha** assim que acessar o sistema (clique em `admin` no canto superior direito e selecione Editar). Esse é o acesso padrão de fábrica em qualquer NOMAD.
 
@@ -260,7 +262,7 @@ Uma plataforma completa de aprendizado offline desenvolvida pela Learning Equali
 3. Agora você poderá selecionar canais individuais da versão antiga ou escolher "Selecionar canais inteiros" para importar tudo de uma só vez. Clique em "Importar" e a transferência local será iniciada.
 4. Quando tudo estiver conferido na nova instalação e os conteúdos estiverem transferidos, desinstale a Plataforma Educacional antiga pelo cartão dela (ela exibe a etiqueta **legado/legacy**). Recomenda-se também marcar a opção de remover a imagem antiga e o volume de dados ao desinstalar para liberar espaço em disco, mas se preferir mantê-la instalada temporariamente por garantia, não há problema.
 
-**Seus dados:** Seus canais importados, turmas cadastradas e o progresso dos alunos ficam salvos na pasta `storage/kolibri-gen2` no seu NOMAD. Fazer o backup dessa pasta protege todo o ambiente do Kolibri.
+**Seus dados & Onde escolher o HD de Download:** Seus canais importados, turmas cadastradas e o progresso dos alunos ficam salvos na pasta `storage/kolibri-gen2` no seu NOMAD. Para gravar os cursos em um **HD externo ou disco secundário**, acesse **Configurações → Armazenamento & Samba → Destino de Downloads do Kolibri** e clique em **Mapear Kolibri → [Seu HD]**. O NOMAD move os dados e cria um link automático sem quebrar nada. Dentro do próprio Kolibri, na tela **Importar Canais**, use o filtro de idioma **Português** para baixar apenas materiais em PT-BR ou cole o token do canal desejado.
 
 **Funcionamento offline:** 100% offline após a importação dos canais, cumprindo rigorosamente a missão do Kolibri. A única etapa que requer internet é o download inicial de canais via Kolibri Studio; todo o restante — navegação nas aulas, resolução de exercícios e acompanhamento pedagógico — roda localmente no seu NOMAD.
 
@@ -383,5 +385,5 @@ Estes 50 idiomas estão disponíveis no momento (o idioma chinês ainda não est
 2. **Recipe (Centro):** Monte a sequência de passos. Clique em **BAKE!** (ou deixe **Auto Bake** marcado) para processar instantaneamente.
 3. **Input / Output (Direita):** Cole o texto ou carregue um arquivo em **Input** e veja/salve o resultado em **Output**.
 
-**Nota sobre idioma:** O projeto oficial do CyberChef não possui tradução nativa para Português no código-fonte, mas os termos das operações são padrões técnicos universais e este guia resume os principais comandos.
+**Tradução Nativa PT-BR no N.O.M.A.D.:** A partir da versão `v1.0.19`, ao abrir o CyberChef pela Central de Aplicativos, o NOMAD aplica automaticamente a camada nativa de tradução (`/apps-pt/cyberchef/`), traduzindo menus, categorias, botões e dicas ao passar o mouse diretamente para Português (PT-BR).
 

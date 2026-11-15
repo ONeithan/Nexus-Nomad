@@ -692,12 +692,12 @@ export default class ServiceSeeder extends BaseSeeder {
       container_config: JSON.stringify({
         HostConfig: {
           RestartPolicy: { Name: 'unless-stopped' },
-          PortBindings: { '8080/tcp': [{ HostPort: '8500' }] },
+          PortBindings: { '8080/tcp': [{ HostPort: '9999' }] },
           Binds: ['/var/run/docker.sock:/var/run/docker.sock:ro'],
         },
         ExposedPorts: { '8080/tcp': {} },
       }),
-      ui_location: '8500',
+      ui_location: '9999',
       installed: false,
       installation_status: 'idle',
       is_dependency_service: false,

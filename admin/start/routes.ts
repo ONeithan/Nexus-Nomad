@@ -6,6 +6,7 @@
 | The routes file is used for defining the HTTP routes.
 |
 */
+import AppTranslatorProxyController from '#controllers/app_translator_proxy_controller'
 import BenchmarkController from '#controllers/benchmark_controller'
 import ChatsController from '#controllers/chats_controller'
 import ConditionsController from '#controllers/conditions_controller'
@@ -307,6 +308,10 @@ documented(
 router.get('/api/openapi.json', [OpenApiController, 'spec'])
 router.get('/reference', [OpenApiController, 'reference'])
 router.get('/reference/assets/standalone.js', [OpenApiController, 'standalone'])
+
+// Native PT-BR translation proxy for IT-Tools and CyberChef
+router.any('/apps-pt/:app', [AppTranslatorProxyController, 'handle'])
+router.any('/apps-pt/:app/*', [AppTranslatorProxyController, 'handle'])
 
 router
   .group(() => {

@@ -329,7 +329,7 @@ export default function Home(props: {
     <AppLayout>
       <Head title="Centro de Comando" />
       {updateInfo?.updateAvailable && (
-        <div className="flex justify-center items-center p-4 w-full max-w-[1440px] mx-auto">
+        <div className="flex justify-center items-center p-4 w-full max-w-[1840px] mx-auto 2xl:px-10">
           <Alert
             title="Uma nova atualização está disponível!"
             type="info-inverted"
@@ -346,7 +346,7 @@ export default function Home(props: {
       )}
       <WhatsNewBanner />
       {rerunBanner?.show && (
-        <div className="flex justify-center items-center px-4 pt-4 w-full max-w-[1440px] mx-auto">
+        <div className="flex justify-center items-center px-4 pt-4 w-full max-w-[1840px] mx-auto 2xl:px-10">
           <Alert
             title="Seu benchmark pode ser recalculado com o Score v2"
             message="O sistema de pontuação de hardware foi atualizado. Execute novamente quando desejar."
@@ -370,9 +370,9 @@ export default function Home(props: {
            MODO HUD TÁTICO MILITAR (MIL-STD-810H — Olive Drab + Coyote Tan)
            Respeita 100% dos módulos reais instalados e funções do site NOMAD
            ==================================================================== */
-        <div className="max-w-[1440px] mx-auto px-4 sm:px-6 py-5 space-y-5">
+        <div className="max-w-[1840px] w-full mx-auto px-4 sm:px-6 2xl:px-10 py-5 space-y-5">
           {/* 1. CABEÇALHO DE COMANDO TÁTICO */}
-          <header className="chamfer-box relative p-5 border-l-4 border-l-desert-tan">
+          <header className="chamfer-box nomad-hud-header relative p-5 border-l-4 border-l-desert-tan">
             <div className="rivet absolute top-2.5 left-2.5" />
             <div className="rivet absolute top-2.5 right-2.5" />
             <div className="rivet absolute bottom-2.5 left-2.5" />
@@ -385,10 +385,11 @@ export default function Home(props: {
                     <span className="w-1.5 h-1.5 rounded-full bg-desert-green nomad-telemetry-dot" />
                     CLASSIFICAÇÃO: RESTRITO // OPERACIONAL
                   </span>
-                  <span className="px-2 py-0.5 bg-desert-orange/15 border border-desert-orange/50 text-desert-orange-light font-bold">
+                  <span className="nomad-classified-badge px-2 py-0.5 bg-desert-orange/15 border border-desert-orange/50 text-desert-orange-light font-bold inline-flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-desert-orange nomad-telemetry-dot" />
                     MODO: OPERAÇÃO AUTÔNOMA (OFF-GRID)
                   </span>
-                  <span className="text-text-secondary">
+                  <span className="nomad-stat-tile px-2 py-0.5 border border-border-subtle bg-surface-secondary/60 text-text-secondary">
                     DOUTRINA: <strong className="text-desert-tan">MIL-STD-810H</strong>
                   </span>
                 </div>
@@ -430,7 +431,7 @@ export default function Home(props: {
               </div>
 
               {/* Telemetria Rápida no Topo */}
-              <div className="chamfer-inner flex flex-wrap items-center gap-4 px-4 py-3">
+              <div className="chamfer-inner nomad-stat-tile flex flex-wrap items-center gap-4 px-4 py-3">
                 <div className="text-right">
                   <div className="text-[10px] font-mono-mil text-text-muted uppercase">
                     Divisões na Home
@@ -450,7 +451,8 @@ export default function Home(props: {
                 </div>
                 <div className="h-7 w-[1px] bg-border-default" />
                 <div className="text-right">
-                  <div className="text-[10px] font-mono-mil text-text-muted uppercase">
+                  <div className="text-[10px] font-mono-mil text-text-muted uppercase flex items-center justify-end gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-desert-green nomad-telemetry-dot" />
                     Integridade
                   </div>
                   <div className="text-sm font-mono-mil font-bold text-text-primary">
@@ -484,7 +486,7 @@ export default function Home(props: {
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 px-1">
                 <Link
                   href="/settings/zim"
-                  className="chamfer-inner p-3 text-center hover:border-desert-tan transition-colors block"
+                  className="chamfer-inner nomad-interactive-card p-3 text-center hover:border-desert-tan transition-colors block"
                 >
                   <div className="text-[10px] font-mono-mil text-text-secondary uppercase">
                     Acervo de Sobrevivência
@@ -498,7 +500,7 @@ export default function Home(props: {
                 </Link>
 
                 <Link
-                  href={aiConfigured ? '/chat' : '/supply-depot'}
+                  href={aiConfigured ? '/chat' : '/settings/models'}
                   className="chamfer-inner nomad-interactive-card p-3 text-center hover:border-desert-tan transition-colors block"
                 >
                   <div className="text-[10px] font-mono-mil text-text-secondary uppercase">
@@ -627,7 +629,7 @@ export default function Home(props: {
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border-default pb-2">
               <div className="flex items-center gap-2">
                 <span className="text-desert-tan font-mono-mil text-sm nomad-telemetry-dot">►</span>
-                <h2 className="text-lg font-bold font-stencil tracking-widest uppercase text-text-primary">
+                <h2 className="text-lg font-bold font-stencil tracking-widest uppercase text-text-primary nomad-classified-badge px-2.5 py-1 rounded border border-border-default/80">
                   DIVISÕES OPERACIONAIS DO SISTEMA
                 </h2>
               </div>
@@ -668,7 +670,7 @@ export default function Home(props: {
                   isLinkTile && pendingDelete === item.linkTile!.service_name
 
                 const cardInner = (
-                  <div className="chamfer-box relative p-5 h-full flex flex-col justify-between transition-all hover:border-desert-tan group">
+                  <div className="chamfer-box nomad-interactive-card relative p-5 h-full flex flex-col justify-between transition-all hover:border-desert-tan group">
                     <div className="rivet absolute top-2.5 left-2.5" />
                     <div className="rivet absolute top-2.5 right-2.5" />
                     <div className="rivet absolute bottom-2.5 left-2.5" />
@@ -998,7 +1000,7 @@ export default function Home(props: {
       )}
 
       {linkError && (
-        <div className="px-4 pb-4 max-w-[1440px] mx-auto">
+        <div className="px-4 2xl:px-10 pb-4 max-w-[1840px] w-full mx-auto">
           <Alert title={linkError} type="error" variant="solid" className="w-full" />
         </div>
       )}

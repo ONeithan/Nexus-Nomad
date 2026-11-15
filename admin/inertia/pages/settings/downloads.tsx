@@ -13,8 +13,8 @@ export default function SettingsDownloads() {
   return (
     <SettingsLayout>
       <Head title="Downloads Ativos — Nexus N.O.M.A.D." />
-      <div className="flex-1 lg:pl-12">
-        <main className="px-6 py-8 lg:px-12 max-w-6xl space-y-8">
+      <div className="xl:pl-72 w-full">
+        <main className="px-6 lg:px-12 py-6 lg:py-8 max-w-7xl space-y-8">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
               <h1 className="text-4xl font-bold text-text-primary mb-2 flex items-center gap-3">

@@ -225,8 +225,8 @@ export default function SettingsStorage() {
   return (
     <SettingsLayout>
       <Head title="Armazenamento, Arquivos & Samba — Nexus N.O.M.A.D." />
-      <div className="flex-1 lg:pl-12">
-        <main className="px-6 py-8 lg:px-12 max-w-6xl space-y-10">
+      <div className="xl:pl-72 w-full">
+        <main className="px-6 lg:px-12 py-6 lg:py-8 max-w-7xl space-y-10">
           <div>
             <h1 className="text-4xl font-bold text-text-primary mb-2 flex items-center gap-3">
               <IconDatabase className="text-desert-tan" size={34} />
@@ -235,6 +235,12 @@ export default function SettingsStorage() {
             <p className="text-text-secondary">
               Inspecione o uso exato por pasta, mova bibliotecas entre discos (NVMe / HD externo) sem quebrar o Kiwix ou Kolibri, e compartilhe sua biblioteca via Samba (SMB) com o Portainer remoto.
             </p>
+            <div className="mt-4 p-4 rounded-xl border border-desert-tan/30 bg-surface-secondary/70 text-xs text-text-secondary space-y-1.5">
+              <p className="font-semibold text-text-primary">📌 Como usar esta central em 3 passos:</p>
+              <p>1. <strong>Escolher onde baixar:</strong> Selecione o disco desejado em <em>Discos de Armazenamento</em> (NVMe ou HD secundário) para novos pacotes ZIM, mapas e conteúdos do Kolibri.</p>
+              <p>2. <strong>Mover bibliotecas sem quebrar:</strong> No <em>Gerenciador de Arquivos</em> abaixo, clique em <strong>Mover para outro HD</strong> em qualquer pasta (<code className="text-desert-tan">/zim</code>, <code className="text-desert-tan">/kolibri-gen2</code>, <code className="text-desert-tan">/maps</code>). O NOMAD move os dados fisicamente e cria um link simbólico automático para o Kiwix e Kolibri continuarem lendo sem erro.</p>
+              <p>3. <strong>Acessar pela rede / Portainer (Samba):</strong> Ative o Samba no final da página para montar <code className="text-desert-tan">\\{hostIp}\nomad</code> no Windows/Mac ou em containers remotos.</p>
+            </div>
           </div>
 
           {/* 1. Raio-X de Uso por Pasta & Discos */}
@@ -328,6 +334,139 @@ export default function SettingsStorage() {
               </div>
             )}
           </section>
+
+          {/* Central de Mapeamento de Discos de Download (Para TODOS os Módulos) */}
+          {overview && overview.mountTargets.length > 0 && (
+            <section className="rounded-xl border border-desert-green/40 bg-surface-primary p-6 space-y-6">
+              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-border-subtle pb-4">
+                <div>
+                  <h3 className="text-base font-bold text-text-primary flex items-center gap-2">
+                    <span className="text-xl">💾</span>
+                    <span>Central de Mapeamento de Discos de Download (Para TODOS os Módulos)</span>
+                  </h3>
+                  <p className="text-xs text-text-secondary mt-1">
+                    Defina em qual HD cada categoria de download deve ser gravada (Kiwix/Wikipédia, Mapas, Kolibri, Modelos de IA, Livros, Mídia). O NOMAD move os dados e cria links simbólicos automáticos sem quebrar as aplicações.
+                  </p>
+                </div>
+
+                {/* Ação Mestre: Mapear TUDO de uma vez */}
+                <div className="flex items-center gap-2 shrink-0 bg-surface-secondary p-2.5 rounded-xl border border-border-default">
+                  <span className="text-xs font-semibold text-text-primary">Mapear TUDO para:</span>
+                  {overview.mountTargets.map((m) => (
+                    <button
+                      key={`map-all-${m.path}`}
+                      type="button"
+                      disabled={Boolean(movingItem)}
+                      onClick={async () => {
+                        const confirm = window.confirm(`Deseja mover e mapear TODAS as pastas de downloads para o disco ${m.label}? Isso criará links simbólicos automáticos.`)
+                        if (!confirm) return
+                        setMovingItem('all')
+                        let successCount = 0
+                        for (const f of overview.folderUsage) {
+                          try {
+                            await axios.post('/api/system/storage/move', {
+                              sourcePath: f.path,
+                              targetDiskPath: m.path,
+                            })
+                            successCount++
+                          } catch {
+                            // Continua para as demais
+                          }
+                        }
+                        addNotification({
+                          message: `${successCount} pastas mapeadas com sucesso para ${m.label}!`,
+                          type: 'success',
+                        })
+                        refetchOverview()
+                        refetchBrowse()
+                        setMovingItem(null)
+                      }}
+                      className="px-3 py-1.5 rounded-lg bg-desert-green hover:bg-desert-green-dark text-white text-xs font-bold cursor-pointer disabled:opacity-50"
+                    >
+                      {movingItem === 'all' ? 'Mapeando...' : `⚡ ${m.label}`}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Grade de Módulos Individuais */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {[
+                  { key: 'zim', name: 'Biblioteca ZIM (Kiwix / Wikipédia)', icon: '📚', desc: 'Acervos offline e Wikipédia completa' },
+                  { key: 'maps', name: 'Mapas Vetoriais Offline', icon: '🗺️', desc: 'Camadas e pacotes de mapas PMTiles' },
+                  { key: 'kolibri-gen2', name: 'Plataforma Kolibri', icon: '🎓', desc: 'Cursos, videoaulas e canais educativos' },
+                  { key: 'ollama', name: 'Modelos de IA Local (Ollama)', icon: '🤖', desc: 'Pesos GGUF e modelos de linguagem' },
+                  { key: 'books', name: 'Livros & E-books (Calibre-Web)', icon: '📖', desc: 'Biblioteca digital e acervos EPUB/PDF' },
+                  { key: 'media', name: 'Mídia & Vídeos (Jellyfin)', icon: '🎬', desc: 'Filmes, séries e documentários offline' },
+                  { key: 'kb_uploads', name: 'Base de Conhecimento RAG', icon: '📄', desc: 'Documentos e PDFs indexados' },
+                ].map((mod) => {
+                  const currentFolder = overview.folderUsage.find((f) => f.name === mod.key)
+                  const isMovingThis = movingItem === mod.key
+                  return (
+                    <div
+                      key={`module-card-${mod.key}`}
+                      className="p-4 rounded-xl border border-border-default bg-surface-secondary/70 flex flex-col justify-between space-y-3"
+                    >
+                      <div>
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-base">{mod.icon}</span>
+                          <span className="text-xs font-mono font-bold text-desert-orange">
+                            {currentFolder ? formatBytes(currentFolder.sizeBytes, 1) : '0 B'}
+                          </span>
+                        </div>
+                        <h4 className="text-xs font-bold text-text-primary mt-1">{mod.name}</h4>
+                        <p className="text-[11px] text-text-muted mt-0.5">{mod.desc}</p>
+                        <div className="text-[10px] font-mono text-text-secondary mt-1 truncate">
+                          Pasta: /{mod.key} {currentFolder?.fileCount ? `(${currentFolder.fileCount} arq.)` : ''}
+                        </div>
+                      </div>
+
+                      <div className="pt-2 border-t border-border-subtle/50">
+                        <div className="text-[10px] font-semibold text-text-secondary mb-1.5 uppercase">
+                          Mapear para disco:
+                        </div>
+                        <div className="flex flex-wrap gap-1.5">
+                          {overview.mountTargets.map((m) => (
+                            <button
+                              key={`btn-${mod.key}-${m.path}`}
+                              type="button"
+                              disabled={Boolean(movingItem)}
+                              onClick={async () => {
+                                setMovingItem(mod.key)
+                                try {
+                                  const targetFolder = currentFolder || { path: `${overview.storageRoot}/${mod.key}` }
+                                  const res = await axios.post('/api/system/storage/move', {
+                                    sourcePath: targetFolder.path,
+                                    targetDiskPath: m.path,
+                                  })
+                                  addNotification({
+                                    message: res.data?.message || `${mod.name} mapeado para ${m.label}!`,
+                                    type: 'success',
+                                  })
+                                  refetchOverview()
+                                  refetchBrowse()
+                                } catch (err: any) {
+                                  addNotification({
+                                    message: err?.response?.data?.error || `Falha ao mapear ${mod.name}.`,
+                                    type: 'error',
+                                  })
+                                } finally {
+                                  setMovingItem(null)
+                                }
+                              }}
+                              className="px-2.5 py-1 rounded border border-border-default bg-surface-primary hover:border-desert-tan text-[11px] font-medium text-text-primary cursor-pointer disabled:opacity-50"
+                            >
+                              {isMovingThis ? 'Mapeando...' : `→ ${m.label}`}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </section>
+          )}
 
           {/* 2. Gerenciador de Arquivos Nativo + Mover entre Discos */}
           <section className="space-y-4">

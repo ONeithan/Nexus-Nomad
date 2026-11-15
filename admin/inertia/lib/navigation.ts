@@ -47,6 +47,16 @@ export function getServiceLink(ui_location: string, customUrl?: string | null): 
     // Check if the ui location is a port number
     const parsedPort = parseInt(ui_location, 10);
     if (!isNaN(parsedPort)) {
+        // Redirecionamento nativo e fixo para tradução PT-BR e portas padrão do NOMAD
+        if (parsedPort === 8430) {
+            return '/apps-pt/it-tools/';
+        }
+        if (parsedPort === 8100) {
+            return '/apps-pt/cyberchef/';
+        }
+        if (parsedPort === 8500) {
+            return `http://${window.location.hostname}:9999`;
+        }
         // If it's a port number, return a link to the service on that port
         return `http://${window.location.hostname}:${parsedPort}`;
     }

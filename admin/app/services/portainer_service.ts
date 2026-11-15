@@ -880,7 +880,8 @@ export class PortainerService {
 
     if (resolvedBinds.length > 0) {
       for (const bind of resolvedBinds) {
-        if (usesHostBinds && bind.startsWith('/')) {
+        const isSystemSocket = bind.startsWith('/var/run/docker.sock')
+        if ((usesHostBinds && bind.startsWith('/')) || isSystemSocket) {
           volumeMounts.push(`- ${bind}`)
         } else {
           const parts = bind.split(':')
@@ -1589,6 +1590,9 @@ ${cmdBlock}${topLevelVolumesBlock}`
         const defaultBinds =
           resolvedBinds.length > 0
             ? resolvedBinds.map((b: string) => {
+                if (b.startsWith('/var/run/docker.sock')) {
+                  return b
+                }
                 if (!usesHostBinds && b.startsWith('/')) {
                   const parts = b.split(':')
                   const targetPath = parts[1] || '/data'
@@ -1707,6 +1711,31 @@ ${cmdBlock}${topLevelVolumesBlock}`
         throw new Error(
           `Contêiner não permaneceu ativo (estado: ${cState?.Status || runningCont.State}, reinícios: ${restartCount}). ${logs ? `Logs: ${logs.replace(/[^\x20-\x7E\n]/g, '').slice(0, 220)}` : ''}`
         )
+      }
+
+      if (serviceName === 'nomad_filebrowser') {
+        // Garante que o usuário admin / nomad funcione mesmo se .filebrowser.db já existia com senha aleatória
+        for (const cmd of [
+          ['filebrowser', 'users', 'update', 'admin', '--password', 'nomad', '-d', '/db/.filebrowser.db'],
+          ['filebrowser', 'users', 'add', 'admin', 'nomad', '--perm.admin', '-d', '/db/.filebrowser.db'],
+        ]) {
+          try {
+            const execCreate = await client.post(
+              `/api/endpoints/${endpointId}/docker/containers/${runningCont.Id}/exec`,
+              { AttachStdout: true, AttachStderr: true, Cmd: cmd },
+              { timeout: 8000 }
+            )
+            if (execCreate.data?.Id) {
+              await client.post(
+                `/api/endpoints/${endpointId}/docker/exec/${execCreate.data.Id}/start`,
+                { Detach: false, Tty: false },
+                { timeout: 8000 }
+              )
+            }
+          } catch {
+            // Non-fatal
+          }
+        }
       }
 
       // 10. Mark as installed and linked to remote server

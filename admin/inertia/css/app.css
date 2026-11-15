@@ -761,6 +761,51 @@ button:not(:disabled):active {
   animation: nomad-telemetry-tick 2.4s ease-in-out infinite;
 }
 
+/* Tactile HUD header sweep + button press feedback (theme-coherent, non-flashy) */
+@keyframes nomad-hud-scan {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.nomad-hud-header {
+  position: relative;
+  overflow: hidden;
+}
+
+.nomad-hud-header::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in srgb, var(--tactical-accent, #c2a677) 55%, transparent) 50%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  animation: nomad-hud-scan 7s linear infinite;
+  pointer-events: none;
+}
+
+.nomad-stat-tile {
+  transition:
+    transform 0.18s ease,
+    border-color 0.18s ease,
+    background-color 0.18s ease;
+}
+
+.nomad-stat-tile:hover {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--tactical-accent, #c2a677) 55%, transparent);
+}
+
 /* Base (hidden scrollbar + fade hint) */
 .themed-scrollbar {
   scrollbar-width: none; /* Firefox */

@@ -973,6 +973,20 @@ export class DockerService {
         'finalizing',
         `Finalizing installation of service ${service.service_name}...`
       )
+      if (service.service_name === SERVICE_NAMES.FILEBROWSER) {
+        // Garante que o usuário admin / nomad funcione no FileBrowser local mesmo se o DB já existia
+        for (const cmd of [
+          ['filebrowser', 'users', 'update', 'admin', '--password', 'nomad', '-d', '/db/.filebrowser.db'],
+          ['filebrowser', 'users', 'add', 'admin', 'nomad', '--perm.admin', '-d', '/db/.filebrowser.db'],
+        ]) {
+          try {
+            const exec = await container.exec({ Cmd: cmd, AttachStdout: true, AttachStderr: true })
+            await exec.start({ hijack: false, stdin: false })
+          } catch {
+            // Non-fatal
+          }
+        }
+      }
       service.installed = true
       service.installation_status = 'idle'
       await service.save()

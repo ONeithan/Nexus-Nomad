@@ -6,7 +6,7 @@ import {
   rename,
   rm,
   symlink,
-  copyFile,
+  cp,
   statfs,
 } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
@@ -39,7 +39,8 @@ const FOLDER_LABELS: Record<string, string> = {
   media: 'Mídia, Filmes & Séries (Jellyfin)',
   kb_uploads: 'Base de Conhecimento RAG / Documentos',
   ollama: 'Modelos de IA Local (Ollama)',
-  kolibri: 'Plataforma Educacional (Kolibri)',
+  kolibri: 'Plataforma Educacional (Kolibri Gen1)',
+  'kolibri-gen2': 'Plataforma Educacional (Kolibri Gen2)',
   'stirling-pdf': 'Stirling PDF (Configs & Arquivos)',
   filebrowser: 'Gerenciador de Arquivos (FileBrowser)',
   calibreweb: 'Calibre-Web (Configurações)',
@@ -231,7 +232,7 @@ export class StorageManagerService {
     } catch (err: any) {
       if (err?.code === 'EXDEV') {
         // Cross-device move (e.g. NVMe -> /mnt/nomad_storage HDD)
-        await copyFile(src, destPath)
+        await cp(src, destPath, { recursive: true })
         await rm(src, { recursive: true, force: true })
       } else {
         throw err

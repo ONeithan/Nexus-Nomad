@@ -103,16 +103,25 @@ function loadAuthDB(serverRaw?: string | null): NomadAuthDBState {
   }
 
   // 1. Prioriza o banco de dados SQLite do servidor (KVStore 'auth.operators')
-  mergeFrom(parseAuthState(serverRaw))
+  const parsedServer = parseAuthState(serverRaw)
+  mergeFrom(parsedServer)
 
   // 2. Mescla com localStorage (incluindo chaves de versões anteriores para nunca perder dados)
   if (typeof window !== 'undefined') {
     for (const key of LEGACY_STORAGE_KEYS) {
       try {
-        mergeFrom(parseAuthState(localStorage.getItem(key)))
+        const parsedLocal = parseAuthState(localStorage.getItem(key))
+        mergeFrom(parsedLocal)
       } catch {
         // ignore
       }
+    }
+    // A chave primária local ou do servidor decide o estado de bloqueio atual (evita trava por chave legada)
+    const primaryLocal = parseAuthState(localStorage.getItem(AUTH_STORAGE_KEY))
+    if (primaryLocal) {
+      lockedExplicitly = Boolean(primaryLocal.lockedExplicitly)
+    } else if (parsedServer) {
+      lockedExplicitly = Boolean(parsedServer.lockedExplicitly)
     }
   }
 
@@ -138,7 +147,13 @@ function loadAuthDB(serverRaw?: string | null): NomadAuthDBState {
 function saveAuthDB(state: NomadAuthDBState) {
   if (typeof window === 'undefined') return
   try {
-    localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(state))
+    const serialized = JSON.stringify(state)
+    localStorage.setItem(AUTH_STORAGE_KEY, serialized)
+    for (const key of LEGACY_STORAGE_KEYS) {
+      if (key !== AUTH_STORAGE_KEY && localStorage.getItem(key)) {
+        localStorage.setItem(key, serialized)
+      }
+    }
   } catch {
     // ignore storage errors
   }
@@ -525,7 +540,10 @@ export default function TacticalBootGate({ children }: { children: React.ReactNo
   const [regSubmitting, setRegSubmitting] = useState(false)
 
   // Login states
-  const [loginUser, setLoginUser] = useState('')
+  const [loginUser, setLoginUser] = useState(() => {
+    const db = loadAuthDB(tacticalAuth)
+    return db.operators[0]?.username || ''
+  })
   const [loginPass, setLoginPass] = useState('')
   const [showLoginPass, setShowLoginPass] = useState(false)
   const [rememberSession, setRememberSession] = useState(true)
@@ -603,6 +621,10 @@ export default function TacticalBootGate({ children }: { children: React.ReactNo
     initGate()
 
     const handleLock = () => {
+      const db = loadAuthDB(tacticalAuth)
+      if (db.operators.length > 0 && !loginUser) {
+        setLoginUser(db.operators[0].username)
+      }
       setLoginPass('')
       setLoginError('')
       setStage('LOGIN_SCREEN')
@@ -1141,12 +1163,19 @@ export default function TacticalBootGate({ children }: { children: React.ReactNo
     const db = loadAuthDB(tacticalAuth)
     const user = loginUser.trim()
     const encodedPass = btoa(unescape(encodeURIComponent(loginPass)))
+    const encodedTrimmed = btoa(unescape(encodeURIComponent(loginPass.trim())))
 
-    const matched = db.operators.find(
-      (o) =>
-        o.username.toLowerCase() === user.toLowerCase() &&
-        (o.passwordHash === encodedPass || o.passwordHash === loginPass)
-    )
+    const matched = db.operators.find((o) => {
+      const userMatch =
+        o.username.trim().toLowerCase() === user.toLowerCase() ||
+        (!user && db.operators.length === 1)
+      const passMatch =
+        o.passwordHash === encodedPass ||
+        o.passwordHash === encodedTrimmed ||
+        o.passwordHash === loginPass ||
+        o.passwordHash === loginPass.trim()
+      return userMatch && passMatch
+    })
 
     if (!matched) {
       setLoginError('ACESSO NEGADO: Usuário ou senha inválidos no banco nomad_auth_db.')
@@ -1267,6 +1296,7 @@ export default function TacticalBootGate({ children }: { children: React.ReactNo
         position: 'fixed',
         inset: 0,
         zIndex: 9999,
+        background: '#050806',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -1977,15 +2007,6 @@ export default function TacticalBootGate({ children }: { children: React.ReactNo
               </p>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
-              <button
-                type="button"
-                onClick={resetFullBootSimulation}
-                className="mil-btn"
-                style={{ padding: '4px 10px', fontSize: '10px' }}
-              >
-                <span>🔄</span>
-                <span>REINICIAR TESTE</span>
-              </button>
               <span
                 className="font-mono-mil"
                 style={{

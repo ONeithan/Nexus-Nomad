@@ -1153,6 +1153,35 @@ function AppCard({
   // Per-app documentation link (in-app docs page, anchored to this app's section). Null for apps
   // without a doc section (custom apps, undocumented catalog apps) so the Docs item is hidden.
   const docLink = getSupplyDepotDocLink(service.service_name)
+  const [showFirstOpenModal, setShowFirstOpenModal] = useState(false)
+  const [dontShowAgain, setDontShowAgain] = useState(false)
+
+  const launchUrl =
+    service.service_name === SERVICE_NAMES.IT_TOOLS
+      ? '/apps-pt/it-tools/'
+      : service.service_name === SERVICE_NAMES.CYBERCHEF
+        ? '/apps-pt/cyberchef/'
+        : service.service_name === SERVICE_NAMES.DOZZLE && (!service.ui_location || service.ui_location === '8500')
+          ? getServiceLink('9999', service.custom_url)
+          : getServiceLink(service.ui_location || '', service.custom_url)
+
+  const handleOpenClick = (e: React.MouseEvent) => {
+    if (typeof window !== 'undefined') {
+      const hidden = localStorage.getItem(`nomad_hide_first_open_doc_${service.service_name}`)
+      if (!hidden) {
+        e.preventDefault()
+        setShowFirstOpenModal(true)
+      }
+    }
+  }
+
+  const confirmOpenApp = () => {
+    if (typeof window !== 'undefined' && dontShowAgain) {
+      localStorage.setItem(`nomad_hide_first_open_doc_${service.service_name}`, '1')
+    }
+    setShowFirstOpenModal(false)
+    window.open(launchUrl, '_blank', 'noopener,noreferrer')
+  }
 
   // Subtitle under the app name: the powered-by name plus the installed image tag
   // (e.g. "Kiwix · 3.7.0"). Only installed apps have a meaningful running version; a
@@ -1374,9 +1403,10 @@ function AppCard({
             {/* Open button — shown when the app has a default location or a user-set custom URL */}
             {(service.ui_location || service.custom_url) && (
               <a
-                href={getServiceLink(service.ui_location || "", service.custom_url)}
+                href={launchUrl}
                 target="_blank"
                 rel="noopener noreferrer"
+                onClick={handleOpenClick}
                 className="flex-1"
               >
                 <StyledButton size="sm" variant="primary" icon="IconExternalLink" fullWidth>
@@ -1482,6 +1512,77 @@ function AppCard({
           </div>
         )}
       </div>
+
+      {showFirstOpenModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+          onClick={() => setShowFirstOpenModal(false)}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl border border-desert-tan/40 bg-surface-primary p-6 shadow-2xl space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <span className="text-[11px] font-mono uppercase tracking-wider text-desert-orange">
+                  Primeiro Acesso // N.O.M.A.D.
+                </span>
+                <h3 className="text-lg font-bold text-text-primary mt-0.5">
+                  {service.friendly_name || service.service_name}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowFirstOpenModal(false)}
+                className="text-text-muted hover:text-text-primary text-sm cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <p className="text-xs text-text-secondary leading-relaxed">
+              Antes de começar a usar este aplicativo, recomendamos consultar a{' '}
+              <strong className="text-text-primary">Documentação Nativa (PT-BR)</strong> para conferir
+              usuário/senha padrão, onde os arquivos são salvos e dicas de uso offline.
+            </p>
+
+            <label className="flex items-center gap-2 text-xs text-text-secondary cursor-pointer select-none pt-1">
+              <input
+                type="checkbox"
+                checked={dontShowAgain}
+                onChange={(e) => setDontShowAgain(e.target.checked)}
+                className="rounded border-border-default"
+              />
+              <span>Não mostrar novamente para este aplicativo</span>
+            </label>
+
+            <div className="flex flex-wrap items-center justify-end gap-2 pt-2">
+              {docLink && (
+                <a
+                  href={docLink}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={() => {
+                    if (dontShowAgain && typeof window !== 'undefined') {
+                      localStorage.setItem(`nomad_hide_first_open_doc_${service.service_name}`, '1')
+                    }
+                  }}
+                  className="px-3 py-2 rounded-lg border border-desert-tan/40 bg-desert-tan/10 hover:bg-desert-tan/20 text-xs font-semibold text-desert-tan"
+                >
+                  📖 Ver Documentação
+                </a>
+              )}
+              <button
+                type="button"
+                onClick={confirmOpenApp}
+                className="px-4 py-2 rounded-lg bg-desert-green hover:bg-desert-green-dark text-white text-xs font-bold cursor-pointer"
+              >
+                Continuar para o App →
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
