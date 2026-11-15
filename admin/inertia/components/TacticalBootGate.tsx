@@ -507,7 +507,7 @@ export default function TacticalBootGate({ children }: { children: React.ReactNo
   const displayVersion =
     appVersion && appVersion !== '0.0.0' && appVersion !== 'dev'
       ? `v${appVersion.replace(/^v/i, '').replace(/-nexus$/i, '')}`
-      : 'v1.0.16'
+      : 'v1.0.19'
 
   const [stage, setStage] = useState<BootStage>(() => {
     if (hasBootedInCurrentDocument) return 'UNLOCKED'
