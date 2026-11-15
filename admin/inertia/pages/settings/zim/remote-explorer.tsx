@@ -65,7 +65,21 @@ export default function ZimRemoteExplorer() {
   const { addNotification } = useNotifications()
   const { isOnline } = useInternetStatus()
   const { isInstalled } = useServiceInstalledStatus(SERVICE_NAMES.KIWIX)
-  const { isInstalled: kolibriInstalled } = useServiceInstalledStatus(SERVICE_NAMES.KOLIBRI)
+  const { isInstalled: kolibriV1Installed } = useServiceInstalledStatus(SERVICE_NAMES.KOLIBRI)
+  const { isInstalled: kolibriGen2Installed } = useServiceInstalledStatus(SERVICE_NAMES.KOLIBRI_GEN2)
+  const { data: systemServicesData } = useQuery({
+    queryKey: ['system-services-kolibri-check'],
+    queryFn: () => api.getSystemServices(),
+    staleTime: 15000,
+  })
+  const kolibriServiceMatch = systemServicesData?.services?.find(
+    (s: any) =>
+      s.installed &&
+      (s.service_name?.toLowerCase().includes('kolibri') ||
+        s.friendly_name?.toLowerCase().includes('kolibri'))
+  )
+  const kolibriInstalled =
+    kolibriV1Installed || kolibriGen2Installed || Boolean(kolibriServiceMatch)
   const { data: zimDownloads = [] } = useDownloads({ filetype: 'zim' })
   const { debounce } = useDebounce()
 
@@ -1230,7 +1244,12 @@ export default function ZimRemoteExplorer() {
                           </button>
                           {kolibriInstalled && (
                             <a
-                              href={`http://${typeof window !== 'undefined' ? window.location.hostname : 'localhost'}:8095`}
+                              href={
+                                kolibriServiceMatch?.custom_url ||
+                                (kolibriServiceMatch?.ui_location?.startsWith('http')
+                                  ? kolibriServiceMatch.ui_location
+                                  : `http://${typeof window !== 'undefined' ? window.location.hostname : 'localhost'}:${kolibriServiceMatch?.ui_location || '8095'}`)
+                              }
                               target="_blank"
                               rel="noopener noreferrer"
                               className="px-2.5 py-1 rounded bg-desert-green text-white hover:bg-btn-green-hover font-medium"

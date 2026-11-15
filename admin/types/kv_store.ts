@@ -58,6 +58,12 @@ export const KV_STORE_SCHEMA = {
   // whatever chat model the user last used. Unset/null keeps the previous
   // behaviour: titles use the chat model, suggestions use chat.lastModel.
   'ai.tasksModel':              'string',
+  'samba.enabled':              'boolean',
+  'samba.shareName':            'string',
+  'samba.username':             'string',
+  'samba.password':             'string',
+  'samba.hostPath':             'string',
+  'storage.preferredDownloadDisk': 'string',
   // Learned per-model token-estimator corrections, as a JSON object keyed by
   // model name ({"llama3:8b":1.02,"qwen2.5:0.5b":1.26}). One row rather than a
   // key per model, since KVStoreKey is a closed union. Written by

@@ -89,6 +89,14 @@ export default class SettingsController {
     return inertia.render('settings/legal')
   }
 
+  async downloads({ inertia }: HttpContext) {
+    return inertia.render('settings/downloads')
+  }
+
+  async storage({ inertia }: HttpContext) {
+    return inertia.render('settings/storage')
+  }
+
   async support({ inertia }: HttpContext) {
     return inertia.render('settings/support')
   }

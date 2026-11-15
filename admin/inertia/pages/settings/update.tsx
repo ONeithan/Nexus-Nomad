@@ -9,7 +9,7 @@ import { SystemUpdateStatus } from '../../../types/system'
 import api from '~/lib/api'
 import Input from '~/components/inputs/Input'
 import Switch from '~/components/inputs/Switch'
-import { useMutation } from '@tanstack/react-query'
+import { useMutation, useQuery } from '@tanstack/react-query'
 import { useNotifications } from '~/context/NotificationContext'
 import { useSystemSetting } from '~/hooks/useSystemSetting'
 import CoreAutoUpdateSection from '~/components/updates/CoreAutoUpdateSection'
@@ -98,6 +98,57 @@ export default function SystemUpdatePage(props: { system: Props }) {
   const [email, setEmail] = useState('')
   const [versionInfo, setVersionInfo] = useState<Omit<Props, 'earlyAccess'>>(props.system)
   const [showConnectionLostNotice, setShowConnectionLostNotice] = useState(false)
+  const [updatingApps, setUpdatingApps] = useState<Set<string>>(new Set())
+  const [checkingApps, setCheckingApps] = useState(false)
+
+  const { data: appsData, refetch: refetchApps } = useQuery({
+    queryKey: ['update-page-services'],
+    queryFn: () => api.getSystemServices(),
+  })
+
+  const installedApps = (appsData?.services || []).filter(
+    (s: any) => s.installed && !s.is_unmanaged
+  )
+  const appsWithUpdates = installedApps.filter((s: any) => Boolean(s.available_update_version))
+
+  const handleCheckAllAppUpdates = async () => {
+    setCheckingApps(true)
+    try {
+      await api.checkServiceUpdates()
+      addNotification({ message: 'Verificação de atualizações de aplicativos iniciada!', type: 'info' })
+      setTimeout(() => {
+        refetchApps()
+        setCheckingApps(false)
+      }, 3000)
+    } catch {
+      setCheckingApps(false)
+    }
+  }
+
+  const handleUpdateSingleApp = async (serviceName: string) => {
+    setUpdatingApps((prev) => new Set(prev).add(serviceName))
+    try {
+      const res = await api.forceReinstallService(serviceName)
+      addNotification({
+        message: res?.message || `Atualização/re-sincronização de ${serviceName} iniciada.`,
+        type: res?.success ? 'success' : 'error',
+      })
+      refetchApps()
+    } finally {
+      setUpdatingApps((prev) => {
+        const next = new Set(prev)
+        next.delete(serviceName)
+        return next
+      })
+    }
+  }
+
+  const handleUpdateAllApps = async () => {
+    const targets = appsWithUpdates.length > 0 ? appsWithUpdates : installedApps
+    for (const app of targets) {
+      await handleUpdateSingleApp(app.service_name)
+    }
+  }
   // Tracks whether this update session has progressed past 'idle'/'starting'.
   // The sidecar sits on 'complete' for ~5s before resetting to 'idle' (see
   // install/sidecar-updater/update-watcher.sh), and the SPA can miss that
@@ -554,6 +605,80 @@ export default function SystemUpdatePage(props: { system: Props }) {
                 </p>
               </div>
             </div>
+          </div>
+
+          <div className="mt-10 pt-8 border-t border-border-default space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <StyledSectionHeader title="Atualizações de Aplicativos (Local &amp; Portainer)" className="!mb-0" />
+                <p className="text-xs text-text-muted mt-1">
+                  Verifique novas versões ou re-sincronize aplicativos já instalados (ex: após configurar o Samba).
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <StyledButton
+                  size="sm"
+                  icon="IconReload"
+                  loading={checkingApps}
+                  onClick={handleCheckAllAppUpdates}
+                >
+                  Verificar Atualizações
+                </StyledButton>
+                <StyledButton
+                  size="sm"
+                  variant="primary"
+                  icon="IconArrowBigUpLines"
+                  disabled={installedApps.length === 0}
+                  onClick={handleUpdateAllApps}
+                >
+                  {appsWithUpdates.length > 0
+                    ? `Atualizar em Massa (${appsWithUpdates.length})`
+                    : `Re-sincronizar Todos (${installedApps.length})`}
+                </StyledButton>
+              </div>
+            </div>
+
+            {installedApps.length === 0 ? (
+              <p className="text-sm text-text-muted">Nenhum aplicativo instalado no momento.</p>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {installedApps.map((app: any) => {
+                  const isUpdatingThis = updatingApps.has(app.service_name)
+                  return (
+                    <div
+                      key={app.service_name}
+                      className="p-3.5 rounded-xl border border-border-default bg-surface-primary flex items-center justify-between gap-3"
+                    >
+                      <div className="min-w-0">
+                        <div className="text-sm font-bold text-text-primary truncate">
+                          {app.friendly_name || app.service_name}
+                        </div>
+                        <div className="text-xs text-text-muted font-mono flex items-center gap-2 mt-0.5">
+                          <span>
+                            {app.node === 'portainer' || app.node === 'dell-micro'
+                              ? 'Portainer'
+                              : 'NOMAD Local'}
+                          </span>
+                          {app.available_update_version && (
+                            <span className="px-1.5 py-0.5 rounded bg-desert-orange/15 text-desert-orange font-bold">
+                              Nova versão disponível
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <StyledButton
+                        size="sm"
+                        variant={app.available_update_version ? 'primary' : 'outline'}
+                        loading={isUpdatingThis}
+                        onClick={() => handleUpdateSingleApp(app.service_name)}
+                      >
+                        {app.available_update_version ? 'Atualizar' : 'Re-sincronizar'}
+                      </StyledButton>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
           </div>
 
           {showLogs && (

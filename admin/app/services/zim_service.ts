@@ -436,9 +436,9 @@ export class ZimService {
   }
 
   async downloadRemoteSuccessCallback(urls: string[], restart = true) {
-    // Check if any URL is a Wikipedia download and handle it
+    // Check if any URL is a Wikipedia download and handle it (supports all languages: _pt_, _en_, etc.)
     for (const url of urls) {
-      if (url.includes('wikipedia_en_')) {
+      if (url.includes('wikipedia_')) {
         await this.onWikipediaDownloadComplete(url, true)
       }
     }
@@ -503,8 +503,8 @@ export class ZimService {
     const zimStorageDir = join(process.cwd(), ZIM_STORAGE_PATH)
     let removedSupersededZim = false
     for (const url of urls) {
-      // Skip Wikipedia files (managed separately)
-      if (url.includes('wikipedia_en_')) continue
+      // Skip Wikipedia files (managed separately, all languages)
+      if (url.includes('wikipedia_')) continue
 
       const filename = url.split('/').pop()
       if (!filename) continue
@@ -843,6 +843,37 @@ export class ZimService {
   async getWikipediaState(): Promise<WikipediaState> {
     const options = await this.getWikipediaOptions()
     const selection = await this.getWikipediaSelection()
+
+    // Reconcile stale "downloading" state (e.g., if container restarted or PT/non-EN download finished)
+    if (selection && selection.status === 'downloading') {
+      try {
+        const { QueueService } = await import('./queue_service.js')
+        const queue = QueueService.getInstance().getQueue('downloads')
+        const [activeJobs, waitingJobs] = await Promise.all([
+          queue.getActive(),
+          queue.getWaiting(),
+        ])
+        const isJobRunning = [...activeJobs, ...waitingJobs].some(
+          (j: any) => j?.data?.url === selection.url
+        )
+
+        if (!isJobRunning) {
+          const targetPath = selection.filename
+            ? join(process.cwd(), ZIM_STORAGE_PATH, selection.filename)
+            : null
+          const stats = targetPath ? await getFileStatsIfExists(targetPath) : null
+          if (stats && stats.size > 1024 * 1024) {
+            selection.status = 'installed'
+            await selection.save()
+          } else {
+            selection.status = 'failed'
+            await selection.save()
+          }
+        }
+      } catch (err) {
+        logger.warn('[ZimService] Failed to reconcile Wikipedia downloading state:', err)
+      }
+    }
 
     return {
       options,

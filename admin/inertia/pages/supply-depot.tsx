@@ -143,6 +143,16 @@ export default function SupplyDepotPage(props: {
   // App whose custom launch URL is being configured (null while the modal is closed).
   const [urlApp, setUrlApp] = useState<ServiceSlim | null>(null)
   const [removeImage, setRemoveImage] = useState(false)
+  const [sambaActive, setSambaActive] = useState<boolean | null>(null)
+
+  useEffect(() => {
+    fetch('/api/system/samba/status')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (d) setSambaActive(Boolean(d.enabled && d.containerRunning))
+      })
+      .catch(() => {})
+  }, [])
   // Optimistic per-app auto-update toggle state, keyed by service_name. Lets the
   // toggle reflect instantly without a full page reload (props come from Inertia).
   const [autoUpdateOverrides, setAutoUpdateOverrides] = useState<Record<string, boolean>>({})
@@ -771,14 +781,30 @@ export default function SupplyDepotPage(props: {
             )}
 
             {installTarget === 'portainer' ? (
-              <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-300">
-                <p className="font-semibold flex items-center gap-2 text-xs text-emerald-300">
-                  <IconServer className="w-4 h-4 text-emerald-400" />
-                  Destino Selecionado: Servidor Docker Remoto (Portainer)
-                </p>
-                <p className="text-xs text-text-muted mt-1 leading-relaxed">
-                  Este contêiner será criado e executado no servidor remoto configurado, sem consumir CPU e memória deste notebook.
-                </p>
+              <div className="space-y-2.5">
+                <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-300">
+                  <p className="font-semibold flex items-center gap-2 text-xs text-emerald-300">
+                    <IconServer className="w-4 h-4 text-emerald-400" />
+                    Destino Selecionado: Servidor Docker Remoto (Portainer)
+                  </p>
+                  <p className="text-xs text-text-muted mt-1 leading-relaxed">
+                    Este contêiner será criado e executado no servidor remoto configurado, sem consumir CPU e memória deste notebook.
+                  </p>
+                </div>
+                {sambaActive === false && (
+                  <div className="p-3 rounded-lg bg-desert-orange/10 border border-desert-orange/40 text-xs space-y-1">
+                    <div className="font-bold text-desert-orange flex items-center gap-1.5">
+                      <IconAlertTriangle className="w-4 h-4 shrink-0" />
+                      Acesso às Pastas Locais (Samba SMB)
+                    </div>
+                    <p className="text-text-secondary text-[11px] leading-relaxed">
+                      Como o Portainer está em outro servidor, apps que leem arquivos locais (Kiwix, Calibre-Web, Jellyfin, Stirling PDF) precisam do compartilhamento <strong>Samba</strong> configurado para enxergar a biblioteca deste N.O.M.A.D. (exceto se o N.O.M.A.D. já rodar no mesmo host Portainer).{' '}
+                      <a href="/settings/storage" className="text-desert-orange underline font-semibold">
+                        Configurar Samba em Armazenamento
+                      </a>
+                    </p>
+                  </div>
+                )}
               </div>
             ) : (
               <p>
@@ -1202,6 +1228,18 @@ function AppCard({
         <p className="text-xs text-text-muted leading-relaxed mb-3 flex-1 line-clamp-2">
           {service.description}
         </p>
+      )}
+
+      {(service.service_name === SERVICE_NAMES.FILEBROWSER ||
+        service.service_name === SERVICE_NAMES.CALIBREWEB) && (
+        <div className="mb-3 px-2.5 py-1.5 rounded-md bg-surface-secondary border border-border-subtle text-[11px] font-mono text-text-secondary flex items-center justify-between gap-2">
+          <span>Login padrão:</span>
+          <span className="font-bold text-text-primary">
+            {service.service_name === SERVICE_NAMES.FILEBROWSER
+              ? 'admin / nomad'
+              : 'admin / admin123'}
+          </span>
+        </div>
       )}
 
       {/* Metadata row: category badge + port pill */}

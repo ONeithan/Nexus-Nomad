@@ -20,6 +20,7 @@ import OllamaController from '#controllers/ollama_controller'
 import OpenApiController from '#controllers/openapi_controller'
 import RagController from '#controllers/rag_controller'
 import SettingsController from '#controllers/settings_controller'
+import StorageController from '#controllers/storage_controller'
 import SupplyDepotController from '#controllers/supply_depot_controller'
 import SystemController from '#controllers/system_controller'
 import CollectionUpdatesController from '#controllers/collection_updates_controller'
@@ -138,6 +139,8 @@ router
 router
   .group(() => {
     router.get('/system', [SettingsController, 'system'])
+    router.get('/storage', [SettingsController, 'storage'])
+    router.get('/downloads', [SettingsController, 'downloads'])
     router.get('/themes', [SettingsController, 'themes'])
     router.get('/servers', [SettingsController, 'servers'])
     router.on('/apps').redirectToPath('/supply-depot') // superseded by Supply Depot
@@ -705,6 +708,14 @@ router
       tags: ['system'],
       request: updateSettingSchema,
     })
+    router.get('/storage/overview', [StorageController, 'overview'])
+    router.get('/storage/browse', [StorageController, 'browse'])
+    router.post('/storage/move', [StorageController, 'move'])
+    router.post('/storage/delete', [StorageController, 'delete'])
+    router.post('/storage/mkdir', [StorageController, 'mkdir'])
+    router.post('/storage/preferred-disk', [StorageController, 'setPreferredDisk'])
+    router.get('/samba/status', [StorageController, 'sambaStatus'])
+    router.post('/samba/configure', [StorageController, 'configureSamba'])
   })
   .prefix('/api/system')
 

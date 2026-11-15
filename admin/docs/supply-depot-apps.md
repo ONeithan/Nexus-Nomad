@@ -365,3 +365,23 @@ Estes 50 idiomas estão disponíveis no momento (o idioma chinês ainda não est
 **Seus dados:** Os modelos de linguagem ficam gravados em `storage/translate/models`. Nenhum texto lido é armazenado ou transmitido externamente.
 
 **Funcionamento offline:** Sim, 100% offline após a conclusão do download dos modelos de idioma.
+
+---
+
+## Ferramentas de Dados (CyberChef) {% #cyberchef %}
+
+**O que é:** O CyberChef é o "canivete suíço" offline para análise, conversão, codificação e criptografia de dados, textos, arquivos e redes — desenvolvido pelo GCHQ. Tudo roda localmente no seu navegador sem enviar nada para a internet.
+
+### Para que serve no dia a dia?
+- **Decodificar / Codificar textos e arquivos:** Base64, Hexadecimal, URL Decode, Binário, ASCII.
+- **Criptografia e Hashes:** Gerar e verificar SHA-256, MD5, AES, HMAC, JWT (JSON Web Tokens).
+- **Análise e Extração:** Extrair URLs, IPs, e-mails ou metadados de textos longos; formatar JSON/XML; comparar diferenças (*Diff*).
+- **Operação *Magic*:** Arraste a operação `Magic` para a área **Recipe** e cole um texto codificado desconhecido — o CyberChef tenta identificar e decodificar automaticamente.
+
+### Como usar em 3 passos (Interface em Inglês → Guia Rápido PT-BR)
+1. **Operations (Esquerda):** Escolha as ferramentas (ex.: `To Base64`, `AES Decrypt`, `JSON Beautify`) e arraste-as para o centro.
+2. **Recipe (Centro):** Monte a sequência de passos. Clique em **BAKE!** (ou deixe **Auto Bake** marcado) para processar instantaneamente.
+3. **Input / Output (Direita):** Cole o texto ou carregue um arquivo em **Input** e veja/salve o resultado em **Output**.
+
+**Nota sobre idioma:** O projeto oficial do CyberChef não possui tradução nativa para Português no código-fonte, mas os termos das operações são padrões técnicos universais e este guia resume os principais comandos.
+

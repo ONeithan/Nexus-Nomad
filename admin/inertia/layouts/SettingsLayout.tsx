@@ -5,6 +5,8 @@ import {
   IconChartBar,
   IconCode,
   IconDashboard,
+  IconDatabase,
+  IconDownload,
   IconFolder,
   IconGavel,
   IconHeart,
@@ -32,6 +34,8 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
 
   const navigation = [
     { name: 'Sistema & Discos', href: '/settings/system', icon: IconSettings, current: false },
+    { name: 'Armazenamento & Samba', href: '/settings/storage', icon: IconDatabase, current: false },
+    { name: 'Downloads Ativos', href: '/settings/downloads', icon: IconDownload, current: false },
     { name: 'Temas & Interface', href: '/settings/themes', icon: IconPalette, current: false },
     { name: 'Servidores Remotos', href: '/settings/servers', icon: IconServer, current: false },
     { name: aiLabel, href: '/settings/models', icon: IconWand, current: false },

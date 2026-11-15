@@ -8,6 +8,7 @@ export const SUPPLY_DEPOT_DOC_PAGE = 'supply-depot-apps'
 // Each anchor MUST match the heading id set in the .md file (e.g. `## Vaultwarden {% #vaultwarden %}`).
 // Add an entry here the moment that app's section is written.
 export const SUPPLY_DEPOT_DOC_ANCHORS: Record<string, string> = {
+  [SERVICE_NAMES.CYBERCHEF]: 'cyberchef',
   [SERVICE_NAMES.STIRLING_PDF]: 'stirling-pdf',
   [SERVICE_NAMES.FILEBROWSER]: 'file-browser',
   [SERVICE_NAMES.CALIBREWEB]: 'calibre-web',

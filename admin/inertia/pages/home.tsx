@@ -205,7 +205,7 @@ export default function Home(props: {
   })
   const { data: activeDownloads = [] } = useDownloads({})
   const runningDownloads = activeDownloads.filter((d) => d.status !== 'completed')
-  const { data: remoteAiSetting } = useSystemSetting({ key: 'ai.remoteUrl' })
+  const { data: remoteAiSetting } = useSystemSetting({ key: 'ai.remoteOllamaUrl' })
   const ollamaInstalled = props.system.services.some(
     (s) => s.service_name === SERVICE_NAMES.OLLAMA && s.installed
   )
@@ -561,31 +561,56 @@ export default function Home(props: {
                 <span className="w-2 h-2 rounded-full bg-desert-olive nomad-telemetry-dot" />
               </div>
 
-              <div className="chamfer-inner p-2.5 font-mono-mil text-[11px] space-y-1 text-text-secondary">
-                <div>
-                  <span className="text-desert-tan">[TELEMETRIA]</span>{' '}
-                  {sysInfo?.cpu
-                    ? `CPU ${Math.round(sysInfo.cpu.usage ?? 0)}% • RAM ${
-                        sysInfo.memory?.percentage ? `${Math.round(sysInfo.memory.percentage)}%` : 'OK'
-                      }`
-                    : 'NÓ NEXUS-01 OPERACIONAL'}
+              <div className="chamfer-inner p-2.5 font-mono-mil text-[11px] space-y-1.5 text-text-secondary">
+                <div className="flex items-center justify-between gap-2">
+                  <span>
+                    <span className="text-desert-tan">[HARDWARE]</span>{' '}
+                    {sysInfo?.memory?.total
+                      ? `RAM ${(
+                          (sysInfo.memory.used || 0) /
+                          (1024 * 1024 * 1024)
+                        ).toFixed(1)}/${(sysInfo.memory.total / (1024 * 1024 * 1024)).toFixed(
+                          1
+                        )} GB`
+                      : 'NÓ NEXUS-01 ATIVO'}
+                    {sysInfo?.cpu?.usage !== undefined && sysInfo.cpu.usage > 0
+                      ? ` • CPU ${Math.round(sysInfo.cpu.usage)}%`
+                      : ''}
+                  </span>
                 </div>
                 <div>
-                  <span className="text-desert-tan">[SERVIÇOS]</span> {installedAppCount} ATIVOS •{' '}
-                  {aiConfigured ? 'IA ONLINE' : 'IA NÃO CONFIGURADA'}
+                  <span className="text-desert-tan">[DISCO]</span>{' '}
+                  {sysInfo?.disk?.available && sysInfo?.disk?.total
+                    ? `${((sysInfo.disk.available || 0) / (1024 * 1024 * 1024)).toFixed(
+                        1
+                      )} GB LIVRES DE ${(sysInfo.disk.total / (1024 * 1024 * 1024)).toFixed(0)} GB`
+                    : 'ARMAZENAMENTO NOMAD MONTADO'}
+                </div>
+                <div>
+                  <span className="text-desert-tan">[MÓDULOS]</span> {installedAppCount} ATIVOS (
+                  {
+                    props.system.services.filter(
+                      (s) => s.installed && (s.node === 'portainer' || s.node === 'dell-micro')
+                    ).length
+                  }{' '}
+                  PORTAINER) • {aiConfigured ? 'IA ONLINE' : 'IA NÃO CONFIG.'}
                 </div>
                 <div>
                   <span className="text-desert-tan">[FILA]</span>{' '}
                   {runningDownloads.length > 0
-                    ? `${runningDownloads.length} DOWNLOAD(S) EM ANDAMENTO (${Math.round(
+                    ? `${runningDownloads.length} ATIVO(S) — ${Math.round(
                         runningDownloads[0]?.progress || 0
-                      )}%)`
-                    : 'NENHUM DOWNLOAD ATIVO NO MOMENTO'}
+                      )}% (${(runningDownloads[0]?.filename || 'arquivo').slice(0, 20)})`
+                    : 'FILA DE DOWNLOADS LIVRE'}
                 </div>
-                <div className="text-desert-olive flex items-center justify-between">
-                  <span>&gt; TEMA {currentThemeDef.shortName.toUpperCase()} OPERACIONAL</span>
-                  <span className="opacity-75">
-                    {new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                <div className="text-desert-olive flex items-center justify-between pt-0.5 border-t border-border-subtle/50">
+                  <span>&gt; TEMA {currentThemeDef.shortName.toUpperCase()}</span>
+                  <span className="opacity-80">
+                    {new Date().toLocaleTimeString('pt-BR', {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      second: '2-digit',
+                    })}
                   </span>
                 </div>
               </div>

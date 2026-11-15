@@ -1407,7 +1407,36 @@ ${cmdBlock}${topLevelVolumesBlock}`
     }
   }
 
+  private static deployQueue: Promise<void> = Promise.resolve()
+
   private async executeRemoteDeploy(
+    service: Service,
+    config: any,
+    hostPort: string,
+    hostIp: string,
+    client: AxiosInstance,
+    _apiKey: string,
+    endpointId: number,
+    preinstall?: { hostStorageRoot?: string; extraEnv?: string[] }
+  ): Promise<void> {
+    const run = async () => {
+      await this._runRemoteDeployInternal(
+        service,
+        config,
+        hostPort,
+        hostIp,
+        client,
+        _apiKey,
+        endpointId,
+        preinstall
+      )
+    }
+    const chained = PortainerService.deployQueue.then(run, run)
+    PortainerService.deployQueue = chained.catch(() => {})
+    return chained
+  }
+
+  private async _runRemoteDeployInternal(
     service: Service,
     config: any,
     hostPort: string,
@@ -1612,28 +1641,34 @@ ${cmdBlock}${topLevelVolumesBlock}`
         }
       }
 
-      // 9. Verification: Check that the main container stays running without crash-looping (`restarting`)
+      // 9. Verification: Poll for the main container (handles slower image pulls / concurrent queue)
       this.broadcast(
         serviceName,
         'starting',
         `[5/5] Verificando inicialização e saúde do serviço no Portainer...`
       )
-      await new Promise((r) => setTimeout(r, 4500))
+      let runningCont: any = null
+      for (let attempt = 0; attempt < 6; attempt++) {
+        await new Promise((r) => setTimeout(r, attempt === 0 ? 3500 : 2500))
+        const verifyResp = await client
+          .get(`/api/endpoints/${endpointId}/docker/containers/json?all=1`, { timeout: 15000 })
+          .catch(() => null)
 
-      const verifyResp = await client
-        .get(`/api/endpoints/${endpointId}/docker/containers/json?all=1`, { timeout: 15000 })
-        .catch(() => null)
-
-      const runningCont = (verifyResp?.data || []).find(
-        (c: any) =>
-          !c.Names?.some((n: string) => n.endsWith('-init')) &&
-          c.Names?.some(
-            (n: string) =>
-              n.toLowerCase() === `/${stackName.toLowerCase()}` ||
-              n.toLowerCase() === `/${serviceName.toLowerCase()}` ||
-              n.toLowerCase().includes(stackName.toLowerCase())
-          )
-      )
+        runningCont = (verifyResp?.data || []).find(
+          (c: any) =>
+            !c.Names?.some((n: string) => n.endsWith('-init')) &&
+            (c.Labels?.['com.docker.compose.project']?.toLowerCase() === stackName.toLowerCase() ||
+              c.Labels?.['com.docker.compose.service']?.toLowerCase() === serviceName.toLowerCase() ||
+              c.Names?.some(
+                (n: string) =>
+                  n.toLowerCase() === `/${stackName.toLowerCase()}` ||
+                  n.toLowerCase() === `/${serviceName.toLowerCase()}` ||
+                  n.toLowerCase().includes(stackName.toLowerCase()) ||
+                  n.toLowerCase().includes(serviceName.toLowerCase())
+              ))
+        )
+        if (runningCont) break
+      }
 
       if (!runningCont) {
         throw new Error(`O contêiner ${stackName} não foi encontrado após a implantação no Portainer.`)

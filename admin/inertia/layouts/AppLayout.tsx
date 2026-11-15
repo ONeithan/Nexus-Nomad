@@ -2,13 +2,12 @@ import { useState } from 'react'
 import Footer from '~/components/Footer'
 import ChatButton from '~/components/chat/ChatButton'
 import ChatModal from '~/components/chat/ChatModal'
-import LeftDownloadsDrawer from '~/components/LeftDownloadsDrawer'
 import TacticalBootGate, { lockTacticalConsole } from '~/components/TacticalBootGate'
 import useServiceInstalledStatus from '~/hooks/useServiceInstalledStatus'
 import { useThemeContext } from '~/providers/ThemeProvider'
 import { SERVICE_NAMES } from '../../constants/service_names'
 import { Link, router } from '@inertiajs/react'
-import { IconArrowLeft, IconLock, IconServer } from '@tabler/icons-react'
+import { IconArrowLeft, IconHome, IconLock, IconServer } from '@tabler/icons-react'
 import classNames from 'classnames'
 
 export default function AppLayout({
@@ -35,18 +34,33 @@ export default function AppLayout({
   return (
     <TacticalBootGate>
       <div className="min-h-screen flex flex-col">
-        <LeftDownloadsDrawer />
-        {/* Barra superior com logo de retorno rápido e acesso aos Discos & Armazenamento */}
+        {/* Barra superior com navegação inteligente e acesso aos Discos & Armazenamento */}
         <div className="w-full bg-surface-primary border-b border-border-subtle px-4 py-2.5 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             {!isHome ? (
-              <Link
-                href="/home"
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-border-default bg-surface-secondary hover:border-desert-green text-sm font-medium text-text-primary transition-colors"
-              >
-                <IconArrowLeft size={18} />
-                <span>Voltar ao Início</span>
-              </Link>
+              <>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (typeof window !== 'undefined' && window.history.length > 1) {
+                      window.history.back()
+                    } else {
+                      router.visit('/home')
+                    }
+                  }}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-border-default bg-surface-secondary hover:border-desert-orange text-sm font-medium text-text-primary transition-colors cursor-pointer"
+                >
+                  <IconArrowLeft size={17} />
+                  <span>Voltar</span>
+                </button>
+                <Link
+                  href="/home"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-border-default bg-surface-secondary hover:border-desert-green text-sm font-medium text-text-primary transition-colors"
+                >
+                  <IconHome size={17} />
+                  <span>Início</span>
+                </Link>
+              </>
             ) : (
               <div className="flex items-center gap-3 flex-wrap">
                 <span className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-desert-green px-2.5 py-1 rounded-full bg-desert-green-lighter border border-desert-green-light">

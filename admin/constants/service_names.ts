@@ -19,4 +19,9 @@ export const SERVICE_NAMES = {
   VAULTWARDEN: 'nomad_vaultwarden',
   JELLYFIN: 'nomad_jellyfin',
   TRANSLATE: 'nomad_translate',
+  SYNCTHING: 'nomad_syncthing',
+  NAVIDROME: 'nomad_navidrome',
+  WIKIJS: 'nomad_wikijs',
+  DOZZLE: 'nomad_dozzle',
+  PAPERLESS: 'nomad_paperless',
 }

@@ -40,5 +40,11 @@ export const SETTINGS_KEYS: KVStoreKey[] = [
     'portainer.deployTarget',
     'truenas.enabled',
     'truenas.url',
-    'truenas.apiKey'
+    'truenas.apiKey',
+    'samba.enabled',
+    'samba.shareName',
+    'samba.username',
+    'samba.password',
+    'samba.hostPath',
+    'storage.preferredDownloadDisk'
 ];
