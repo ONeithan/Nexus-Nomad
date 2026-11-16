@@ -6,7 +6,8 @@ export const SERVICE_NAMES = {
   FLATNOTES: 'nomad_flatnotes',
   KOLIBRI: 'nomad_kolibri',
   KOLIBRI_GEN2: 'nomad_kolibri_2',
-  // Supply Depot — curated catalog (ports 8400–8499)
+
+  // Supply Depot & Arsenal Soberano — Catalog Curado (Portas 8400–8999)
   STIRLING_PDF: 'nomad_stirling_pdf',
   FILEBROWSER: 'nomad_filebrowser',
   CALIBREWEB: 'nomad_calibreweb',
@@ -24,4 +25,116 @@ export const SERVICE_NAMES = {
   WIKIJS: 'nomad_wikijs',
   DOZZLE: 'nomad_dozzle',
   PAPERLESS: 'nomad_paperless',
+
+  // IA, Segundo Cérebro & Documentação
+  OPEN_WEBUI: 'nomad_open_webui',
+  DIFY: 'nomad_dify',
+  OUTLINE: 'nomad_outline',
+  DOCMOST: 'nomad_docmost',
+  HOARDER: 'nomad_hoarder',
+  WHISPER: 'nomad_whisper',
+
+  // Casa, Família & Saúde
+  GROCY: 'nomad_grocy',
+  MEALIE: 'nomad_mealie',
+  KITCHENOWL: 'nomad_kitchenowl',
+  BABYBUDDY: 'nomad_babybuddy',
+  OPENREM: 'nomad_openrem',
+  GRAMPS_WEB: 'nomad_gramps_web',
+  BAR_ASSISTANT: 'nomad_bar_assistant',
+
+  // Finanças & Negócios
+  ACTUAL_BUDGET: 'nomad_actual_budget',
+  FIREFLY_III: 'nomad_fireflyiii',
+  WALLOS: 'nomad_wallos',
+  GHOSTFOLIO: 'nomad_ghostfolio',
+  MAYBE: 'nomad_maybe',
+  INVOICE_NINJA: 'nomad_invoice_ninja',
+
+  // Segurança, Identidade & VPN
+  AUTHENTIK: 'nomad_authentik',
+  CROWDSEC: 'nomad_crowdsec',
+  NETALERTX: 'nomad_netalertx',
+  SCRUTINY: 'nomad_scrutiny',
+  DEFGUARD: 'nomad_defguard',
+  HEADSCALE: 'nomad_headscale',
+  WG_EASY: 'nomad_wgeasy',
+  NMAP_WEB: 'nomad_nmap_web',
+  FRIGATE: 'nomad_frigate',
+  KASM_WEBTOP: 'nomad_kasm_webtop',
+
+  // Rede, DNS & Telemetria
+  NPM: 'nomad_npm',
+  TECHNITIUM_DNS: 'nomad_technitium_dns',
+  BLOCKY: 'nomad_blocky',
+  ADGUARD: 'nomad_adguard',
+  PIHOLE: 'nomad_pihole',
+  SEARXNG: 'nomad_searxng',
+  SMOKEPING: 'nomad_smokeping',
+  SPEEDTEST: 'nomad_speedtest',
+  UPTIME_KUMA: 'nomad_uptime_kuma',
+  PEANUT: 'nomad_peanut',
+
+  // Mídia, Som & Fotos
+  IMMICH: 'nomad_immich',
+  AUDIOBOOKSHELF: 'nomad_audiobookshelf',
+  TUBEARCHIVIST: 'nomad_tubearchivist',
+  PIWIGO: 'nomad_piwigo',
+  MUSIC_ASSISTANT: 'nomad_music_assistant',
+  SNAPCAST: 'nomad_snapcast',
+  LYRION_LMS: 'nomad_lyrion_lms',
+  PODGRAB: 'nomad_podgrab',
+  YOUR_SPOTIFY: 'nomad_your_spotify',
+
+  // Automação, Dados & No-Code
+  N8N: 'nomad_n8n',
+  BASEROW: 'nomad_baserow',
+  NOCODB: 'nomad_nocodb',
+  DIRECTUS: 'nomad_directus',
+  CHANGEDETECTION: 'nomad_changedetection',
+  SHLINK: 'nomad_shlink',
+  APPRISE: 'nomad_apprise',
+  GOTIFY: 'nomad_gotify',
+
+  // Oficina, Bancada & Engenharia
+  INVENTREE: 'nomad_inventree',
+  PARTKEEPR: 'nomad_partkeepr',
+  KICAD_WEB: 'nomad_kicad_web',
+  LIBRECAD_WEB: 'nomad_librecad_web',
+  MAINSAIL: 'nomad_mainsail',
+  OPENWEBRX: 'nomad_openwebrx',
+
+  // Comunicação & Interfonia
+  MATTERMOST: 'nomad_mattermost',
+  SYNAPSE: 'nomad_synapse',
+  CINNY: 'nomad_cinny',
+  MUMBLE: 'nomad_mumble',
+  JITSI: 'nomad_jitsi',
+  FREEPBX: 'nomad_freepbx',
+  ETHERPAD: 'nomad_etherpad',
+  HEDGEDOC: 'nomad_hedgedoc',
+  RUSTDESK: 'nomad_rustdesk',
+
+  // Utilitários, Sistema, Backup & Hardware
+  BESZEL: 'nomad_beszel',
+  DOCKGE: 'nomad_dockge',
+  FORGEJO: 'nomad_forgejo',
+  WOODPECKER: 'nomad_woodpecker',
+  ARCHIVEBOX: 'nomad_archivebox',
+  DUPLICATI: 'nomad_duplicati',
+  RCLONE_WEB: 'nomad_rclone_web',
+  MICROBIN: 'nomad_microbin',
+  CUPS: 'nomad_cups',
+  URBACKUP: 'nomad_urbackup',
+  WEEWX: 'nomad_weewx',
+  PLANKA: 'nomad_planka',
+  FRESHRSS: 'nomad_freshrss',
+  PINGVIN_SHARE: 'nomad_pingvin_share',
+  WOL_WEB: 'nomad_wol_web',
+  DOKUWIKI: 'nomad_dokuwiki',
+  HOMEPAGE: 'nomad_homepage',
+  HOMEASSISTANT: 'nomad_homeassistant',
+  TRACCAR: 'nomad_traccar',
+  VIKUNJA: 'nomad_vikunja',
+  LINKDING: 'nomad_linkding',
 }

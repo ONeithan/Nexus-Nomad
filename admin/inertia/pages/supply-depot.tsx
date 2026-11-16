@@ -5,6 +5,8 @@ import {
   IconArrowRight,
   IconArrowUp,
   IconBook,
+  IconBolt,
+  IconCheck,
   IconBox,
   IconBrandDocker,
   IconChartBar,
@@ -32,6 +34,8 @@ import Alert from '~/components/Alert'
 import CustomAppModal, { CustomAppInitial } from '~/components/CustomAppModal'
 import PortainerConfigModal from '~/components/PortainerConfigModal'
 import AppUrlModal from '~/components/AppUrlModal'
+import AppCatalogModal from '~/components/AppCatalogModal'
+import BulkInstallModal from '~/components/BulkInstallModal'
 import ServiceLogsModal from '~/components/ServiceLogsModal'
 import { setPendingAppAction } from '~/components/TacticalBootGate'
 import ServiceStatsModal from '~/components/ServiceStatsModal'
@@ -61,24 +65,30 @@ const CATEGORIES = [
   { id: 'all', label: 'Todos' },
   { id: 'installed', label: 'Instalados' },
   { id: 'remote-server', label: 'Servidor Portainer' },
+  { id: 'ai', label: 'IA & Cérebro' },
+  { id: 'home-family', label: 'Casa & Família' },
+  { id: 'finance', label: 'Finanças' },
   { id: 'productivity', label: 'Produtividade' },
-  { id: 'media', label: 'Mídia & Livros' },
+  { id: 'media', label: 'Mídia & Som' },
   { id: 'security', label: 'Segurança' },
   { id: 'networking', label: 'Rede & Rádio' },
+  { id: 'workshop', label: 'Oficina & Engenharia' },
   { id: 'utility', label: 'Utilitários' },
-  { id: 'ai', label: 'IA' },
   { id: 'education', label: 'Educação' },
   { id: 'custom', label: 'Personalizados' },
 ]
 
 const CATEGORY_LABELS: Record<string, string> = {
   productivity: 'Produtividade',
-  media: 'Mídia & Livros',
+  media: 'Mídia & Som',
   security: 'Segurança',
   networking: 'Rede & Rádio',
   utility: 'Utilitários',
-  ai: 'IA',
+  ai: 'IA & Cérebro',
   education: 'Educação',
+  'home-family': 'Casa & Família',
+  finance: 'Finanças',
+  workshop: 'Oficina & Engenharia',
   custom: 'Personalizado',
 }
 
@@ -89,6 +99,9 @@ const CATEGORY_COLORS: Record<string, string> = {
   networking: 'border border-desert-stone-light bg-desert-stone-lighter text-desert-stone-dark',
   utility: 'border border-desert-olive-light bg-desert-olive-lighter text-desert-olive-dark',
   ai: 'border border-desert-green bg-desert-green-light text-desert-green-darker',
+  'home-family': 'border border-emerald-500/30 bg-emerald-500/10 text-emerald-400',
+  finance: 'border border-amber-500/30 bg-amber-500/10 text-amber-400',
+  workshop: 'border border-cyan-500/30 bg-cyan-500/10 text-cyan-400',
   education: 'border border-desert-orange-light bg-desert-orange-lighter text-desert-orange-dark',
   custom: 'border border-border-subtle bg-surface-secondary text-text-secondary',
 }
@@ -144,6 +157,25 @@ export default function SupplyDepotPage(props: {
   const [urlApp, setUrlApp] = useState<ServiceSlim | null>(null)
   const [removeImage, setRemoveImage] = useState(false)
   const [sambaActive, setSambaActive] = useState<boolean | null>(null)
+  const [catalogModalOpen, setCatalogModalOpen] = useState(false)
+  const [catalogAppId, setCatalogAppId] = useState<string | null>(null)
+  const [isBulkMode, setIsBulkMode] = useState(false)
+  const [selectedForBulk, setSelectedForBulk] = useState<Set<string>>(new Set())
+  const [bulkModalOpen, setBulkModalOpen] = useState(false)
+
+  const toggleSelectService = (serviceName: string) => {
+    setSelectedForBulk((prev) => {
+      const next = new Set(prev)
+      if (next.has(serviceName)) next.delete(serviceName)
+      else next.add(serviceName)
+      return next
+    })
+  }
+
+  const openAppCatalog = (appId?: string) => {
+    setCatalogAppId(appId || null)
+    setCatalogModalOpen(true)
+  }
 
   useEffect(() => {
     fetch('/api/system/samba/status')
@@ -576,6 +608,14 @@ export default function SupplyDepotPage(props: {
                 Verificar Atualizações
               </StyledButton>
               <StyledButton
+                icon="IconBook"
+                variant="outline"
+                onClick={() => openAppCatalog()}
+                title="Abrir Catálogo Completo & Guia Operacional de todas as Aplicações"
+              >
+                Catálogo &amp; Guias ({services.length})
+              </StyledButton>
+              <StyledButton
                 icon="IconServer"
                 variant="outline"
                 onClick={() => setPortainerModalOpen(true)}
@@ -588,6 +628,18 @@ export default function SupplyDepotPage(props: {
                 onClick={() => setCustomAppOpen(true)}
               >
                 Adicionar App Docker
+              </StyledButton>
+              <StyledButton
+                icon="IconBolt"
+                variant={isBulkMode ? "primary" : "outline"}
+                onClick={() => {
+                  const next = !isBulkMode
+                  setIsBulkMode(next)
+                  if (!next) setSelectedForBulk(new Set())
+                }}
+                title="Ativar modo de seleção múltipla para instalar vários ou todos os aplicativos em lote"
+              >
+                {isBulkMode ? `Modo Massa (${selectedForBulk.size})` : 'Instalação em Massa'}
               </StyledButton>
             </div>
 
@@ -631,6 +683,69 @@ export default function SupplyDepotPage(props: {
                   : 'Ocultar exclusivos do Portainer'}
               </button>
             </div>
+
+            {/* Tactical Bulk Selection Bar */}
+            {isBulkMode && (
+              <div className="p-3.5 rounded-xl bg-desert-orange/10 border border-desert-orange/30 flex flex-wrap items-center justify-between gap-3 shadow-sm">
+                <div className="flex flex-wrap items-center gap-2 text-xs">
+                  <span className="font-bold text-desert-orange flex items-center gap-1.5 uppercase font-mono-mil">
+                    <IconBolt size={16} />
+                    <span>Seleção em Massa:</span>
+                  </span>
+                  <span className="font-mono bg-surface-primary px-2 py-0.5 rounded border border-border-subtle font-bold">
+                    {selectedForBulk.size} de {availableServices.length} selecionados
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedForBulk(new Set(availableServices.map((s) => s.service_name)))}
+                    className="px-2.5 py-1 rounded bg-surface-primary hover:bg-surface-secondary text-text-primary border border-border-subtle cursor-pointer font-medium"
+                  >
+                    Selecionar Todos ({availableServices.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const inCat = availableServices.filter((s) => activeCategory === 'all' || s.category === activeCategory)
+                      setSelectedForBulk(new Set(inCat.map((s) => s.service_name)))
+                    }}
+                    className="px-2.5 py-1 rounded bg-surface-primary hover:bg-surface-secondary text-text-primary border border-border-subtle cursor-pointer font-medium"
+                  >
+                    Selecionar Categoria
+                  </button>
+                  {selectedForBulk.size > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setSelectedForBulk(new Set())}
+                      className="px-2.5 py-1 rounded bg-surface-primary hover:bg-surface-secondary text-text-muted hover:text-text-primary border border-border-subtle cursor-pointer"
+                    >
+                      Desmarcar
+                    </button>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <StyledButton
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setIsBulkMode(false)
+                      setSelectedForBulk(new Set())
+                    }}
+                  >
+                    Cancelar
+                  </StyledButton>
+                  <StyledButton
+                    size="sm"
+                    variant="primary"
+                    icon="IconBolt"
+                    disabled={selectedForBulk.size === 0}
+                    onClick={() => setBulkModalOpen(true)}
+                  >
+                    Instalar Selecionados ({selectedForBulk.size})
+                  </StyledButton>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Bottom accent bar */}
@@ -677,6 +792,7 @@ export default function SupplyDepotPage(props: {
                       onToggleAutoUpdate={(enabled) => handleToggleAutoUpdate(service, enabled)}
                       migrationInstructionsHref={(service.service_name.startsWith(SERVICE_NAMES.KOLIBRI) && educationGen2Installed) ? getSupplyDepotDocLink(SERVICE_NAMES.KOLIBRI) || undefined : undefined}
                       migrationInstructionsText={(service.service_name === SERVICE_NAMES.KOLIBRI) ? 'Como migrar conteúdo para a Gen 2' : 'Como migrar conteúdo da Gen 1'}
+                      onOpenCatalog={() => openAppCatalog(service.service_name)}
                     />
                   ))}
                 </div>
@@ -708,6 +824,10 @@ export default function SupplyDepotPage(props: {
                       onUpdate={() => handleUpdate(service)}
                       onUpdateVersion={() => setModal({ type: 'update', service })}
                       liveProgressMessage={latestActivityByService[service.service_name]?.message}
+                      onOpenCatalog={() => openAppCatalog(service.service_name)}
+                      isBulkMode={isBulkMode}
+                      isSelected={selectedForBulk.has(service.service_name)}
+                      onToggleSelect={() => toggleSelectService(service.service_name)}
                     />
                   ))}
                 </div>
@@ -1070,6 +1190,28 @@ export default function SupplyDepotPage(props: {
         isOpen={portainerModalOpen}
         onClose={() => setPortainerModalOpen(false)}
       />
+
+      <AppCatalogModal
+        isOpen={catalogModalOpen}
+        onClose={() => setCatalogModalOpen(false)}
+        initialAppId={catalogAppId}
+        installedServiceNames={new Set(services.filter((s) => s.installed).map((s) => s.service_name))}
+      />
+
+      <BulkInstallModal
+        isOpen={bulkModalOpen}
+        onClose={() => setBulkModalOpen(false)}
+        selectedServices={availableServices.filter((s) => selectedForBulk.has(s.service_name))}
+        isPortainerConfigured={isPortainerConfigured}
+        defaultTarget={(props.portainer as any)?.deployTarget || 'local'}
+        installActivity={installActivity}
+        onCompletedAll={() => {
+          setBulkModalOpen(false)
+          setIsBulkMode(false)
+          setSelectedForBulk(new Set())
+          window.location.reload()
+        }}
+      />
     </AppLayout>
   )
 }
@@ -1102,6 +1244,10 @@ interface AppCardProps {
   onToggleAutoUpdate?: (enabled: boolean) => void
   migrationInstructionsHref?: string
   migrationInstructionsText?: string
+  onOpenCatalog?: () => void
+  isBulkMode?: boolean
+  isSelected?: boolean
+  onToggleSelect?: () => void
 }
 
 function AppCard({
@@ -1128,6 +1274,10 @@ function AppCard({
   onToggleAutoUpdate,
   migrationInstructionsHref,
   migrationInstructionsText,
+  onOpenCatalog,
+  isBulkMode,
+  isSelected,
+  onToggleSelect,
 }: AppCardProps) {
   const isRunning = service.status === 'running'
   const isStopped = service.installed && !isRunning
@@ -1203,10 +1353,16 @@ function AppCard({
 
   return (
     <div
-      className={`relative flex flex-col rounded-xl border p-4 bg-surface-primary shadow-sm transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5 ${service.installed
-        ? 'border-desert-stone-light'
-        : 'border-desert-stone-lighter hover:border-desert-stone-light'
-        }`}
+      onClick={isBulkMode && !service.installed ? onToggleSelect : undefined}
+      className={`relative flex flex-col rounded-xl border p-4 bg-surface-primary shadow-sm transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5 ${
+        isBulkMode && !service.installed ? 'cursor-pointer select-none' : ''
+      } ${
+        isSelected
+          ? 'border-desert-orange ring-2 ring-desert-orange/50 bg-desert-orange/5'
+          : service.installed
+            ? 'border-desert-stone-light'
+            : 'border-desert-stone-lighter hover:border-desert-stone-light'
+      }`}
     >
       {/* Installed accent spine (rounded to follow the card corners — the card no longer clips
           overflow so the Manage dropdown can open above the card without being cut off) */}
@@ -1231,8 +1387,29 @@ function AppCard({
           </div>
         </div>
 
-        {/* Status indicator */}
-        <div className="flex-shrink-0 ml-2">
+        {/* Status indicator + Guide button */}
+        <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
+          {isBulkMode && !service.installed && (
+            <input
+              type="checkbox"
+              checked={Boolean(isSelected)}
+              onChange={(e) => {
+                e.stopPropagation()
+                onToggleSelect?.()
+              }}
+              className="w-4 h-4 rounded text-desert-orange focus:ring-desert-orange border-desert-stone cursor-pointer mr-1"
+            />
+          )}
+          {onOpenCatalog && (
+            <button
+              type="button"
+              onClick={onOpenCatalog}
+              title="Ver o que este app faz, como funciona e exemplos reais no Catálogo"
+              className="p-1 rounded-md text-text-muted hover:text-desert-green hover:bg-surface-secondary border border-transparent hover:border-desert-green/30 transition-colors cursor-pointer"
+            >
+              <IconBook className="h-4 w-4" />
+            </button>
+          )}
           {service.installation_status === 'installing' ? (
             <span className="flex items-center gap-1 text-xs text-desert-orange">
               <span className="animate-spin inline-block w-3 h-3 border border-desert-orange border-t-transparent rounded-full" />
@@ -1375,15 +1552,28 @@ function AppCard({
       {/* Action buttons */}
       <div className="flex items-center gap-2">
         {!service.installed && service.installation_status !== 'installing' && (
-          <StyledButton
-            size="sm"
-            variant="primary"
-            icon="IconDownload"
-            onClick={onInstall}
-            fullWidth
-          >
-            Instalar
-          </StyledButton>
+          <div className="flex items-center gap-2 w-full">
+            <StyledButton
+              size="sm"
+              variant="primary"
+              icon="IconDownload"
+              onClick={onInstall}
+              fullWidth
+            >
+              Instalar
+            </StyledButton>
+            {onOpenCatalog && (
+              <StyledButton
+                size="sm"
+                variant="outline"
+                icon="IconBook"
+                onClick={onOpenCatalog}
+                title="Ver o que este app faz e exemplos de uso"
+              >
+                Guia
+              </StyledButton>
+            )}
+          </div>
         )}
 
         {!service.installed && service.installation_status === 'installing' && (
@@ -1423,6 +1613,19 @@ function AppCard({
 
               {isDropdownOpen && (
                 <div className="absolute right-0 bottom-full mb-1 w-52 bg-surface-primary border border-surface-secondary rounded-lg shadow-xl z-20 overflow-hidden">
+                  {onOpenCatalog && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        onOpenCatalog()
+                      }}
+                      className="flex items-center gap-2 w-full px-3 py-2 text-xs transition-colors text-left cursor-pointer text-text-primary hover:bg-surface-secondary"
+                    >
+                      <IconBook className="h-4 w-4 text-desert-green" />
+                      Guia &amp; Exemplos de Uso
+                    </button>
+                  )}
                   {docLink && (
                     <a
                       href={docLink}

@@ -2,6 +2,7 @@ import {
   readdir,
   stat,
   lstat,
+  readlink,
   mkdir,
   rename,
   rm,
@@ -226,6 +227,16 @@ export class StorageManagerService {
     if (src === destPath) {
       throw new Error('A origem e o destino são idênticos.')
     }
+
+    try {
+      const stats = await lstat(src)
+      if (stats.isSymbolicLink()) {
+        const target = await readlink(src)
+        if (resolve(dirname(src), target) === resolve(destPath)) {
+          return { success: true, sourcePath: src, destPath, symlinkCreated: true, alreadyMapped: true }
+        }
+      }
+    } catch {}
 
     try {
       await rename(src, destPath)

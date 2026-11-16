@@ -56,6 +56,7 @@ export default function SettingsStorage() {
   const [moveDestDir, setMoveDestDir] = useState<string>('')
   const [keepSymlink, setKeepSymlink] = useState<boolean>(true)
   const [moving, setMoving] = useState<boolean>(false)
+  const [movingItem, setMovingItem] = useState<string | null>(null)
   const [newFolderName, setNewFolderName] = useState<string>('')
 
   // Samba state
@@ -66,7 +67,11 @@ export default function SettingsStorage() {
   const [sambaHostPath, setSambaHostPath] = useState('')
   const [sambaSaving, setSambaSaving] = useState(false)
 
-  const { data: overview, isLoading: overviewLoading } = useQuery({
+  const {
+    data: overview,
+    isLoading: overviewLoading,
+    refetch: refetchOverview,
+  } = useQuery({
     queryKey: ['storage-overview'],
     queryFn: async () => {
       const res = await axios.get<{

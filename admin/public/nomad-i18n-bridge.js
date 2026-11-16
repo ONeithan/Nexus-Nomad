@@ -64,6 +64,27 @@
     'Settings': 'Configurações',
     'About': 'Sobre',
 
+    // === FLATNOTES: Menus e Edição de Notas ===
+    'New note': 'Nova nota',
+    'Search notes...': 'Buscar notas...',
+    'Search notes': 'Buscar notas',
+    'All notes': 'Todas as notas',
+    'Archive': 'Arquivar',
+    'Archived': 'Arquivadas',
+    'Trash': 'Lixeira',
+    'Delete': 'Excluir',
+    'Save': 'Salvar',
+    'Preview': 'Pré-visualizar',
+    'Edit': 'Editar',
+    'Tags': 'Etiquetas / Tags',
+    'Untitled': 'Sem título',
+    'No notes found': 'Nenhuma nota encontrada',
+    'Logout': 'Sair',
+    'Dark mode': 'Modo escuro',
+    'Light mode': 'Modo claro',
+    'Created': 'Criado em',
+    'Modified': 'Modificado em',
+
     // === IT-TOOLS: Títulos e Descrições das Ferramentas ===
     'Token generator': 'Gerador de Tokens',
     'Generate random string with the chars you want, uppercase or lowercase letters, numbers and/or symbols.':

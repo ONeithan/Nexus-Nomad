@@ -1,4 +1,5 @@
 import { Fragment, useState, useEffect, useMemo } from 'react'
+import axios from 'axios'
 import { Dialog, Transition } from '@headlessui/react'
 import { IconX, IconCheck, IconInfoCircle } from '@tabler/icons-react'
 import { useQuery } from '@tanstack/react-query'
@@ -19,6 +20,70 @@ import { getPrimaryDiskInfo } from '~/hooks/useDiskDisplayData'
  * patterns like `wikipedia_en_simple_` continue to match upstream filenames
  * regardless of mirror domain.
  */
+const RESOURCE_TITLE_TRANSLATIONS: Record<string, string> = {
+  'Medical Library': 'Biblioteca Médica de Emergência',
+  'NHS Medicines A to Z': 'Guia de Remédios e Posologia (NHS A a Z)',
+  'Military Medicine': 'Medicina Militar e Tática de Combate',
+  'CDC Health Information': 'Manual de Saúde Pública e Doenças (CDC)',
+  'MedlinePlus': 'Enciclopédia de Saúde MedlinePlus (NIH)',
+  'FDA Drug Reference': 'Referência Farmacológica e Bulas de Medicamentos (FDA)',
+  'Wikipedia Medicine': 'Wikipédia Médica Ilustrada',
+  'LibreTexts Medicine': 'Livros Didáticos de Medicina (LibreTexts)',
+  'LibrePathology': 'Patologia Clínica e Diagnóstico de Doenças (LibrePathology)',
+  'Water Treatment Library': 'Guia de Captação e Purificação de Água',
+  'Food for Preppers': 'Alimentação e Racionamento para Sobrevivência',
+  'A Library of Knots': 'Manual Ilustrado de Nós, Amarras e Suturas',
+  'Canadian Prepper: Winter Prepping': 'Sobrevivência no Frio Extremo e Inverno Rigoroso',
+  'Canadian Prepper: Bug Out Roll': 'Mochila de Fuga e Equipamentos Essenciais (Bug Out Bag)',
+  'Ready.gov': 'Plano Oficial de Desastres e Emergências (Ready.gov)',
+  'The Great Outdoors Q&A': 'Sobrevivência Selvagem e Trekking (Stack Exchange)',
+  'Amateur Radio Q&A': 'Rádio Amadorismo e Comunicação de Crise (Q&A)',
+  'Canadian Prepper: Bug Out Concepts': 'Estratégias e Rotas de Evacuação Tática',
+  'Urban Prepper': 'Preparação e Defesa para Emergências Urbanas',
+  'Canadian Prepper: Prepping Food': 'Armazenamento Alimentar de Longo Prazo',
+  'Post Disaster Resource Library': 'Recuperação, Abrigo e Saneamento Pós-Desastre',
+  'Hundred Rabbits': 'Vida Autossuficiente e Energia Solar Off-Grid (Hundred Rabbits)',
+  'Project Gutenberg: Military Science': 'Estratégia e Ciência Militar Clássica (Gutenberg)',
+  'CD3WD: Appropriate Technology Library': 'Tecnologia Apropriada e Engenharia de Aldeia (CD3WD)',
+  'Wikibooks': 'Livros Didáticos Livres (Wikibooks)',
+  'TED-Ed': 'Aulas e Animações Educativas (TED-Ed)',
+  'Wikiversity': 'Universidade Aberta (Wikiversity)',
+  'LibreTexts Mathematics': 'Matemática e Cálculo Diferencial (LibreTexts)',
+  'LibreTexts Physics': 'Física Clássica e Moderna (LibreTexts)',
+  'LibreTexts Chemistry': 'Química Geral e Orgânica (LibreTexts)',
+  'LibreTexts Biology': 'Biologia Geral e Genética (LibreTexts)',
+  'Wikibooks (With Images)': 'Livros Didáticos Ilustrados (Wikibooks Maxi)',
+  'TED Conference': 'Conferências Globais TED (Arquivo de Vídeos)',
+  'LibreTexts Humanities': 'Ciências Humanas, Filosofia e História (LibreTexts)',
+  'LibreTexts Geosciences': 'Geociências, Climatologia e Geologia (LibreTexts)',
+  'LibreTexts Engineering': 'Engenharia e Estruturas Mecânicas (LibreTexts)',
+  'LibreTexts Business': 'Administração, Finanças e Gestão Prática (LibreTexts)',
+  'Woodworking Q&A': 'Marcenaria e Carpintaria Prática (Stack Exchange)',
+  'Motor Vehicle Maintenance Q&A': 'Mecânica Automotiva e Conserto de Veículos (Q&A)',
+  'DIY & Home Improvement Q&A': 'Reformas, Hidráulica e Elétrica Residencial (Q&A)',
+  'iFixit Repair Guides': 'Manuais Oficiais de Reparo iFixit',
+  'FOSS Cooking': 'Culinária Básica e Nutritiva (FOSS Cooking)',
+  'Based.Cooking': 'Receitas Sem Firula (Based.Cooking)',
+  'Gardening Q&A': 'Hortas, Cultivo e Jardinagem Produtiva (Q&A)',
+  'Cooking Q&A': 'Técnicas Culinárias e Segurança dos Alimentos (Q&A)',
+  'Learning Self-Reliance: Homesteading': 'Vida no Campo e Autossuficiência Rural (Homesteading)',
+  'Project Gutenberg: Agriculture': 'Tratados Históricos de Agropecuária (Gutenberg)',
+  'freeCodeCamp': 'Cursos de Programação Web (freeCodeCamp)',
+  'Python Documentation': 'Documentação Oficial do Python',
+  'JavaScript Documentation': 'Documentação Oficial de JavaScript (MDN)',
+  'HTML Documentation': 'Manual de HTML5 (MDN)',
+  'CSS Documentation': 'Manual de CSS3 e Estilos (MDN)',
+  'Arduino Q&A': 'Automação e Microcontroladores Arduino (Q&A)',
+  'Raspberry Pi Q&A': 'Sistemas Embarcados e Raspberry Pi (Q&A)',
+  'Node.js Documentation': 'Documentação Oficial do Node.js',
+  'React Documentation': 'Documentação Oficial do React',
+  'Git Documentation': 'Manual de Controle de Versão Git',
+  'Electronics Q&A': 'Engenharia Eletrônica e Projetos de Circuitos (Q&A)',
+  'Robotics Q&A': 'Robótica, Sensores e Atuadores (Q&A)',
+  'Docker Documentation': 'Manual de Contêineres Docker',
+  'Linux Documentation': 'Manual do Sistema Operacional Linux e Terminal Bash',
+}
+
 function resourceFilename(resource: SpecResource): string {
   const last = resource.url.split('/').pop()
   return last && last.length > 0 ? last : resource.id
@@ -41,6 +106,20 @@ const TierSelectionModal: React.FC<TierSelectionModalProps> = ({
 }) => {
   // Local selection state - initialized from prop
   const [localSelectedSlug, setLocalSelectedSlug] = useState<string | null>(null)
+  const [targetDisk, setTargetDisk] = useState<string>('')
+
+  const { data: storageOverview } = useQuery({
+    queryKey: ['storage-overview'],
+    queryFn: async () => {
+      const res = await axios.get<{
+        storageRoot: string
+        preferredDownloadDisk: string
+        mountTargets: { label: string; path: string; freeBytes: number; totalBytes: number }[]
+      }>('/api/system/storage/overview')
+      return res.data
+    },
+    staleTime: 60_000,
+  })
 
   // Reset local selection when modal opens or category changes
   useEffect(() => {
@@ -131,10 +210,22 @@ const TierSelectionModal: React.FC<TierSelectionModalProps> = ({
    * handleSubmit so the guardrail modal's confirm path can call it after
    * the user has consented to the large operation.
    */
-  const finalizeSubmit = () => {
+  const finalizeSubmit = async () => {
     if (!localSelectedSlug || !category) return
     const selectedTier = category.tiers.find((t) => t.slug === localSelectedSlug)
     if (selectedTier) {
+      const chosenDisk = targetDisk || storageOverview?.preferredDownloadDisk || storageOverview?.storageRoot
+      if (chosenDisk && chosenDisk !== storageOverview?.storageRoot) {
+        try {
+          await axios.post('/api/system/storage/move', {
+            sourcePath: `${storageOverview?.storageRoot || '/storage'}/zim`,
+            targetDiskPath: chosenDisk,
+            createSymlink: true,
+          })
+        } catch (e) {
+          console.warn('Could not map storage to selected disk before tier download', e)
+        }
+      }
       onSelectTier(category, selectedTier)
     }
     onClose()
@@ -268,17 +359,20 @@ const TierSelectionModal: React.FC<TierSelectionModalProps> = ({
                                   )}
                                 </p>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                                  {ownResources.map((resource, idx) => (
-                                    <div key={idx} className="flex items-start text-sm">
-                                      <IconCheck size={14} className="text-desert-green mr-1.5 mt-0.5 flex-shrink-0" />
-                                      <div>
-                                        <span className="text-text-primary">{resource.title}</span>
-                                        <span className="text-text-muted text-xs ml-1">
-                                          ({formatBytes(resource.size_mb * 1024 * 1024, 0)})
-                                        </span>
+                                  {ownResources.map((resource, idx) => {
+                                    const translatedTitle = RESOURCE_TITLE_TRANSLATIONS[resource.title] || resource.title
+                                    return (
+                                      <div key={idx} className="flex items-start text-sm">
+                                        <IconCheck size={14} className="text-desert-green mr-1.5 mt-0.5 flex-shrink-0" />
+                                        <div>
+                                          <span className="text-text-primary">{translatedTitle}</span>
+                                          <span className="text-text-muted text-xs ml-1">
+                                            ({formatBytes(resource.size_mb * 1024 * 1024, 0)})
+                                          </span>
+                                        </div>
                                       </div>
-                                    </div>
-                                  ))}
+                                    )
+                                  })}
                                 </div>
                               </div>
                             </div>
@@ -331,6 +425,42 @@ const TierSelectionModal: React.FC<TierSelectionModalProps> = ({
                             )}
                           </p>
                         </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Seletor de HD de Destino */}
+                  {storageOverview?.mountTargets && storageOverview.mountTargets.length > 0 && (
+                    <div className="mt-4 p-3.5 bg-surface-secondary border border-border-default rounded-xl space-y-2.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-text-primary uppercase tracking-wide flex items-center gap-1.5">
+                          <span>💾 Salvar coleção no disco:</span>
+                        </span>
+                        <span className="text-[11px] text-text-secondary">Destino de gravação ZIM</span>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                        {storageOverview.mountTargets.map((disk) => {
+                          const isChosen = (targetDisk || storageOverview.preferredDownloadDisk || storageOverview.storageRoot) === disk.path
+                          return (
+                            <div
+                              key={`tier-disk-${disk.path}`}
+                              onClick={() => setTargetDisk(disk.path)}
+                              className={`p-2.5 rounded-lg border text-xs cursor-pointer transition-all flex items-center justify-between ${
+                                isChosen
+                                  ? 'border-desert-green bg-desert-green/10 font-bold'
+                                  : 'border-border-subtle bg-surface-primary hover:border-desert-tan'
+                              }`}
+                            >
+                              <div className="truncate mr-2">
+                                <div className="text-text-primary truncate">{disk.label}</div>
+                                <div className="text-[10px] font-mono text-text-secondary truncate">
+                                  {disk.path} • Livre: {formatBytes(disk.freeBytes, 1)}
+                                </div>
+                              </div>
+                              {isChosen && <IconCheck size={16} className="text-desert-green shrink-0" />}
+                            </div>
+                          )
+                        })}
                       </div>
                     </div>
                   )}

@@ -1,389 +1,2488 @@
-# Aplicativos da Central de Aplicativos (Supply Depot)
+# Catálogo & Guia Completo de Aplicativos N.O.M.A.D.
 
-A Central de Aplicativos (Supply Depot) é onde você instala aplicativos adicionais no seu NOMAD, além das ferramentas nativas integradas. Cada aplicativo é executado em seu próprio contêiner no seu NOMAD, de forma 100% offline, exibindo um botão **Abrir** assim que a instalação for concluída.
+O **Catálogo de Aplicativos do Nexus N.O.M.A.D.** reúne tanto as ferramentas nativas integradas quanto todo o **Arsenal Soberano** com mais de 100 microsserviços auto-hospedados.
 
-Esta página reúne tudo o que você precisa saber para começar a usar cada aplicativo *especificamente no NOMAD*: se é necessário fazer login, quais são as credenciais padrão, onde seus arquivos são armazenados e o que você precisa ter em mãos antes de começar. Ela não substitui os manuais de uso de cada ferramenta em si — cada aplicativo é um projeto de código aberto independente, com documentação própria, para a qual fornecemos os links oficiais correspondentes.
-
-Uma observação rápida sobre logins: alguns desses aplicativos possuem contas próprias, totalmente separadas do seu login do NOMAD. Quando um aplicativo solicitar autenticação, informamos aqui as credenciais iniciais e se você deve alterá-las.
+Esta página reúne a documentação operacional de cada aplicativo: **Para que serve**, **O que faz**, **Como funciona** e **Exemplos práticos de uso real** na sua residência, homelab e família.
 
 ---
 
-## Gerenciando seus aplicativos
+## Biblioteca Offline (Kiwix) {% #nomad-kiwix-server %}
 
-Cada aplicativo instalado recebe um menu **Gerenciar** em seu cartão. A partir dele, você pode:
+- **Categoria:** `utility` | **Porta:** `80` | **Tipo:** `Arsenal Docker`
 
-- **Documentação** — acesse diretamente as instruções de introdução do NOMAD para esse aplicativo (as mesmas seções detalhadas abaixo).
-- **Editar** — altere as configurações do aplicativo: mapeamento de portas, montagem de volumes, variáveis de ambiente e limites de memória/CPU. Isso funciona tanto para aplicativos do catálogo curado quanto para aplicativos personalizados. Suas edições são mescladas com a configuração existente do aplicativo, garantindo que ajustes avançados (como acesso à GPU no Assistente de IA) sejam preservados, e um aplicativo editado deixa de ser sobrescrito por atualizações do catálogo.
-- **Logs** e **Estatísticas** — abra a visualização em tempo real do registro de logs do aplicativo ou seu consumo atual de memória e CPU, muito útil quando algo não estiver se comportando como esperado.
-- **Atualizar** e **Remover** — baixe a versão mais recente de um aplicativo ou desinstale-o (com a opção de remover sua imagem Docker para liberar espaço). Caso o novo contêiner falhe ao iniciar após uma atualização, o NOMAD realiza automaticamente o rollback para a versão que estava funcionando.
+### 🎯 Para que serve
+Versão em C/C++ de alto desempenho do modelo de transcrição de voz da OpenAI, otimizada para CPUs e placas de vídeo locais.
 
-**Visualizando a versão em execução:** Cada cartão de aplicativo exibe a versão instalada logo ao lado do nome (por exemplo, `Kiwix · 3.7.0`). Quando uma versão mais nova estiver disponível, um indicador laranja com **Atualização disponível** aparecerá no cartão para fácil identificação visual.
+### ⚙️ O que faz
+- Transcreve reuniões, áudios longos e gravações familiares com 100% de privacidade e sem custos de nuvem.
+- Porta padrão mapeada: 80
+- Categoria operacional: utility
+- Integração com ecossistema N.O.M.A.D.
 
-**Links de inicialização personalizados ("Abrir"):** Por padrão, o botão **Abrir** direciona para o endereço local do aplicativo no próprio NOMAD. Caso você use um proxy reverso ou DNS local e prefira abrir o aplicativo através de um domínio amigável (por exemplo, `https://jellyfin.minharede.local`), utilize a opção **Gerenciar › Definir URL personalizada** (ou **Editar**). O NOMAD mantém o link original guardado com segurança para que você possa alternar de volta quando desejar, e o endereço personalizado é preservado mesmo após atualizações.
+### 🧠 Como funciona
+Expõe uma API compatível com OpenAI para onde você envia arquivos de áudio (.mp3, .ogg, .wav) ou notas de voz do WhatsApp e recebe a transcrição precisa em texto com pontuação correta e identificação de idioma.
 
-**Mantendo aplicativos atualizados automaticamente:** Os aplicativos instalados podem ser atualizados de maneira autônoma. Essa função requer ativação em dois níveis — uma chave mestra em **Configurações → Atualizações** e uma opção individual por aplicativo na Central de Aplicativos — aplicando de forma automática apenas atualizações secundárias e correções (minor e patch); versões principais (major) sempre permanecem manuais. Consulte o [Guia de Atualizações](/docs/updates) para obter todas as informações.
-
----
-
-## Adicionando seu próprio aplicativo Docker
-
-Além do catálogo curado, a Central de Aplicativos pode executar **seu próprio contêiner Docker** como um aplicativo gerenciado junto aos demais. Clique em **Adicionar App Docker** e informe ao NOMAD:
-
-- a **imagem** a ser baixada (por exemplo, `ghcr.io/owner/app:1.2.3`),
-- os **mapeamentos de portas**, **montagens de volumes**, **variáveis de ambiente** e **limites de memória/CPU** necessários.
-
-Conforme você preenche os campos, o NOMAD realiza uma verificação prévia em tempo real (pre-flight check) e avisa sobre eventuais conflitos de portas ou configurações de risco. Alguns avisos (como registros não verificados ou a tag `:latest`, que impede o rastreamento preciso de versão) são informativos e você pode optar por **Instalar mesmo assim**; configurações comprovadamente inseguras são bloqueadas de imediato.
-
-Uma vez instalado, um aplicativo personalizado se comporta exatamente como qualquer outro: ele conta com o mesmo menu **Gerenciar** (Editar, Logs, Estatísticas, Atualizar, Remover), exibe sua versão no cartão e pode participar das atualizações automáticas. O NOMAD protege os pontos de montagem no host e isola os logs e estatísticas estritamente aos seus contêineres gerenciados, garantindo que o aplicativo personalizado não acesse nada além do que você conceder.
-
-> Um aplicativo personalizado é exclusivamente seu. O NOMAD o executa e gerencia sua infraestrutura básica, mas não fornece documentação de configuração nem suporte para softwares fora do catálogo curado. Consulte a documentação oficial do projeto para saber como utilizá-lo.
+### 💡 Exemplo Real de Uso
+Integrar ao n8n para que qualquer áudio de voz enviado para um bot do Telegram seja transcrito na hora e arquivado no seu diário pessoal ou no Outline.
 
 ---
 
-## Stirling PDF {% #stirling-pdf %}
 
-Uma caixa de ferramentas completa para trabalhar com PDFs, tudo rodando em seu próprio hardware. Mescle e divida arquivos, converta de e para PDF, comprima, gire, adicione ou remova senhas, execute OCR em documentos escaneados para torná-los pesquisáveis, assine, adicione marcas d'água e oculte informações sensíveis (redação). São mais de 50 utilitários disponíveis e, como tudo roda localmente, nenhum de seus documentos sai do seu NOMAD.
+## Banco Vetorial Qdrant {% #nomad-qdrant %}
 
-**Site oficial:** [stirlingpdf.com](https://stirlingpdf.com) · **Código-fonte:** [github.com/Stirling-Tools/Stirling-PDF](https://github.com/Stirling-Tools/Stirling-PDF)
+- **Categoria:** `utility` | **Porta:** `80` | **Tipo:** `Arsenal Docker`
 
-**Primeira vez que você abre:** O aplicativo abre diretamente nas ferramentas, sem exigir nenhum login. Configuramos o Stirling para ignorar sua tela de login por padrão, pois no NOMAD ele é uma ferramenta de uso pessoal em sua rede local, onde uma barreira de senha costuma ser desnecessária. Você verá a indicação "Guest" no canto inferior esquerdo, o que é totalmente normal.
+### 🎯 Para que serve
+Alternativa auto-hospedada moderna ao Airtable, oferecendo bancos de dados relacionais rápidos com interface visual intuitiva.
 
-**Atenção, inicialização um pouco mais lenta:** O Stirling PDF é uma aplicação Java robusta. Após instalá-lo, aguarde de 30 a 60 segundos para que a inicialização seja concluída antes de carregar a interface. Ele também consome uma quantidade significativa de memória (aproximadamente 1 GB de RAM), funcionando de forma mais fluida em dispositivos NOMAD com boa folga de recursos.
+### ⚙️ O que faz
+- Ideal para estruturar cadastros e catálogos rápidos que exigem relações entre dados sem precisar programar em SQL.
+- Porta padrão mapeada: 80
+- Categoria operacional: utility
+- Integração com ecossistema N.O.M.A.D.
 
-**Deseja proteger com senha?** Se preferir que o Stirling exija login (por exemplo, se várias pessoas compartilham o mesmo NOMAD e você deseja restringir o acesso), é possível reativar a autenticação pelo NOMAD:
+### 🧠 Como funciona
+Permite criar tabelas com campos dinâmicos (fórmulas, relações entre tabelas, arquivos anexados, tags, datas e caixas de seleção), com visualização em Grade, Formulário Web, Galeria e Kanban.
 
-1. Na página da Central de Aplicativos, localize o Stirling PDF e clique em **Gerenciar > Editar**.
-2. Em **Variáveis de Ambiente**, altere `SECURITY_ENABLELOGIN=false` para `SECURITY_ENABLELOGIN=true`.
-3. Salve. O NOMAD recria o contêiner e a tela de login volta a ser exibida.
-
-Na primeira vez que fizer login após essa alteração, utilize o usuário `admin` e a senha `stirling`. O Stirling exigirá que você defina uma nova senha imediatamente. Observe que essa é a única maneira de reativar a autenticação: o menu interno de configurações do Stirling fica bloqueado quando não há usuário logado, portanto a reativação deve ser feita pela tela de Edição do NOMAD, e não por dentro do próprio Stirling.
-
-**Seus dados:** As configurações do aplicativo ficam salvas na pasta `storage/stirling-pdf` no seu NOMAD. Os arquivos PDF enviados para manipulação são processados na operação e baixados de volta para o seu dispositivo cliente. O Stirling não funciona como um repositório de documentos de longo prazo, de modo que ele não retém seus PDFs após o processamento.
-
-**De onde vêm seus PDFs (PC local + Pastas do NOMAD):**
-- **Do seu computador/celular:** Basta clicar em **"Selecionar arquivo"** ou arrastar o PDF direto para o navegador, editar e baixar o resultado de volta para o seu aparelho.
-- **Das pastas do servidor NOMAD:** O container do Stirling já monta automaticamente as pastas `books` e `kb_uploads` do NOMAD em `/customFiles/books` e `/customFiles/documentos`. Além disso, você pode ativar o **Samba** em **Configurações → Armazenamento & Samba** para abrir os PDFs do servidor direto pelo Windows Explorer/Finder e arrastar para o Stirling.
-
-**Funcionamento offline:** Todas as ferramentas de manipulação de PDF rodam localmente no seu NOMAD, operando 100% offline. Apenas alguns recursos secundários dependem de internet e não farão nada quando desconectado: a opção de importação do "Google Drive" e os links no rodapé (Pesquisa, Discord, GitHub). Nenhum deles é necessário para trabalhar com PDFs. O único recurso principal que possui componente online opcional é o OCR (reconhecimento óptico de caracteres em documentos escaneados), que já vem com suporte ao idioma inglês pré-instalado — a adição de pacotes de outros idiomas é a única parte que requer conexão temporária.
-
-## Gerenciador de Arquivos (File Browser) {% #file-browser %}
-
-Um gerenciador de arquivos web completo para o seu NOMAD. Navegue por diretórios, faça upload e download de arquivos, crie pastas, renomeie, mova e exclua itens diretamente pelo navegador, sem necessidade de instalar nada no seu computador. É uma forma prática de transferir arquivos para dentro e fora do dispositivo ou organizar conteúdos sem precisar recorrer ao terminal de linha de comando.
-
-**Site oficial:** [filebrowser.org](https://filebrowser.org) · **Código-fonte:** [github.com/filebrowser/filebrowser](https://github.com/filebrowser/filebrowser)
-
-**Primeira vez que você abre:** Uma tela de login será exibida. Acesse com o usuário `admin` e a senha `nomad`. **Altere essa senha imediatamente.** Esse padrão é idêntico em todas as instalações do NOMAD, portanto qualquer pessoa na sua rede que o conheça poderia obter acesso até que você o modifique. Clique no ícone de engrenagem de configurações, abra as configurações do seu perfil e defina uma nova senha segura.
-
-Ao contrário da maioria dos aplicativos aqui, o Gerenciador de Arquivos mantém o login ativo intencionalmente. Ele tem permissão para renomear e excluir arquivos reais no seu NOMAD, tornando a proteção por senha indispensável mesmo em rede local restrita.
-
-**O que você pode visualizar:** O Gerenciador de Arquivos exibe as principais pastas de conteúdo do seu NOMAD em um único local:
-
-- **books** - e-books e livros digitais, incluindo todo o material lido pelo Calibre-Web
-- **maps** - dados e pacotes de mapas baixados
-- **media** - vídeos, músicas e fotos, incluindo arquivos transmitidos pelo Jellyfin
-- **zim** - acervos offline baixados, como a Wikipédia e outras bibliotecas de referência
-- **kb_uploads** - documentos adicionados à Base de Conhecimento (Knowledge Base)
-
-Você pode enviar, baixar, renomear, mover e excluir itens dentro dessas pastas, e qualquer arquivo adicionado na raiz também é preservado. As pastas internas de sistema utilizadas diretamente na execução dos serviços (como modelos de IA, índices de busca e o cofre de senhas) ficam intencionalmente isoladas e fora do alcance do Gerenciador de Arquivos, evitando navegações indevidas ou exclusões acidentais.
-
-> **Atenção ao excluir arquivos:** o que for apagado aqui é excluído permanentemente, sem lixeira. A maioria dos conteúdos pode ser recuperada (é possível baixar novamente um mapa ou arquivo ZIM da Wikipédia), mas se você excluir um livro, vídeo ou documento pessoal adicionado por você, essa cópia será perdida em definitivo. Exclua sempre com a mesma cautela que teria em seu próprio computador.
-
-**Funcionamento offline:** Totalmente offline. O Gerenciador de Arquivos é executado integralmente no seu NOMAD e não se conecta à internet para nenhuma operação, funcionando com o mesmo desempenho esteja o dispositivo conectado ou não.
-
-## Calibre-Web {% #calibre-web %}
-
-Um leitor e organizador de bibliotecas de e-books baseado na web para a sua coleção digital. Leia livros diretamente no navegador, organize seus títulos por autor, séries e tags, e envie arquivos para Kindles ou outros leitores eletrônicos. Ele se integra diretamente à pasta `books` do seu NOMAD, mantendo todo o seu acervo no dispositivo para acompanhar você onde quer que vá.
-
-**Site oficial:** [github.com/janeczku/calibre-web](https://github.com/janeczku/calibre-web)
-
-**Primeira vez que você abre:** O Calibre-Web precisa apontar para um banco de dados de biblioteca, e o NOMAD cria automaticamente uma biblioteca vazia durante a instalação para evitar erros de configuração. Este é o fluxo de configuração inicial (executado uma única vez):
-
-1. Abra o Calibre-Web. Ele iniciará na tela de **Database Configuration** (Configuração do Banco de Dados).
-2. Se aparecer a janela **"Choose File Location"** mostrando `/app/calibre-web`: clique **duas vezes em `..`** na lista de pastas para subir até a raiz `/`, entre na pasta **`books`** e clique no botão azul **Select** (ou feche a janela, digite `/books` diretamente no campo **Location of Calibre Database** e clique em **Save**).
-3. Você verá a mensagem *"Database Settings updated"* e sua biblioteca será aberta. A configuração está concluída!
-
-Se em algum momento for solicitado login, as credenciais padrão são `admin` / `admin123`. **Altere essa senha** assim que acessar o sistema (clique em `admin` no canto superior direito e selecione Editar). Esse é o acesso padrão de fábrica em qualquer NOMAD.
-
-**Adicionando livros:** O upload direto pela interface web vem desativado por padrão. Para ativá-lo, acesse o menu **Admin** (canto superior direito), edite a configuração básica marcando a permissão de uploads e um botão de Enviar (Upload) passará a ser exibido. Você também pode simplesmente transferir arquivos de e-book diretamente para a pasta `books` usando o Gerenciador de Arquivos (File Browser) e, em seguida, usar a opção "Verificar/Scan" do Calibre-Web para indexá-los automaticamente.
-
-**Seus dados:** Sua biblioteca fica armazenada na pasta `books` do seu NOMAD (a mesma pasta `books` visível no Gerenciador de Arquivos). Cada livro adicionado é salvo nesse local, portanto fazer backup dessa pasta garante a preservação de toda a sua coleção.
-
-**Funcionamento offline:** A leitura e o gerenciamento da sua biblioteca funcionam 100% offline. O único recurso que utiliza internet é a busca de metadados ("fetch metadata"), que puxa capas e sinopses de fontes online. Essa função não operará quando estiver sem conexão, mas isso não afeta em nada a leitura ou a organização dos livros já armazenados.
-
-## IT Tools {% #it-tools %}
-
-Uma coleção prática com mais de 100 pequenos utilitários que você normalmente precisaria pesquisar na internet: geradores de hash, codificadores Base64 e URL, formatadores de JSON e SQL, geradores de UUID, criador de QR Code, conversores de cores e muito mais. Tudo roda localmente no seu NOMAD, disponível a qualquer momento sem depender de internet.
-
-**Site oficial:** [it-tools.tech](https://it-tools.tech) · **Código-fonte:** [github.com/CorentinTh/it-tools](https://github.com/CorentinTh/it-tools)
-
-**Primeira vez que você abre:** O aplicativo abre imediatamente na tela de ferramentas. Não há login, cadastro de conta nem etapas de configuração. Basta escolher a ferramenta na barra lateral e usá-la.
-
-**Seus dados:** Não há nada para gerenciar. O IT Tools não salva dados no seu NOMAD entre as sessões; não há arquivos persistentes, bancos de dados ou credenciais para controlar. É o aplicativo mais direto e leve da Central de Aplicativos.
-
-**Funcionamento offline:** Cada utilitário é executado diretamente no seu navegador a partir da cópia hospedada no seu NOMAD. Nenhuma função requer acesso à internet, mantendo total disponibilidade offline.
-
-## Excalidraw {% #excalidraw %}
-
-Um quadro branco virtual intuitivo para criar diagramas rápidos, croquis e esboços com estilo de desenho à mão. Crie formas geométricas, setas, desenhos livres, insira textos e imagens e elabore fluxogramas, diagramas de rede ou anotações visuais em segundos. A interface tem um visual amigável e descontraído, funcionando diretamente no navegador.
-
-**Site oficial:** [excalidraw.com](https://excalidraw.com) · **Código-fonte:** [github.com/excalidraw/excalidraw](https://github.com/excalidraw/excalidraw)
-
-**Primeira vez que você abre:** O aplicativo abre diretamente em uma tela de desenho em branco. Sem login, sem cadastro, sem passos de configuração. Escolha uma forma na barra superior e comece a desenhar. Uma breve mensagem de boas-vindas lembrará que seu trabalho fica salvo no navegador, o que nos leva ao ponto fundamental sobre o Excalidraw no NOMAD.
-
-**Onde seus desenhos ficam salvos (leia com atenção):** Esta versão do Excalidraw não mantém armazenamento persistente no disco do NOMAD. Seus desenhos são salvos no armazenamento local do navegador web que você estiver utilizando naquele aparelho específico. Isso implica o seguinte:
-
-- Seus desenhos **não são sincronizados automaticamente entre aparelhos**. O que você desenhar no seu notebook não aparecerá ao abrir o Excalidraw no celular, pois cada navegador armazena sua própria cópia local.
-- Se você **limpar os dados de navegação/cookies do navegador** ou utilizar uma janela anônima, o desenho será perdido. Não há cópia no servidor NOMAD para recuperação.
-- Portanto, **salve seus trabalhos em arquivo.** Utilize o menu principal (canto superior esquerdo) e escolha **Salvar em...** gerando um arquivo com extensão `.excalidraw`, guardando-o em um local seguro (por exemplo, nas suas pastas de documentos ou mídia através do Gerenciador de Arquivos). Para continuar editando depois, basta clicar em **Abrir** e carregar esse arquivo. Esse é o método seguro para preservar seus diagramas no longo prazo ou transferi-los para outros aparelhos.
-
-**Seus dados:** Como tudo permanece salvo no seu próprio navegador, não há pastas de armazenamento nem credenciais do NOMAD associadas ao Excalidraw. Os arquivos que você exportar ficarão onde você decidir guardá-los.
-
-**Funcionamento offline:** O quadro branco funciona de forma offline: você pode desenhar, editar e salvar arquivos normalmente sem internet. Três observações importantes:
-
-- **A tipografia característica com estilo manuscrito depende originalmente de fontes online.** Quando o NOMAD estiver desconectado, o Excalidraw não consegue baixar essas fontes e recorre a uma fonte padrão do sistema operacional, fazendo com que os textos fiquem com um visual mais reto. Os desenhos em si não sofrem nenhuma alteração, apenas a exibição das letras.
-- **O Excalidraw envia telemetria anônima básica quando o NOMAD está online.** Os desenvolvedores originais do projeto incluem uma contagem simples de visualizações de página (via Simple Analytics) para registrar que o app foi aberto. Esse rastreamento não acessa seus desenhos nem transmite informações quando o NOMAD está offline, mas fazemos questão de esclarecer sua existência para manter total transparência, já que o NOMAD preza pelo isolamento de dados.
-- **Alguns botões correspondem a serviços em nuvem que não funcionam no NOMAD.** "Colaboração ao vivo", "Cadastrar-se" e "Excalidraw+" apontam para o serviço comercial online dos criadores da ferramenta e exigem conexão à internet. Eles não fazem parte do seu quadro branco local e podem ser ignorados. O mesmo se aplica ao explorador de **Biblioteca** de formas prontas, que depende de uma galeria online externa.
-
-## Homebox {% #homebox %}
-
-Um sistema de inventário doméstico e patrimonial completo para você organizar tudo o que possui. Cadastre seus pertences agrupando por locais e etiquetas, anexe fotos, registre números de série, valores pagos, prazos de garantia e comprovantes de compra, encontrando qualquer item rapidamente por meio da busca integrada. Uma ferramenta indispensável para registros de seguro, controle de garantias e organização de estoques e peças.
-
-**Site oficial:** [homebox.software](https://homebox.software) · **Código-fonte:** [github.com/sysadminsmedia/homebox](https://github.com/sysadminsmedia/homebox)
-
-**Primeira vez que você abre:** O Homebox exibe uma tela de autenticação, mas como ainda não há contas cadastradas, você deve criar a sua. Clique em **Registrar** (Register) e preencha:
-
-- **seu e-mail** (usado como nome de usuário para login),
-- **seu nome**,
-- **uma senha** (o Homebox inclui um medidor de segurança e exige uma senha forte para permitir o cadastro).
-
-Clique em **Registrar** e, em seguida, faça login com o e-mail e senha criados. A primeira conta cadastrada se torna automaticamente a **proprietária (owner)** desta instância do Homebox. Não existem senhas de fábrica para alterar; a conta já nasce configurada por você.
-
-**Compartilhando seu NOMAD com outras pessoas?** Por padrão, o Homebox permite que qualquer usuário com acesso à rede crie uma conta própria. Se o dispositivo for de uso estritamente seu ou de sua confiança, não há problema. Caso prefira fechar novos cadastros após criar seu acesso inicial:
-
-1. Crie primeiramente sua conta de proprietário (conforme explicado acima).
-2. Na página da Central de Aplicativos, localize o Homebox e clique em **Gerenciar > Editar**.
-3. Em **Variáveis de Ambiente**, adicione `HBOX_OPTIONS_ALLOW_REGISTRATION=false`.
-4. Salve. O NOMAD reinicia o contêiner e o botão de Registro deixará de aceitar novos cadastros. Você continuará fazendo login normalmente.
-
-**Seus dados:** Todas as informações do Homebox ficam salvas em uma única pasta no seu NOMAD, `storage/homebox`, estruturadas em um arquivo de banco de dados (acompanhado das fotos e notas anexadas). Fazer backup dessa pasta preserva integralmente todo o seu inventário.
-
-**Funcionamento offline:** 100% offline. O Homebox roda exclusivamente no seu NOMAD, mantém todos os dados gravados localmente e não realiza nenhuma telemetria externa, operando com total autonomia esteja o servidor conectado ou não à internet. Os links exibidos no cabeçalho (GitHub, Discord e site do projeto) são apenas atalhos informativos externos e não interferem no uso do inventário.
-
-## Vaultwarden {% #vaultwarden %}
-
-Um gerenciador de senhas pessoal e seguro rodando diretamente no seu NOMAD. Totalmente compatível com o ecossistema Bitwarden, permite armazenar credenciais de acesso, notas seguras e dados de cartões em um cofre criptografado. Você pode utilizar as extensões oficiais para navegadores e aplicativos móveis do Bitwarden conectando-os ao seu NOMAD, mantendo seus dados sob seu controle e fora de servidores em nuvem de terceiros.
-
-**Site oficial:** [bitwarden.com](https://bitwarden.com) (para aplicativos e extensões) · **Código-fonte:** [github.com/dani-garcia/vaultwarden](https://github.com/dani-garcia/vaultwarden)
-
-**Primeira vez que você abre (aviso de certificado de segurança):** Gerenciadores de senhas exigem conexões estritamente criptografadas (HTTPS) para funcionar. Por isso, o NOMAD configura o Vaultwarden com HTTPS de forma automática. Como o NOMAD é um servidor privado na sua rede local e não um site público na internet, ele utiliza um certificado digital autoassinado, fazendo com que os navegadores mostrem um aviso de segurança no primeiro acesso. O alerta parece preocupante, mas é o comportamento esperado para dispositivos locais. Para prosseguir:
-
-1. Clique em **Abrir** no cartão do Vaultwarden. Seu navegador exibirá uma mensagem como *"Sua conexão não é particular"* ou *"Não seguro"*.
-2. Clique em **Avançado** e depois em **Ir para (endereço do seu NOMAD)** (em alguns navegadores o botão pode se chamar "Continuar" ou "Aceitar o risco e continuar").
-3. O cofre do Vaultwarden será aberto. O navegador salvará essa exceção e você não verá mais esse aviso no mesmo dispositivo.
-
-**Criando seu cofre:** Na página inicial de login, clique em **Criar conta**, insira seu **e-mail** e defina uma **senha mestra**.
-
-> **Sua senha mestra não pode ser recuperada.** O Vaultwarden não possui serviço de redefinição por e-mail nem opção de recuperação, por projeto de segurança criptográfica — o sistema jamais tem conhecimento da sua senha. Se você esquecê-la, o cofre e todas as senhas armazenadas ficarão inacessíveis de forma irreversível. Escolha uma senha forte que você não vá esquecer e anote-a em um local físico seguro.
-
-**Compartilhando seu NOMAD com outras pessoas?** Por padrão, qualquer pessoa que acessar a tela do Vaultwarden pode criar uma conta individual (cada conta possui seu cofre isolado e criptografado separadamente). Caso queira impedir novos cadastros após criar a sua conta:
-
-1. Crie sua conta primeiro.
-2. Na página da Central de Aplicativos, localize o Vaultwarden e clique em **Gerenciar > Editar**.
-3. Em **Variáveis de Ambiente**, adicione `SIGNUPS_ALLOWED=false`.
-4. Salve. O NOMAD recria o contêiner e novos cadastros são bloqueados, mantendo as contas existentes funcionando normalmente.
-
-**Usando no celular e nas extensões do navegador:** Instale o aplicativo ou extensão oficial do Bitwarden. Na tela inicial de login, selecione a opção de servidor personalizado / auto-hospedado (**self-hosted** ou "URL do Servidor") e informe `https://(endereço_do_seu_NOMAD):8480`. Vale notar que alguns aplicativos para celular aplicam restrições mais severas a certificados autoassinados e podem recusar a conexão; o cofre web acessado pelo navegador no NOMAD sempre funciona perfeitamente.
-
-**Seus dados:** Seu cofre criptografado fica armazenado na pasta `storage/vaultwarden` no seu NOMAD. Fazer backup dessa pasta protege todos os seus dados. (O painel administrativo integrado do Vaultwarden vem desativado por padrão, a menos que você configure um token de administrador, o que não costuma ser necessário para a grande maioria dos usuários).
-
-**Funcionamento offline:** Totalmente offline e seguro. O Vaultwarden é executado integralmente no seu NOMAD, armazena seu cofre de senhas localmente e não envia dados para a internet. Os aplicativos e extensões do Bitwarden também salvam uma cópia em cache local, permitindo que você consulte suas senhas mesmo quando o NOMAD ou o seu celular estiverem desconectados.
-
-## Jellyfin {% #jellyfin %}
-
-Seu próprio servidor de streaming de mídia. Aponte o Jellyfin para uma pasta com filmes, séries, músicas e fotos no seu NOMAD e ele organizará todo o conteúdo com capas, sinopses e detalhes, transmitindo para navegadores web, celulares, tablets, smart TVs ou aplicativos dedicados do Jellyfin. Uma alternativa autônoma e privada aos serviços de streaming comercial para aproveitar os arquivos que você já possui.
-
-**Site oficial:** [jellyfin.org](https://jellyfin.org) · **Código-fonte:** [github.com/jellyfin/jellyfin](https://github.com/jellyfin/jellyfin)
-
-**Primeira vez que você abre (assistente de configuração inicial):** Ao abrir, você passará por algumas etapas rápidas:
-
-1. **Idioma** - selecione o idioma de exibição da interface e clique em Próximo.
-2. **Crie sua conta de administrador** - informe um nome de usuário e uma senha. Esta é a conta mestre que administra todo o servidor, portanto defina uma senha forte e guarde-a com cuidado. (Mais usuários, incluindo perfis restritos para crianças, podem ser criados posteriormente pelo Painel de Controle).
-3. **Adicione suas mídias** - clique em **Adicionar Biblioteca de Mídia** e selecione o tipo de conteúdo. Para facilitar, o NOMAD já cria as pastas correspondentes dentro do seu diretório `media`. Basta associar cada biblioteca à sua pasta respectiva:
-   - Biblioteca de **Filmes** → pasta `Movies`
-   - Biblioteca de **Séries / Programas de TV** → pasta `TV Shows`
-   - Biblioteca de **Músicas** → pasta `Music`
-   - Biblioteca de **Fotos** → pasta `Photos`
-
-   **Aponte cada biblioteca para sua pasta específica, e nunca para a pasta raiz `media`.** Este detalhe é fundamental: se você apontar uma biblioteca para a pasta `media` geral (que engloba todas as outras) e outra para `Music`, o Jellyfin identificará arquivos duplicados ("duplicate path") e sua biblioteca de músicas deixará de ser exibida silenciosamente. Usar uma subpasta dedicada para cada tipo de mídia mantém tudo limpo e funcionando perfeitamente. Você também pode pular esta etapa agora e adicionar as bibliotecas mais tarde pelo Painel de Controle.
-4. **Metadados, acesso remoto e conclusão** - aceite as opções padrão nas telas seguintes e conclua o assistente. Depois, faça login com a conta criada.
-
-**Enviando seus arquivos de mídia:** Coloque os arquivos na subpasta correspondente dentro da pasta **media** do seu NOMAD (a mesma pasta `media` visível no Gerenciador de Arquivos): filmes em **Movies**, séries em **TV Shows**, músicas em **Music** (organizar uma pasta para cada álbum funciona muito bem) e imagens em **Photos**. O fluxo mais prático é carregar os arquivos pelo Gerenciador de Arquivos (ou transferi-los como preferir) e depois clicar em **Escanear Biblioteca** no Jellyfin para indexá-los. O Jellyfin lê subdiretórios normalmente (uma pasta de álbum inteira dentro de `Music` é identificada como um único disco). Ele também se beneficia de arquivos nomeados de forma padronizada (como `Nome do Filme (2020).mp4`), o que facilita a localização automática das capas e informações corretas.
-
-**Seus dados:** Seus arquivos de mídia ficam armazenados em `storage/media`. As configurações do Jellyfin, contas de usuários e capas baixadas ficam em `storage/jellyfin`. Seus arquivos originais nunca são modificados; o Jellyfin apenas realiza a leitura deles.
-
-**Funcionamento offline:** A transmissão das suas próprias mídias é totalmente offline — este é o grande objetivo da ferramenta. A única funcionalidade que depende de internet é a **obtenção de metadados**: quando o Jellyfin adiciona um filme ou série, ele tenta buscar capas, sinopses e elenco em bancos de dados online. Sem conexão, itens novos aparecerão com seus nomes de arquivo normais e sem ilustrações, mas serão reproduzidos normalmente. Assim que a conexão for restabelecida, uma simples verificação de biblioteca baixará as capas faltantes.
-
-> **Observação sobre desempenho de reprodução:** O Jellyfin reproduz a grande maioria dos formatos com facilidade. Porém, se o formato de um vídeo não for suportado diretamente pelo dispositivo em que você está assistindo, o Jellyfin precisará convertê-lo em tempo real ("transcodificação"), o que demanda bastante processamento. O NOMAD não ativa aceleração por placa de vídeo para transcodificação por padrão, o que pode causar travamentos em vídeos muito pesados ou em altíssima resolução caso o hardware do NOMAD seja modesto. Reproduzir arquivos em formatos amplamente compatíveis (como MP4 com codec H.264) dispensa a transcodificação e garante máxima fluidez.
-
-## Meshtastic Web {% #meshtastic-web %}
-
-Um painel de controle via navegador para dispositivos [Meshtastic](https://meshtastic.org). O Meshtastic é uma tecnologia de comunicação via rádio off-grid de longo alcance: rádios LoRa pequenos e econômicos formam uma rede mesh autônoma capaz de trocar mensagens de texto e coordenadas de GPS por quilômetros, sem sinal de celular, sem internet e sem custos de operadora. Este aplicativo permite configurar esses rádios e ler/enviar mensagens em uma tela de tamanho completo.
-
-**Site oficial:** [meshtastic.org](https://meshtastic.org) · **Código-fonte:** [github.com/meshtastic/web](https://github.com/meshtastic/web)
-
-**É necessário ter um rádio Meshtastic físico para usar este aplicativo.** O aplicativo atua apenas como interface de controle. Sem um dispositivo conectado, ele abrirá na tela "No devices connected", pois o processamento e a comunicação real ocorrem no hardware de rádio Meshtastic (e na rede de outros rádios com os quais ele se comunica). Se você ainda não possui um rádio, este aplicativo não terá utilidade no momento.
-
-**Primeira vez que você abre:** O acesso é direto, sem tela de login. Clique em **New Connection** (Nova Conexão) e você verá três formas de conexão com o seu rádio:
-
-- **HTTP** - conecta a um rádio que já esteja conectado à sua rede Wi-Fi, inserindo seu endereço IP. **Este é o método correto a ser utilizado no NOMAD** (veja a explicação abaixo).
-- **Bluetooth** - pareamento com um rádio próximo via Bluetooth.
-- **Serial** - conexão com um rádio plugado na porta USB.
-
-**Particularidade importante no NOMAD (Bluetooth e Serial exigem HTTPS):** Os navegadores modernos só autorizam que páginas web acessem portas USB ou Bluetooth quando carregadas sob conexão criptografada (HTTPS). Como o NOMAD disponibiliza o Meshtastic Web via HTTP simples, **as opções de Bluetooth e Serial não funcionarão no NOMAD**, sendo bloqueadas pelo navegador. O método funcional é **HTTP**: conecte seu rádio Meshtastic à mesma rede Wi-Fi local (a maioria dos módulos Meshtastic possui Wi-Fi integrado) e faça a conexão informando o IP atribuído a ele. Caso precise obrigatoriamente fazer o pareamento via USB ou Bluetooth, utilize o aplicativo oficial do Meshtastic para smartphone ou acesse diretamente o site do Meshtastic.
-
-**Seus dados:** Não há nada para salvar ou configurar no armazenamento do NOMAD para este aplicativo. As configurações do rádio ficam gravadas no próprio hardware do rádio e as preferências da interface ficam salvas no seu navegador. Não há diretório de dados no NOMAD a ser gerenciado.
-
-**Funcionamento offline:** Totalmente offline, alinhado à proposta do ecossistema Meshtastic. A aplicação é servida pelo seu NOMAD e a comunicação com os rádios ocorre exclusivamente pela rede local ou pelas ondas de rádio, sem jamais passar pela internet. Os únicos elementos online são links informativos no rodapé (Vercel, termos legais), que não exercem nenhum impacto no funcionamento da sua rede de rádio.
-
-## Plataforma Educacional (Kolibri) {% #kolibri %}
-
-Uma plataforma completa de aprendizado offline desenvolvida pela Learning Equality. O Kolibri reúne videoaulas, exercícios interativos e leituras em canais estruturados, organiza turmas e lições, acompanha o progresso dos alunos e opera de forma autônoma no seu NOMAD, sem qualquer necessidade de internet. Foi projetado especificamente para escolas, centros comunitários e estudantes em áreas com conectividade limitada ou inexistente.
-
-**Site oficial:** [learningequality.org/kolibri](https://learningequality.org/kolibri) · **Código-fonte:** [github.com/learningequality/kolibri](https://github.com/learningequality/kolibri)
-
-**Primeira vez que você abre (assistente de configuração rápida):** Escolha o tipo de instalação/instituição e crie a **conta de administrador** (este é o usuário mestre responsável pela gestão de todo o sistema e turmas; defina uma senha forte e anote-a). Uma vez logado, você pode importar os conteúdos educativos na forma de **canais**.
-
-**Importando conteúdo:** O material educativo do Kolibri é organizado em canais temáticos. Acesse **Dispositivo → Canais → Importar** (Device → Channels → Import) e escolha baixar canais online a partir do Kolibri Studio ou importar de um drive local / outro dispositivo Kolibri caso já possua os arquivos. A quantidade de acervo disponível é extensa, portanto selecione apenas os canais necessários, pois eles podem ocupar bastante espaço em disco.
-
-**Migrando conteúdo da Plataforma Educacional antiga (Gen 1):** Versões anteriores do NOMAD utilizavam uma versão legada do Kolibri (imagem `treehouses/kolibri:0.12.8`). A Plataforma Educacional "Gen 2" traz a versão oficial mais recente do Kolibri e faz uma instalação **limpa** — os canais antigos e dados de estudantes **não** são transferidos automaticamente, pois as duas versões possuem formatos de banco de dados incompatíveis para migração direta. Se você usava a versão antiga e deseja importar os canais existentes para a nova, siga este procedimento:
-
-1. Instale a "Plataforma Educacional (Gen 2)" pelo catálogo (ela roda em paralelo à versão antiga em uma porta diferente, sem interromper nada enquanto você a configura).
-2. Abra a nova versão, passe pelo assistente de configuração inicial e, no menu lateral, navegue até **Dispositivo > Canais > Importar**. Selecione a opção "Rede local ou internet" e clique em "Adicionar novo dispositivo". Na janela exibida, digite o endereço IP do seu NOMAD junto com a porta da Plataforma Educacional antiga (porta 8300 por padrão, por exemplo `http://192.168.1.36:8300`), dê um nome de identificação à conexão e clique em "Adicionar" e depois em "Continuar".
-3. Agora você poderá selecionar canais individuais da versão antiga ou escolher "Selecionar canais inteiros" para importar tudo de uma só vez. Clique em "Importar" e a transferência local será iniciada.
-4. Quando tudo estiver conferido na nova instalação e os conteúdos estiverem transferidos, desinstale a Plataforma Educacional antiga pelo cartão dela (ela exibe a etiqueta **legado/legacy**). Recomenda-se também marcar a opção de remover a imagem antiga e o volume de dados ao desinstalar para liberar espaço em disco, mas se preferir mantê-la instalada temporariamente por garantia, não há problema.
-
-**Seus dados & Onde escolher o HD de Download:** Seus canais importados, turmas cadastradas e o progresso dos alunos ficam salvos na pasta `storage/kolibri-gen2` no seu NOMAD. Para gravar os cursos em um **HD externo ou disco secundário**, acesse **Configurações → Armazenamento & Samba → Destino de Downloads do Kolibri** e clique em **Mapear Kolibri → [Seu HD]**. O NOMAD move os dados e cria um link automático sem quebrar nada. Dentro do próprio Kolibri, na tela **Importar Canais**, use o filtro de idioma **Português** para baixar apenas materiais em PT-BR ou cole o token do canal desejado.
-
-**Funcionamento offline:** 100% offline após a importação dos canais, cumprindo rigorosamente a missão do Kolibri. A única etapa que requer internet é o download inicial de canais via Kolibri Studio; todo o restante — navegação nas aulas, resolução de exercícios e acompanhamento pedagógico — roda localmente no seu NOMAD.
-
-## MeshCore Web {% #meshcore-web %}
-
-Um cliente baseado em navegador para dispositivos de rádio [MeshCore](https://meshcore.io). O MeshCore é uma abordagem alternativa para redes de comunicação mesh via LoRa de longo alcance off-grid, similar ao Meshtastic: rádios compactos que formam uma malha própria e transmitem mensagens de texto e localização por quilômetros sem sinal de celular, sem internet e sem mensalidades. Este aplicativo permite configurar um rádio MeshCore e trocar mensagens através de uma tela ampla. Se você ainda não utiliza equipamentos específicos MeshCore, o cliente Meshtastic citado acima é a opção mais usual; esta ferramenta está disponível para quem utiliza o ecossistema MeshCore.
-
-**Site oficial:** [meshcore.io](https://meshcore.io) · **Código-fonte:** [github.com/aXistem-dev/meshcore-web](https://github.com/aXistem-dev/meshcore-web) (versão empacotada do cliente MeshCore de Liam Cottle)
-
-**É necessário ter um rádio MeshCore para utilizar este aplicativo.** Assim como no cliente Meshtastic, esta aplicação é apenas o painel de interface. Sem um rádio conectado, não há com quem o sistema se comunicar.
-
-**Primeira vez que você abre (aviso de segurança esperado):** O MeshCore se comunica com seu rádio via USB ou Bluetooth, e os navegadores web só liberam essas conexões em páginas carregadas sob protocolo seguro (HTTPS). Por isso, o NOMAD serve esta aplicação com HTTPS automaticamente. Como o NOMAD é um servidor privado local sem domínio público, ele utiliza um certificado autoassinado que faz os navegadores apresentarem um alerta de segurança na primeira visita. Para prosseguir:
-
-1. Clique em **Abrir** no cartão do MeshCore Web. Seu navegador exibirá algo como *"Sua conexão não é particular"* ou *"Não seguro"*.
-2. Clique em **Avançado** e selecione **Ir para (endereço do seu NOMAD)** (em alguns navegadores o botão diz "Continuar" ou "Aceitar o risco e continuar").
-3. Você entrará no MeshCore Web. O navegador memorizará a exceção para que você não veja mais o aviso nesse dispositivo.
-
-**Conectando seu rádio:** Recomendamos utilizar o **Google Chrome ou Microsoft Edge**, que oferecem o melhor suporte aos padrões WebUSB e WebBluetooth. Conecte o rádio na porta USB do computador de onde você está acessando o navegador ou mantenha-o por perto (Bluetooth) e inicie a conexão pela interface do aplicativo. O rádio deve ser conectado **ao computador ou celular que você está manuseando**, e não ao servidor NOMAD em si. Alguns smartphones impõem restrições a certificados autoassinados e podem recusar a conexão; computadores desktop com Chrome ou Edge proporcionam a experiência mais estável.
-
-**Seus dados:** Não há armazenamento de dados ou pastas no NOMAD para este aplicativo. As configurações do rádio ficam gravadas no próprio aparelho e as preferências da aplicação ficam salvas no navegador cliente. Não há arquivos no servidor a serem gerenciados.
-
-**Funcionamento offline:** Totalmente offline. O aplicativo é servido pelo seu NOMAD e a comunicação com o rádio ocorre diretamente pelas conexões USB ou Bluetooth locais, sem trafegar dados pela internet.
-
-## Biblioteca Traduzida {% #offline-translation %}
-
-Permite ler a Biblioteca de Informações em outros idiomas. Ao abrir um artigo, uma barra com a opção **Traduzir esta página** surge no topo com um botão para cada idioma instalado, além de **Original** para retornar ao texto-fonte. O idioma escolhido permanece ativo enquanto você navega pelos artigos.
-
-**Por que utilizar este módulo em vez do Assistente de IA:** Embora o Assistente de IA consiga traduzir textos, esta ferramenta especializada é cerca de 1.600 vezes mais rápida no mesmo hardware e dispensa placa de vídeo dedicada, funcionando com máxima agilidade em qualquer dispositivo NOMAD. Além disso, ela tem maior precisão com termos técnicos e nomes próprios: enquanto o Assistente de IA tende a traduzir literalmente nomes como "Project NOMAD", esta ferramenta os preserva adequadamente.
-
-**Configurando os idiomas:** Por padrão, os idiomas francês, espanhol e alemão já vêm configurados. Para adicionar ou remover idiomas:
-
-1. Na **Central de Aplicativos**, abra o menu **Gerenciar** da Biblioteca Traduzida e selecione **Editar**.
-2. Em **Variáveis de Ambiente**, localize a linha `TRANSLATE_LANGS=fr,es,de`.
-3. Altere a lista com os códigos de idioma desejados, separados por vírgula. Por exemplo, `TRANSLATE_LANGS=fr,es,de,pt` inclui o português.
-4. Clique em **Salvar**. O aplicativo será reiniciado, fará o download dos modelos dos novos idiomas e adicionará um botão correspondente a cada um deles na barra de tradução.
-
-O download de novos pacotes de idioma necessita de conexão temporária à internet. Cada idioma ocupa entre 45 MB e 140 MB de espaço em disco. Os idiomas já baixados continuam funcionando 100% offline. Remover um código da lista de variáveis não apaga o modelo baixado anteriormente do disco: ele permanece armazenado em `storage/translate/models` e mantém seu botão na barra.
-
-Estes 50 idiomas estão disponíveis no momento (o idioma chinês ainda não está disponível):
-
-| Idioma | Código |
-|---|---|
-| Africâner | `af` |
-| Árabe | `ar` |
-| Basco | `eu` |
-| Bengali | `bn` |
-| Bósnio | `bs` |
-| Búlgaro | `bg` |
-| Catalão | `ca` |
-| Croata | `hr` |
-| Tcheco | `cs` |
-| Dinamarquês | `da` |
-| Holandês (Neerlandês) | `nl` |
-| Estoniano | `et` |
-| Finlandês | `fi` |
-| Francês | `fr` |
-| Galego | `gl` |
-| Alemão | `de` |
-| Grego | `el` |
-| Guzerate | `gu` |
-| Hebraico | `he` |
-| Hindi | `hi` |
-| Húngaro | `hu` |
-| Islandês | `is` |
-| Indonésio | `id` |
-| Italiano | `it` |
-| Japonês | `ja` |
-| Canarês (Kannada) | `kn` |
-| Coreano | `ko` |
-| Letão | `lv` |
-| Lituano | `lt` |
-| Malaio | `ms` |
-| Malaiala (Malayalam) | `ml` |
-| Marata (Marathi) | `mr` |
-| Norueguês | `nb` |
-| Persa | `fa` |
-| Polonês | `pl` |
-| Português | `pt` |
-| Romeno | `ro` |
-| Russo | `ru` |
-| Sérvio | `sr` |
-| Eslovaco | `sk` |
-| Esloveno | `sl` |
-| Espanhol | `es` |
-| Sueco | `sv` |
-| Tâmil | `ta` |
-| Telugu | `te` |
-| Tailandês | `th` |
-| Turco | `tr` |
-| Ucraniano | `uk` |
-| Urdu | `ur` |
-| Vietnamita | `vi` |
-
-**Primeira inicialização requer internet:** Os modelos de linguagem são baixados na primeira execução do aplicativo, assim como ocorre na instalação de qualquer ferramenta. Depois disso, o funcionamento é totalmente offline. Se você instalar este aplicativo sem conexão à internet, ele ainda iniciará e a biblioteca funcionará normalmente, ficando apenas a tradução aguardando a conexão para buscar os modelos.
-
-**O que não é traduzido:** Tabelas e caixas de informação (infoboxes), o título da página na aba do seu navegador e os resultados de pesquisa nativos do Kiwix. A barra de busca continua correspondendo ao idioma original do conteúdo — pesquise os artigos no idioma original e ative a tradução quando a página abrir.
-
-**Diferença entre os botões de idioma:** A barra de ferramentas da biblioteca possui um ícone de globo que altera o idioma dos *menus e interface*. A barra adicionada por este aplicativo altera o conteúdo do *artigo em si*. São funções distintas que ficam próximas na tela devido à disposição dos elementos na interface.
-
-**Precisão da tradução:** Trata-se de tradução automática neural de tradução literal direta. É excelente para compreender o sentido e o conteúdo geral de um artigo. Tenha cuidado ao depender dela para instruções médicas ou de segurança crítica onde termos técnicos exatos exijam precisão absoluta.
-
-**Seus dados:** Os modelos de linguagem ficam gravados em `storage/translate/models`. Nenhum texto lido é armazenado ou transmitido externamente.
-
-**Funcionamento offline:** Sim, 100% offline após a conclusão do download dos modelos de idioma.
+### 💡 Exemplo Real de Uso
+Criar um formulário público na sua rede para cadastrar os livros emprestados para amigos ou catalogar ordens de serviço da sua oficina.
 
 ---
 
-## Ferramentas de Dados (CyberChef) {% #cyberchef %}
 
-**O que é:** O CyberChef é o "canivete suíço" offline para análise, conversão, codificação e criptografia de dados, textos, arquivos e redes — desenvolvido pelo GCHQ. Tudo roda localmente no seu navegador sem enviar nada para a internet.
+## Assistente de IA {% #nomad-ollama %}
 
-### Para que serve no dia a dia?
-- **Decodificar / Codificar textos e arquivos:** Base64, Hexadecimal, URL Decode, Binário, ASCII.
-- **Criptografia e Hashes:** Gerar e verificar SHA-256, MD5, AES, HMAC, JWT (JSON Web Tokens).
-- **Análise e Extração:** Extrair URLs, IPs, e-mails ou metadados de textos longos; formatar JSON/XML; comparar diferenças (*Diff*).
-- **Operação *Magic*:** Arraste a operação `Magic` para a área **Recipe** e cole um texto codificado desconhecido — o CyberChef tenta identificar e decodificar automaticamente.
+- **Categoria:** `utility` | **Porta:** `80` | **Tipo:** `Arsenal Docker`
 
-### Como usar em 3 passos (Interface em Inglês → Guia Rápido PT-BR)
-1. **Operations (Esquerda):** Escolha as ferramentas (ex.: `To Base64`, `AES Decrypt`, `JSON Beautify`) e arraste-as para o centro.
-2. **Recipe (Centro):** Monte a sequência de passos. Clique em **BAKE!** (ou deixe **Auto Bake** marcado) para processar instantaneamente.
-3. **Input / Output (Direita):** Cole o texto ou carregue um arquivo em **Input** e veja/salve o resultado em **Output**.
+### 🎯 Para que serve
+Aplicativo colaborativo leve para gerenciamento de despensa e listas de compras inteligentes sincronizadas entre celulares.
 
-**Tradução Nativa PT-BR no N.O.M.A.D.:** A partir da versão `v1.0.19`, ao abrir o CyberChef pela Central de Aplicativos, o NOMAD aplica automaticamente a camada nativa de tradução (`/apps-pt/cyberchef/`), traduzindo menus, categorias, botões e dicas ao passar o mouse diretamente para Português (PT-BR).
+### ⚙️ O que faz
+- Alternativa mais ágil e direta para o dia a dia quando você deseja focar apenas na dinâmica de compras rápidas do casal.
+- Porta padrão mapeada: 80
+- Categoria operacional: utility
+- Integração com ecossistema N.O.M.A.D.
 
+### 🧠 Como funciona
+Permite que membros da família marquem itens conforme acabam em casa. Organiza as listas por categorias de corredores do mercado (Hortifrúti, Laticínios, Limpeza).
+
+### 💡 Exemplo Real de Uso
+Um de vocês está no supermercado riscando os itens comprados na tela do celular enquanto o outro adiciona um item esquecido de casa, e a lista atualiza em tempo real.
+
+---
+
+
+## Ferramentas de Dados {% #nomad-cyberchef %}
+
+- **Categoria:** `utility` | **Porta:** `80` | **Tipo:** `Arsenal Docker`
+
+### 🎯 Para que serve
+Sistema completo de registro de cuidados diários, saúde, medicação e marcos de desenvolvimento da família e crianças.
+
+### ⚙️ O que faz
+- Elimina dúvidas sobre quem já deu o antibiótico da criança ou quando foi a última dose do antitérmico, evitando sobredos...
+- Porta padrão mapeada: 80
+- Categoria operacional: utility
+- Integração com ecossistema N.O.M.A.D.
+
+### 🧠 Como funciona
+Interface rápida para celular onde pai e mãe registram horários de medicamentos dados, sintomas de febre, doses de vacinas tomadas, curvas de peso/altura e consultas médicas.
+
+### 💡 Exemplo Real de Uso
+Na madrugada com a criança com febre, você olha no celular e vê exatamente que a última dose de remédio foi dada há 4 horas pela sua esposa.
+
+---
+
+
+## Bloco de Notas {% #nomad-flatnotes %}
+
+- **Categoria:** `utility` | **Porta:** `80` | **Tipo:** `Arsenal Docker`
+
+### 🎯 Para que serve
+Caderno de anotações rápidas em Markdown salvo diretamente no armazenamento local
+
+### ⚙️ O que faz
+- Porta canônica: 80
+- Execução autônoma e segura
+- Pronto para deploy via Portainer ou Docker Compose
+
+### 🧠 Como funciona
+Executado em contêiner Docker isolado na porta 80, persistindo dados em volumes dedicados.
+
+### 💡 Exemplo Real de Uso
+Utilizado para operações de utility com controle e soberania local no seu homelab.
+
+---
+
+
+## Plataforma Educacional (Kolibri) {% #nomad-kolibri-2 %}
+
+- **Categoria:** `utility` | **Porta:** `80` | **Tipo:** `Arsenal Docker`
+
+### 🎯 Para que serve
+Escola interativa offline com cursos em vídeo, Khan Academy em português e exercícios
+
+### ⚙️ O que faz
+- Porta canônica: 80
+- Execução autônoma e segura
+- Pronto para deploy via Portainer ou Docker Compose
+
+### 🧠 Como funciona
+Executado em contêiner Docker isolado na porta 80, persistindo dados em volumes dedicados.
+
+### 💡 Exemplo Real de Uso
+Utilizado para operações de utility com controle e soberania local no seu homelab.
+
+---
+
+
+## Stirling PDF {% #nomad-stirling-pdf %}
+
+- **Categoria:** `utility` | **Porta:** `80` | **Tipo:** `Arsenal Docker`
+
+### 🎯 Para que serve
+Estúdio completo de PDF offline — juntar, dividir, comprimir, converter e OCR
+
+### ⚙️ O que faz
+- Porta canônica: 80
+- Execução autônoma e segura
+- Pronto para deploy via Portainer ou Docker Compose
+
+### 🧠 Como funciona
+Executado em contêiner Docker isolado na porta 80, persistindo dados em volumes dedicados.
+
+### 💡 Exemplo Real de Uso
+Utilizado para operações de utility com controle e soberania local no seu homelab.
+
+---
+
+
+## Gerenciador de Arquivos {% #nomad-filebrowser %}
+
+- **Categoria:** `utility` | **Porta:** `80` | **Tipo:** `Arsenal Docker`
+
+### 🎯 Para que serve
+Gerenciador visual interativo de stacks Docker Compose criado por Louis Lam (mesmo autor do Uptime Kuma).
+
+### ⚙️ O que faz
+- Porta padrão mapeada: 80
+- Categoria operacional: utility
+- Integração com ecossistema N.O.M.A.D.
+
+### 🧠 Como funciona
+Lê os arquivos `compose.yaml` diretamente do disco, permitindo editar, iniciar, parar e atualizar contêineres com um editor visual e terminal interativo na web.
+
+### 💡 Exemplo Real de Uso
+
+
+---
+
+
+## Biblioteca de Livros (Calibre Web) {% #nomad-calibreweb %}
+
+- **Categoria:** `utility` | **Porta:** `80` | **Tipo:** `Arsenal Docker`
+
+### 🎯 Para que serve
+Central de streaming e catálogo de audiolivros e podcasts auto-hospedada.
+
+### ⚙️ O que faz
+- Dá a comodidade do Audible sem mensalidades, reunindo sua biblioteca inteira de audiolivros em um só lugar.
+- Porta padrão mapeada: 80
+- Categoria operacional: utility
+- Integração com ecossistema N.O.M.A.D.
+
+### 🧠 Como funciona
+Organiza audiolivros em capítulos, sincroniza a posição exata da reprodução entre o computador e o aplicativo de celular, permite controle de velocidade (1.2x, 1.5x), notas de áudio e download offline no aparelho para escutar no trânsito ou avião.
+
+### 💡 Exemplo Real de Uso
+Você está ouvindo um audiolivro no computador da bancada; entra no carro, abre o app no celular e ele continua no mesmo segundo de onde você parou.
+
+---
+
+
+## Ferramentas de TI {% #nomad-it-tools %}
+
+- **Categoria:** `utility` | **Porta:** `80` | **Tipo:** `Arsenal Docker`
+
+### 🎯 Para que serve
+Coleção de utilitários técnicos offline — conversores, rede, hashes, geradores e formatação
+
+### ⚙️ O que faz
+- Porta padrão mapeada: 80
+- Categoria operacional: utility
+- Integração com ecossistema N.O.M.A.D.
+
+### 🧠 Como funciona
+
+
+### 💡 Exemplo Real de Uso
+
+
+---
+
+
+## Quadro Branco (Excalidraw) {% #nomad-excalidraw %}
+
+- **Categoria:** `utility` | **Porta:** `80` | **Tipo:** `Arsenal Docker`
+
+### 🎯 Para que serve
+Quadro visual offline para desenhar plantas, esquemas elétricos, projetos hidráulicos e diagramas
+
+### ⚙️ O que faz
+- Porta canônica: 80
+- Execução autônoma e segura
+- Pronto para deploy via Portainer ou Docker Compose
+
+### 🧠 Como funciona
+Executado em contêiner Docker isolado na porta 80, persistindo dados em volumes dedicados.
+
+### 💡 Exemplo Real de Uso
+Utilizado para operações de utility com controle e soberania local no seu homelab.
+
+---
+
+
+## Rádio Mesh LoRa (Meshtastic) {% #nomad-meshtastic-web %}
+
+- **Categoria:** `utility` | **Porta:** `80` | **Tipo:** `Arsenal Docker`
+
+### 🎯 Para que serve
+Implementação auto-hospedada e de código aberto do servidor de controle Tailscale / Netbird.
+
+### ⚙️ O que faz
+- Dá a comodidade do Tailscale sem depender dos servidores corporativos de terceiros para guardar a chave de roteamento da...
+- Porta padrão mapeada: 80
+- Categoria operacional: utility
+- Integração com ecossistema N.O.M.A.D.
+
+### 🧠 Como funciona
+Conecta todos os seus computadores, servidores, TrueNAS e celulares em uma única rede mesh ponto a ponto criptografada, permitindo que eles se comuniquem diretamente mesmo atrás de roteadores e CGNAT da operadora de internet.
+
+### 💡 Exemplo Real de Uso
+Você está no trabalho usando o notebook; digita `ssh truenas.nexus` e acessa o terminal do seu servidor em casa sem precisar abrir nenhuma porta no roteador.
+
+---
+
+
+## Terminal LoRa MeshCore {% #nomad-meshcore-web %}
+
+- **Categoria:** `utility` | **Porta:** `80` | **Tipo:** `Arsenal Docker`
+
+### 🎯 Para que serve
+Cliente web alternativo para conexão e troca de mensagens via nós de rádio LoRa MeshCore
+
+### ⚙️ O que faz
+- Porta canônica: 80
+- Execução autônoma e segura
+- Pronto para deploy via Portainer ou Docker Compose
+
+### 🧠 Como funciona
+Executado em contêiner Docker isolado na porta 80, persistindo dados em volumes dedicados.
+
+### 💡 Exemplo Real de Uso
+Utilizado para operações de utility com controle e soberania local no seu homelab.
+
+---
+
+
+## Inventário Doméstico (Homebox) {% #nomad-homebox %}
+
+- **Categoria:** `utility` | **Porta:** `80` | **Tipo:** `Arsenal Docker`
+
+### 🎯 Para que serve
+Controle de estoque familiar — cadastre ferramentas, sementes, remédios, peças e suprimentos
+
+### ⚙️ O que faz
+- Porta canônica: 80
+- Execução autônoma e segura
+- Pronto para deploy via Portainer ou Docker Compose
+
+### 🧠 Como funciona
+Executado em contêiner Docker isolado na porta 80, persistindo dados em volumes dedicados.
+
+### 💡 Exemplo Real de Uso
+Utilizado para operações de utility com controle e soberania local no seu homelab.
+
+---
+
+
+## Cofre de Senhas (Vaultwarden) {% #nomad-vaultwarden %}
+
+- **Categoria:** `utility` | **Porta:** `80` | **Tipo:** `Arsenal Docker`
+
+### 🎯 Para que serve
+Servidor de senhas criptografado compatível com Bitwarden — proteja suas credenciais offline
+
+### ⚙️ O que faz
+- Porta canônica: 80
+- Execução autônoma e segura
+- Pronto para deploy via Portainer ou Docker Compose
+
+### 🧠 Como funciona
+Executado em contêiner Docker isolado na porta 80, persistindo dados em volumes dedicados.
+
+### 💡 Exemplo Real de Uso
+Utilizado para operações de utility com controle e soberania local no seu homelab.
+
+---
+
+
+## Servidor de Mídia (Jellyfin) {% #nomad-jellyfin %}
+
+- **Categoria:** `utility` | **Porta:** `80` | **Tipo:** `Arsenal Docker`
+
+### 🎯 Para que serve
+A mais rápida e elegante interface de controle e telemetria para impressoras 3D rodando firmware Klipper e Moonraker.
+
+### ⚙️ O que faz
+- Gerencia suas impressões de bancada direto do computador do escritório ou pelo celular.
+- Porta padrão mapeada: 80
+- Categoria operacional: utility
+- Integração com ecossistema N.O.M.A.D.
+
+### 🧠 Como funciona
+Conecta-se à impressora 3D via rede, exibindo temperaturas de bico e mesa em gráficos suaves, câmera ao vivo com time-lapses, controle de velocidade e upload de arquivos G-code.
+
+### 💡 Exemplo Real de Uso
+Gerencia suas impressões de bancada direto do computador do escritório ou pelo celular.
+
+---
+
+
+## Tradutor Offline da Biblioteca {% #nomad-translate %}
+
+- **Categoria:** `utility` | **Porta:** `80` | **Tipo:** `Arsenal Docker`
+
+### 🎯 Para que serve
+Versão em C/C++ de alto desempenho do modelo de transcrição de voz da OpenAI, otimizada para CPUs e placas de vídeo locais.
+
+### ⚙️ O que faz
+- Transcreve reuniões, áudios longos e gravações familiares com 100% de privacidade e sem custos de nuvem.
+- Porta padrão mapeada: 80
+- Categoria operacional: utility
+- Integração com ecossistema N.O.M.A.D.
+
+### 🧠 Como funciona
+Expõe uma API compatível com OpenAI para onde você envia arquivos de áudio (.mp3, .ogg, .wav) ou notas de voz do WhatsApp e recebe a transcrição precisa em texto com pontuação correta e identificação de idioma.
+
+### 💡 Exemplo Real de Uso
+Integrar ao n8n para que qualquer áudio de voz enviado para um bot do Telegram seja transcrito na hora e arquivado no seu diário pessoal ou no Outline.
+
+---
+
+
+## Sincronização P2P (Syncthing) {% #nomad-syncthing %}
+
+- **Categoria:** `utility` | **Porta:** `80` | **Tipo:** `Arsenal Docker`
+
+### 🎯 Para que serve
+Ferramentas de backup com criptografia AES-256 e sincronização de dados desduplicados entre discos locais e nuvens frias.
+
+### ⚙️ O que faz
+- Porta padrão mapeada: 80
+- Categoria operacional: utility
+- Integração com ecossistema N.O.M.A.D.
+
+### 🧠 Como funciona
+
+
+### 💡 Exemplo Real de Uso
+
+
+---
+
+
+## Músicas & Audiolivros (Navidrome) {% #nomad-navidrome %}
+
+- **Categoria:** `utility` | **Porta:** `80` | **Tipo:** `Arsenal Docker`
+
+### 🎯 Para que serve
+Servidor leve de streaming offline para suas músicas, podcasts e audiolivros armazenados nos discos
+
+### ⚙️ O que faz
+- Porta canônica: 80
+- Execução autônoma e segura
+- Pronto para deploy via Portainer ou Docker Compose
+
+### 🧠 Como funciona
+Executado em contêiner Docker isolado na porta 80, persistindo dados em volumes dedicados.
+
+### 💡 Exemplo Real de Uso
+Utilizado para operações de utility com controle e soberania local no seu homelab.
+
+---
+
+
+## Wiki & Base de Conhecimento (Wiki.js) {% #nomad-wikijs %}
+
+- **Categoria:** `utility` | **Porta:** `80` | **Tipo:** `Arsenal Docker`
+
+### 🎯 Para que serve
+A ferramenta definitiva de documentação de equipe e projetos, combinando a elegância do Notion com a velocidade do Markdown e segurança corporativa.
+
+### ⚙️ O que faz
+- É a resposta perfeita para quem não gostou da interface do BookStack. O Outline possui design limpo, moderno, suporte a ...
+- Porta padrão mapeada: 80
+- Categoria operacional: utility
+- Integração com ecossistema N.O.M.A.D.
+
+### 🧠 Como funciona
+Interface rápida com suporte a múltiplos espaços de trabalho, histórico de versões, busca textual em tempo real, suporte a IA para expansão de textos e controle fino de permissões.
+
+### 💡 Exemplo Real de Uso
+Documentar todo o seu homelab, topologias de rede, manuais dos seus projetos eletrônicos e procedimentos operacionais (SOPs) para que qualquer pessoa consiga manter a infraestrutura funcionando.
+
+---
+
+
+## Monitor de Logs Docker (Dozzle) {% #nomad-dozzle %}
+
+- **Categoria:** `utility` | **Porta:** `80` | **Tipo:** `Arsenal Docker`
+
+### 🎯 Para que serve
+Ferramentas visuais de monitoramento de integridade e tempo de atividade (uptime) de serviços e servidores.
+
+### ⚙️ O que faz
+- Permite saber que um serviço caiu antes mesmo de você ou sua família tentarem acessá-lo.
+- Porta padrão mapeada: 80
+- Categoria operacional: utility
+- Integração com ecossistema N.O.M.A.D.
+
+### 🧠 Como funciona
+Testam a cada 30 segundos se cada porta, site, contêiner Docker e ping de roteador está respondendo normalmente. Se qualquer serviço falhar, disparam alarmes sonoros e notificações imediatas.
+
+### 💡 Exemplo Real de Uso
+Permite saber que um serviço caiu antes mesmo de você ou sua família tentarem acessá-lo.
+
+---
+
+
+## Arquivo Digital & OCR (Paperless-ngx) {% #nomad-paperless %}
+
+- **Categoria:** `utility` | **Porta:** `80` | **Tipo:** `Arsenal Docker`
+
+### 🎯 Para que serve
+Servidor PACS e visualizador de exames médicos de imagem (Raios-X, Tomografias, Ressonâncias Magnéticas e Ultrassons).
+
+### ⚙️ O que faz
+- Garante que o histórico radiológico de toda a sua vida fique guardado no TrueNAS sem perda de resolução ou compressão de...
+- Porta padrão mapeada: 80
+- Categoria operacional: utility
+- Integração com ecossistema N.O.M.A.D.
+
+### 🧠 Como funciona
+Recebe os arquivos digitais em formato nativo DICOM que vêm nos CDs/pen-drives de laboratórios e clínicas, permitindo visualização de cortes em alta fidelidade pelo navegador.
+
+### 💡 Exemplo Real de Uso
+Você precisa comparar uma ressonância de joelho ou coluna feita há 5 anos com uma atual; o Orthanc abre as duas lado a lado no navegador para o médico avaliar.
+
+---
+
+
+## Open WebUI (Chat IA Local) {% #nomad-open-webui %}
+
+- **Categoria:** `utility` | **Porta:** `80` | **Tipo:** `Arsenal Docker`
+
+### 🎯 Para que serve
+Interface web de chat estilo ChatGPT / Claude com suporte nativo a Ollama, vLLM e OpenAI API.
+
+### ⚙️ O que faz
+- Permite aproveitar todo o potencial da sua **RTX 5060** rodando modelos como Llama 3.2, Mistral, Qwen e DeepSeek sem env...
+- Porta padrão mapeada: 80
+- Categoria operacional: utility
+- Integração com ecossistema N.O.M.A.D.
+
+### 🧠 Como funciona
+Conecta-se ao daemon do Ollama na porta 11434 e renderiza uma UI rica com suporte a RAG (Retrieval Augmented Generation), upload de documentos PDF/DOCX, navegação web privativa, execução de código e múltiplos usuários com controle de acesso.
+
+### 💡 Exemplo Real de Uso
+Você sobe o manual da sua placa-mãe ou um PDF de 500 páginas e pergunta *"Qual é o barramento PCIe correto para colocar o segundo SSD NVMe?"*, e o Open WebUI responde em segundos citando a página exata.
+
+---
+
+
+## Dify (Automação de Agentes IA) {% #nomad-dify %}
+
+- **Categoria:** `utility` | **Porta:** `80` | **Tipo:** `Arsenal Docker`
+
+### 🎯 Para que serve
+Plataforma avançada para construção visual de fluxos de agentes de IA, RAG multi-etapas e assistentes automatizados.
+
+### ⚙️ O que faz
+- Transforma seus modelos locais de simples "chatbots" em verdadeiros funcionários digitais que executam tarefas complexas...
+- Porta padrão mapeada: 80
+- Categoria operacional: utility
+- Integração com ecossistema N.O.M.A.D.
+
+### 🧠 Como funciona
+Fornece um construtor de pipelines no-code onde você pode ligar modelos de IA locais, bancos vetoriais (Qdrant), raspadores de web e webhooks externos para criar ferramentas que tomam decisões de forma autônoma.
+
+### 💡 Exemplo Real de Uso
+Criar um agente que lê seus e-mails ou alertas do homelab, resume os pontos críticos e notifica você no Mattermost ou Gotify apenas se houver algo urgente.
+
+---
+
+
+## Outline (Base de Conhecimento & Projetos) {% #nomad-outline %}
+
+- **Categoria:** `utility` | **Porta:** `80` | **Tipo:** `Arsenal Docker`
+
+### 🎯 Para que serve
+A ferramenta definitiva de documentação de equipe e projetos, combinando a elegância do Notion com a velocidade do Markdown e segurança corporativa.
+
+### ⚙️ O que faz
+- É a resposta perfeita para quem não gostou da interface do BookStack. O Outline possui design limpo, moderno, suporte a ...
+- Porta padrão mapeada: 80
+- Categoria operacional: utility
+- Integração com ecossistema N.O.M.A.D.
+
+### 🧠 Como funciona
+Interface rápida com suporte a múltiplos espaços de trabalho, histórico de versões, busca textual em tempo real, suporte a IA para expansão de textos e controle fino de permissões.
+
+### 💡 Exemplo Real de Uso
+Documentar todo o seu homelab, topologias de rede, manuais dos seus projetos eletrônicos e procedimentos operacionais (SOPs) para que qualquer pessoa consiga manter a infraestrutura funcionando.
+
+---
+
+
+## Docmost (Wiki & Workspace Colaborativo) {% #nomad-docmost %}
+
+- **Categoria:** `utility` | **Porta:** `80` | **Tipo:** `Arsenal Docker`
+
+### 🎯 Para que serve
+Plataforma moderna de edição de notas e documentos colaborativos em tempo real, baseada em blocos e totalmente open-source.
+
+### ⚙️ O que faz
+- Excelente para atas de reuniões rápidas, listas de tarefas dinâmicas e brainstorming colaborativo sem depender de Google...
+- Porta padrão mapeada: 80
+- Categoria operacional: utility
+- Integração com ecossistema N.O.M.A.D.
+
+### 🧠 Como funciona
+Permite que várias pessoas editem o mesmo documento simultaneamente, com renderização de diagramas Mermaid, equações matemáticas KaTeX, tabelas e links bidirecionais.
+
+### 💡 Exemplo Real de Uso
+Planejar viagens ou reformas da casa com sua esposa, editando ao mesmo tempo a lista de compras de materiais e custos estimados.
+
+---
+
+
+## Hoarder (Coletor Inteligente com IA) {% #nomad-hoarder %}
+
+- **Categoria:** `utility` | **Porta:** `80` | **Tipo:** `Arsenal Docker`
+
+### 🎯 Para que serve
+O melhor gerenciador de bookmarks e "leia mais tarde" já criado para homelabs, turbinado com IA.
+
+### ⚙️ O que faz
+- Preserva todo o conhecimento que você descobre na web mesmo se o site original for derrubado ou virar pago.
+- Porta padrão mapeada: 80
+- Categoria operacional: utility
+- Integração com ecossistema N.O.M.A.D.
+
+### 🧠 Como funciona
+Você envia um link, tweet, imagem ou PDF via extensão de navegador ou app móvel. O Hoarder arquiva a página inteira offline, extrai o texto limpo sem anúncios, aciona o Ollama local na sua máquina para classificar categorias, gerar resumo e criar tags automáticas.
+
+### 💡 Exemplo Real de Uso
+Salvar artigos de eletrônica ou threads técnicas; a IA lê o artigo, gera tags como `#kicad`, `#firmware`, `#rtx` e você acha tudo instantaneamente pela busca inteligente.
+
+---
+
+
+## Whisper.cpp (Transcrição Offline de Voz) {% #nomad-whisper %}
+
+- **Categoria:** `utility` | **Porta:** `80` | **Tipo:** `Arsenal Docker`
+
+### 🎯 Para que serve
+Versão em C/C++ de alto desempenho do modelo de transcrição de voz da OpenAI, otimizada para CPUs e placas de vídeo locais.
+
+### ⚙️ O que faz
+- Transcreve reuniões, áudios longos e gravações familiares com 100% de privacidade e sem custos de nuvem.
+- Porta padrão mapeada: 80
+- Categoria operacional: utility
+- Integração com ecossistema N.O.M.A.D.
+
+### 🧠 Como funciona
+Expõe uma API compatível com OpenAI para onde você envia arquivos de áudio (.mp3, .ogg, .wav) ou notas de voz do WhatsApp e recebe a transcrição precisa em texto com pontuação correta e identificação de idioma.
+
+### 💡 Exemplo Real de Uso
+Integrar ao n8n para que qualquer áudio de voz enviado para um bot do Telegram seja transcrito na hora e arquivado no seu diário pessoal ou no Outline.
+
+---
+
+
+## Grocy (ERP Residencial & Despensa) {% #nomad-grocy %}
+
+- **Categoria:** `utility` | **Porta:** `80` | **Tipo:** `Arsenal Docker`
+
+### 🎯 Para que serve
+Sistema profissional de gerenciamento de estoque doméstico, validade de alimentos e manutenção residencial.
+
+### ⚙️ O que faz
+- Acaba com o desperdício de comida e de remédios que passam da validade sem ninguém notar.
+- Porta padrão mapeada: 80
+- Categoria operacional: utility
+- Integração com ecossistema N.O.M.A.D.
+
+### 🧠 Como funciona
+Conectado a um leitor de código de barras USB ou câmera do celular, cadastra cada item que entra na despensa ou congelador. Avisa antes dos alimentos vencerem, rastreia consumo e sugere compras.
+
+### 💡 Exemplo Real de Uso
+Ler o código de barras da caixa de leite ao chegar do mercado; o sistema registra a data de validade e abate automaticamente uma unidade quando você marca como consumido.
+
+---
+
+
+## Mealie (Livro de Receitas & Supermercado) {% #nomad-mealie %}
+
+- **Categoria:** `utility` | **Porta:** `80` | **Tipo:** `Arsenal Docker`
+
+### 🎯 Para que serve
+Gerenciador gastronômico familiar com extração automática de receitas de qualquer site.
+
+### ⚙️ O que faz
+- Permite que você e sua esposa planejem as refeições da semana com visual limpo no tablet da cozinha e gerem a lista de c...
+- Porta padrão mapeada: 80
+- Categoria operacional: utility
+- Integração com ecossistema N.O.M.A.D.
+
+### 🧠 Como funciona
+Você cola a URL de qualquer receita da internet (sites de culinária, YouTube, blogs); o Mealie raspa a página, descarta pop-ups e biografias chatas, salva apenas os ingredientes exatos, modo de preparo passo a passo e fotos.
+
+### 💡 Exemplo Real de Uso
+Sua esposa encontra uma receita incrível na internet, envia o link para o Mealie pelo celular, clica em "Adicionar à lista de compras" e os ingredientes vão direto para a lista do supermercado.
+
+---
+
+
+## KitchenOwl (Cardápios & Despensa Inteligente) {% #nomad-kitchenowl %}
+
+- **Categoria:** `utility` | **Porta:** `80` | **Tipo:** `Arsenal Docker`
+
+### 🎯 Para que serve
+Sistema profissional de gerenciamento de estoque doméstico, validade de alimentos e manutenção residencial.
+
+### ⚙️ O que faz
+- Acaba com o desperdício de comida e de remédios que passam da validade sem ninguém notar.
+- Porta padrão mapeada: 80
+- Categoria operacional: utility
+- Integração com ecossistema N.O.M.A.D.
+
+### 🧠 Como funciona
+Conectado a um leitor de código de barras USB ou câmera do celular, cadastra cada item que entra na despensa ou congelador. Avisa antes dos alimentos vencerem, rastreia consumo e sugere compras.
+
+### 💡 Exemplo Real de Uso
+Ler o código de barras da caixa de leite ao chegar do mercado; o sistema registra a data de validade e abate automaticamente uma unidade quando você marca como consumido.
+
+---
+
+
+## BabyBuddy (Prontuário Médico Familiar) {% #nomad-babybuddy %}
+
+- **Categoria:** `utility` | **Porta:** `80` | **Tipo:** `Arsenal Docker`
+
+### 🎯 Para que serve
+Sistema completo de registro de cuidados diários, saúde, medicação e marcos de desenvolvimento da família e crianças.
+
+### ⚙️ O que faz
+- Elimina dúvidas sobre quem já deu o antibiótico da criança ou quando foi a última dose do antitérmico, evitando sobredos...
+- Porta padrão mapeada: 80
+- Categoria operacional: utility
+- Integração com ecossistema N.O.M.A.D.
+
+### 🧠 Como funciona
+Interface rápida para celular onde pai e mãe registram horários de medicamentos dados, sintomas de febre, doses de vacinas tomadas, curvas de peso/altura e consultas médicas.
+
+### 💡 Exemplo Real de Uso
+Na madrugada com a criança com febre, você olha no celular e vê exatamente que a última dose de remédio foi dada há 4 horas pela sua esposa.
+
+---
+
+
+## OpenREM / DICOM (Arquivo de Exames Médicos) {% #nomad-openrem %}
+
+- **Categoria:** `utility` | **Porta:** `80` | **Tipo:** `Arsenal Docker`
+
+### 🎯 Para que serve
+Servidor PACS e visualizador de exames médicos de imagem (Raios-X, Tomografias, Ressonâncias Magnéticas e Ultrassons).
+
+### ⚙️ O que faz
+- Garante que o histórico radiológico de toda a sua vida fique guardado no TrueNAS sem perda de resolução ou compressão de...
+- Porta padrão mapeada: 80
+- Categoria operacional: utility
+- Integração com ecossistema N.O.M.A.D.
+
+### 🧠 Como funciona
+Recebe os arquivos digitais em formato nativo DICOM que vêm nos CDs/pen-drives de laboratórios e clínicas, permitindo visualização de cortes em alta fidelidade pelo navegador.
+
+### 💡 Exemplo Real de Uso
+Você precisa comparar uma ressonância de joelho ou coluna feita há 5 anos com uma atual; o Orthanc abre as duas lado a lado no navegador para o médico avaliar.
+
+---
+
+
+## Gramps Web (Árvore Genealógica Privada) {% #nomad-gramps-web %}
+
+- **Categoria:** `utility` | **Porta:** `80` | **Tipo:** `Arsenal Docker`
+
+### 🎯 Para que serve
+A mais respeitada plataforma de genealogia científica mundial em versão web colaborativa para toda a família.
+
+### ⚙️ O que faz
+- Mantém a história dos seus antepassados e descendentes protegida, sem expor os dados da sua linhagem para bancos de dado...
+- Porta padrão mapeada: 80
+- Categoria operacional: utility
+- Integração com ecossistema N.O.M.A.D.
+
+### 🧠 Como funciona
+Constrói árvores genealógicas com vínculos de parentesco, digitalização de certidões antigas, fotos históricas restauradas, mapas de migração dos antepassados e linhagens.
+
+### 💡 Exemplo Real de Uso
+Cadastrar fotos dos bisavós e certidões históricas de nascimento/imigração para que seus filhos e netos tenham acesso permanente às suas origens.
+
+---
+
+
+## Bar Assistant (Guia de Drinks & Bebidas) {% #nomad-bar-assistant %}
+
+- **Categoria:** `utility` | **Porta:** `80` | **Tipo:** `Arsenal Docker`
+
+### 🎯 Para que serve
+Gerenciador do seu bar pessoal, adega e catálogo de coquetéis artesanais.
+
+### ⚙️ O que faz
+- Perfeito para receber amigos e família em casa preparando drinks clássicos e autorais com receitas exatas e proporções m...
+- Porta padrão mapeada: 80
+- Categoria operacional: utility
+- Integração com ecossistema N.O.M.A.D.
+
+### 🧠 Como funciona
+Você cadastra os destilados, licores, xaropes e ingredientes que tem no armário; o sistema informa instantaneamente quais coquetéis mundiais você consegue preparar agora ou qual ingrediente barato falta comprar.
+
+### 💡 Exemplo Real de Uso
+Amigos chegam em casa no fim de semana; você abre o Bar Assistant, clica em "O que posso fazer?" e ele lista 15 drinks possíveis com os ingredientes que você tem.
+
+---
+
+
+## Firefly III (Gestão Financeira & Metas) {% #nomad-fireflyiii %}
+
+- **Categoria:** `utility` | **Porta:** `80` | **Tipo:** `Arsenal Docker`
+
+### 🎯 Para que serve
+O mais completo gerenciador financeiro auto-hospedado do mundo, construído sobre princípios rígidos de partidas dobradas (double-entry bookkeeping).
+
+### ⚙️ O que faz
+- É o único sistema capaz de suprir tudo o que você tinha no seu plugin de 2 anos: cartões com dias de fechamento e vencim...
+- Porta padrão mapeada: 80
+- Categoria operacional: utility
+- Integração com ecossistema N.O.M.A.D.
+
+### 🧠 Como funciona
+Trata cada centavo como uma entidade contábil: nenhuma despesa surge do nada; o dinheiro sai de uma conta de ativo (banco, carteira, vale-alimentação) e vai para uma conta de destino ou cartão de crédito. Possui motor robusto de regras automáticas, relatórios orçamentários, tags e acompanhamento de dívidas.
+
+### 💡 Exemplo Real de Uso
+Seu salário quinzenal cai no dia 15; o Firefly III aloca automaticamente as parcelas de investimentos, separa o orçamento do supermercado e abate o saldo devedor do financiamento veicular com atualização de patrimônio líquido em tempo real.
+
+---
+
+
+## Actual Budget (Orçamento por Envelopes) {% #nomad-actual-budget %}
+
+- **Categoria:** `utility` | **Porta:** `80` | **Tipo:** `Arsenal Docker`
+
+### 🎯 Para que serve
+Sistema focado no método "envelope budgeting" (dar um destino a cada real recebido), com interface ultra-rápida construída em React e SQLite.
+
+### ⚙️ O que faz
+- Excelente para o controle tático do orçamento mensal do casal quando você quer rapidez máxima para saber quanto ainda po...
+- Porta padrão mapeada: 80
+- Categoria operacional: utility
+- Integração com ecossistema N.O.M.A.D.
+
+### 🧠 Como funciona
+Funciona inteiramente no navegador local e sincroniza alterações criptografadas ponta a ponta com seu servidor N.O.M.A.D. e com o aplicativo de celular. Mesmo sem internet na rua, você lança despesas e ele sincroniza assim que reconectar.
+
+### 💡 Exemplo Real de Uso
+Você abre o app na fila do restaurante; ele mostra na hora: *"Você ainda tem R$ 180 no envelope de Lazer deste mês"*.
+
+---
+
+
+## Wallos (Rastreador de Assinaturas & Fixas) {% #nomad-wallos %}
+
+- **Categoria:** `utility` | **Porta:** `80` | **Tipo:** `Arsenal Docker`
+
+### 🎯 Para que serve
+Painel visual dedicado a monitorar assinaturas de serviços, contas recorrentes e contratos de longo prazo.
+
+### ⚙️ O que faz
+- Elimina o problema clássico de assinar ferramentas ou serviços e esquecer que eles continuam sendo debitados todo mês no...
+- Porta padrão mapeada: 80
+- Categoria operacional: utility
+- Integração com ecossistema N.O.M.A.D.
+
+### 🧠 Como funciona
+Registra ciclos de cobrança (mensal, anual, trimestral), formas de pagamento utilizadas, conversão automática de moedas (se assina algo em dólar/euro) e data exata da próxima fatura.
+
+### 💡 Exemplo Real de Uso
+Você cadastra suas contas de internet, condomínio, luz e ferramentas; o Wallos mostra um calendário visual com todos os dias de vencimento e o gasto fixo total do mês consolidado.
+
+---
+
+
+## Ghostfolio (Acompanhamento de Investimentos) {% #nomad-ghostfolio %}
+
+- **Categoria:** `utility` | **Porta:** `80` | **Tipo:** `Arsenal Docker`
+
+### 🎯 Para que serve
+Plataforma moderna de gestão de portfólio de investimentos, desenhada para privacidade e independência financeira.
+
+### ⚙️ O que faz
+- Permite ver o crescimento patrimonial da família sem entregar suas posições financeiras para corretoras ou aplicativos q...
+- Porta padrão mapeada: 80
+- Categoria operacional: utility
+- Integração com ecossistema N.O.M.A.D.
+
+### 🧠 Como funciona
+Acompanha seus ativos (ações nacionais da B3, Fundos Imobiliários FIIs, ETFs internacionais, Tesouro Direto e Bitcoin) com cotações automáticas, histórico de dividendos recebidos e cálculo de rentabilidade real contra o CDI e IPCA.
+
+### 💡 Exemplo Real de Uso
+Lançar uma compra de cotas de FII; o Ghostfolio atualiza a renda passiva mensal estimada em dividendos e calcula o peso daquele ativo na carteira geral.
+
+---
+
+
+## Maybe (Planejamento de Independência Financeira) {% #nomad-maybe %}
+
+- **Categoria:** `utility` | **Porta:** `80` | **Tipo:** `Arsenal Docker`
+
+### 🎯 Para que serve
+O ambicioso sistema de gestão de patrimônio e independência financeira (FIRE - Financial Independence, Retire Early) que virou open-source após receber milhões de dólares em desenvolvimento.
+
+### ⚙️ O que faz
+- Dá a visão macro dos próximos 10, 20 e 30 anos do seu patrimônio familiar.
+- Porta padrão mapeada: 80
+- Categoria operacional: utility
+- Integração com ecossistema N.O.M.A.D.
+
+### 🧠 Como funciona
+Oferece projeções estatísticas de longo prazo para aposentadoria, fluxo de caixa futuro, gráficos de patrimônio líquido consolidado e cenários de rentabilidade.
+
+### 💡 Exemplo Real de Uso
+Simular se manter os aportes mensais atuais permitirá quitar o financiamento mais rápido ou atingir a meta da reserva de emergência antes do final do ano.
+
+---
+
+
+## Invoice Ninja (Faturas & Orçamentos Profissionais) {% #nomad-invoice-ninja %}
+
+- **Categoria:** `utility` | **Porta:** `80` | **Tipo:** `Arsenal Docker`
+
+### 🎯 Para que serve
+O padrão ouro auto-hospedado para emissão profissional de faturas, propostas comerciais e orçamentos de projetos.
+
+### ⚙️ O que faz
+- Se você faz projetos para fora ou presta consultorias de engenharia e TI, ele profissionaliza toda a sua relação finance...
+- Porta padrão mapeada: 80
+- Categoria operacional: utility
+- Integração com ecossistema N.O.M.A.D.
+
+### 🧠 Como funciona
+Permite criar orçamentos personalizados com sua logo, enviar faturas em PDF para clientes, controlar horas trabalhadas por projeto e registrar pagamentos recebidos via PIX ou transferência.
+
+### 💡 Exemplo Real de Uso
+Gerar um orçamento detalhado de automação para um cliente com data de validade; o cliente aprova pelo link web e o sistema converte na hora em fatura com controle de recebimento.
+
+---
+
+
+## Authentik (Login Único com Biometria - SSO) {% #nomad-authentik %}
+
+- **Categoria:** `utility` | **Porta:** `80` | **Tipo:** `Arsenal Docker`
+
+### 🎯 Para que serve
+Plataforma corporativa de autenticação e gerenciamento de identidade (IdP) baseada em padrões abertos OAuth2, SAML e OpenID Connect.
+
+### ⚙️ O que faz
+- Protege toda a infraestrutura com autenticação moderna e permite revogar acessos de qualquer aparelho em um clique.
+- Porta padrão mapeada: 80
+- Categoria operacional: utility
+- Integração com ecossistema N.O.M.A.D.
+
+### 🧠 Como funciona
+Intercepta o acesso a qualquer serviço do seu homelab. Em vez de memorizar 30 senhas diferentes, você faz login apenas no Authentik usando a impressão digital do celular (Passkey / WebAuthn) e ele autoriza sua sessão em todos os outros apps com segurança bancária.
+
+### 💡 Exemplo Real de Uso
+Ao acessar o Portainer ou o Outline de fora de casa, o sistema pede sua biometria no celular antes de liberar a tela.
+
+---
+
+
+## CrowdSec (Escudo Colaborativo Anti-Invasão) {% #nomad-crowdsec %}
+
+- **Categoria:** `utility` | **Porta:** `80` | **Tipo:** `Arsenal Docker`
+
+### 🎯 Para que serve
+Plataforma moderna de edição de notas e documentos colaborativos em tempo real, baseada em blocos e totalmente open-source.
+
+### ⚙️ O que faz
+- Excelente para atas de reuniões rápidas, listas de tarefas dinâmicas e brainstorming colaborativo sem depender de Google...
+- Porta padrão mapeada: 80
+- Categoria operacional: utility
+- Integração com ecossistema N.O.M.A.D.
+
+### 🧠 Como funciona
+Permite que várias pessoas editem o mesmo documento simultaneamente, com renderização de diagramas Mermaid, equações matemáticas KaTeX, tabelas e links bidirecionais.
+
+### 💡 Exemplo Real de Uso
+Planejar viagens ou reformas da casa com sua esposa, editando ao mesmo tempo a lista de compras de materiais e custos estimados.
+
+---
+
+
+## NetAlertX (Vigia de Intrusos no Wi-Fi) {% #nomad-netalertx %}
+
+- **Categoria:** `utility` | **Porta:** `80` | **Tipo:** `Arsenal Docker`
+
+### 🎯 Para que serve
+Sistema autônomo de varredura e auditoria que monitora todos os equipamentos conectados na rede local em tempo real.
+
+### ⚙️ O que faz
+- Impede que vizinhos ou aparelhos comprometidos usem seu sinal de rede sem o seu consentimento.
+- Porta padrão mapeada: 80
+- Categoria operacional: utility
+- Integração com ecossistema N.O.M.A.D.
+
+### 🧠 Como funciona
+Executa varreduras ARP e ICMP periódicas no switch e ponto de acesso Wi-Fi. Quando um endereço MAC novo ou desconhecido aparece na rede, ele dispara um alerta imediato no Telegram ou Mattermost com o fabricante e o IP do dispositivo.
+
+### 💡 Exemplo Real de Uso
+Um convidado chega na sua casa e se conecta ao Wi-Fi; seu celular vibra avisando: *"Novo dispositivo detectado: Samsung Galaxy S24 (IP 192.168.1.145)"*.
+
+---
+
+
+## Scrutiny (Prevenção de Queima de HDs e SSDs) {% #nomad-scrutiny %}
+
+- **Categoria:** `utility` | **Porta:** `80` | **Tipo:** `Arsenal Docker`
+
+### 🎯 Para que serve
+Painel visual inteligente para monitoramento preditivo da saúde física de discos mecânicos e SSDs NVMe via telemetria S.M.A.R.T.
+
+### ⚙️ O que faz
+- Vital para quem armazena terabytes de arquivos familiares, projetos e backups valiosos. Previne a perda irreparável de d...
+- Porta padrão mapeada: 80
+- Categoria operacional: utility
+- Integração com ecossistema N.O.M.A.D.
+
+### 🧠 Como funciona
+Coleta os atributos dos discos do host e do TrueNAS em intervalos regulares, compara com os bancos de dados de queima da indústria (como os relatórios de falhas da Backblaze) e avisa se um setor remapeado ou erro de CRC indicar que o disco vai queimar nas próximas semanas.
+
+### 💡 Exemplo Real de Uso
+Um dos seus HDs de 4TB começa a apresentar setores com falha de leitura; o Scrutiny emite um alerta vermelho: *"Atenção: HD /dev/sdb com 98% de chance de quebra iminente. Faça a troca do disco!"*.
+
+---
+
+
+## DefGuard (VPN WireGuard com 2FA & Auditoria) {% #nomad-defguard %}
+
+- **Categoria:** `utility` | **Porta:** `80` | **Tipo:** `Arsenal Docker`
+
+### 🎯 Para que serve
+Solução de nível corporativo para gerenciamento centralizado de redes privadas virtuais WireGuard com suporte a múltiplos fatores de autenticação.
+
+### ⚙️ O que faz
+- Muito mais seguro que uma VPN simples, pois permite revogar na hora o acesso de um dispositivo perdido ou furtado.
+- Porta padrão mapeada: 80
+- Categoria operacional: utility
+- Integração com ecossistema N.O.M.A.D.
+
+### 🧠 Como funciona
+Permite gerar arquivos de configuração e QR codes de acesso remoto para celulares e notebooks com controle de quais IPs cada usuário pode acessar dentro da casa.
+
+### 💡 Exemplo Real de Uso
+Configurar o celular da sua esposa com VPN automática; sempre que ela sai do Wi-Fi de casa, o aparelho se reconecta via WireGuard para acessar as fotos do Immich com segurança total.
+
+---
+
+
+## Headscale / Netbird (VPN Mesh Própria) {% #nomad-headscale %}
+
+- **Categoria:** `utility` | **Porta:** `80` | **Tipo:** `Arsenal Docker`
+
+### 🎯 Para que serve
+Solução de nível corporativo para gerenciamento centralizado de redes privadas virtuais WireGuard com suporte a múltiplos fatores de autenticação.
+
+### ⚙️ O que faz
+- Muito mais seguro que uma VPN simples, pois permite revogar na hora o acesso de um dispositivo perdido ou furtado.
+- Porta padrão mapeada: 80
+- Categoria operacional: utility
+- Integração com ecossistema N.O.M.A.D.
+
+### 🧠 Como funciona
+Permite gerar arquivos de configuração e QR codes de acesso remoto para celulares e notebooks com controle de quais IPs cada usuário pode acessar dentro da casa.
+
+### 💡 Exemplo Real de Uso
+Configurar o celular da sua esposa com VPN automática; sempre que ela sai do Wi-Fi de casa, o aparelho se reconecta via WireGuard para acessar as fotos do Immich com segurança total.
+
+---
+
+
+## WG-Easy (Painel Rápido de VPN WireGuard) {% #nomad-wgeasy %}
+
+- **Categoria:** `utility` | **Porta:** `80` | **Tipo:** `Arsenal Docker`
+
+### 🎯 Para que serve
+A interface web mais simples e direta do mundo para criar e gerenciar conexões VPN WireGuard com leitura de QR Code.
+
+### ⚙️ O que faz
+- Perfeito para setup rápido de conexões de emergência para familiares sem complicação técnica.
+- Porta padrão mapeada: 80
+- Categoria operacional: utility
+- Integração com ecossistema N.O.M.A.D.
+
+### 🧠 Como funciona
+Roda o núcleo do WireGuard com tráfego acelerado no kernel e entrega um painel limpo onde você clica em "Novo Cliente", escaneia o QR Code na câmera do celular e a VPN está pronta para navegar.
+
+### 💡 Exemplo Real de Uso
+Criar um acesso seguro em 30 segundos no tablet do seu filho para ele acessar os desenhos no Jellyfin durante uma viagem.
+
+---
+
+
+## Nmap Web (Auditor de Portas & Brechas) {% #nomad-nmap-web %}
+
+- **Categoria:** `utility` | **Porta:** `80` | **Tipo:** `Arsenal Docker`
+
+### 🎯 Para que serve
+Interface gráfica web para execução do lendário auditor de segurança de rede Nmap.
+
+### ⚙️ O que faz
+- Permite que você audite sua própria casa antes que um invasor encontre uma brecha de segurança nos seus equipamentos de ...
+- Porta padrão mapeada: 80
+- Categoria operacional: utility
+- Integração com ecossistema N.O.M.A.D.
+
+### 🧠 Como funciona
+Realiza varreduras detalhadas nos roteadores, câmeras IP, impressoras e computadores da sua casa, identificando portas abertas por engano, protocolos inseguros (Telnet/HTTP sem senha) e serviços vulneráveis.
+
+### 💡 Exemplo Real de Uso
+Auditar uma lâmpada ou tomada inteligente comprada na internet para ter certeza de que ela não está tentando abrir portas UPnP ou se comunicar com servidores desconhecidos.
+
+---
+
+
+## Frigate NVR (Câmeras de Segurança com IA) {% #nomad-frigate %}
+
+- **Categoria:** `utility` | **Porta:** `80` | **Tipo:** `Arsenal Docker`
+
+### 🎯 Para que serve
+Gravador de vídeo em rede (NVR) de alto desempenho focado em detecção de objetos em tempo real utilizando inteligência artificial local.
+
+### ⚙️ O que faz
+- Segurança patrimonial profissional sem pagar assinaturas abusivas de nuvens de câmeras comerciais.
+- Porta padrão mapeada: 80
+- Categoria operacional: utility
+- Integração com ecossistema N.O.M.A.D.
+
+### 🧠 Como funciona
+Conecta-se às suas câmeras IP via stream RTSP e processa as imagens na GPU ou no acelerador Coral. Em vez de alarmes falsos de chuva ou folhas ao vento, ele só grava e notifica se detectar uma **pessoa**, **carro** ou **animal** na área delimitada.
+
+### 💡 Exemplo Real de Uso
+Uma pessoa se aproxima do portão da sua residência à noite; o Frigate detecta a silhueta humana em 50ms e envia a foto no seu Telegram com a notificação instantânea.
+
+---
+
+
+## Kasm / Webtop (Navegador Descartável Seguro) {% #nomad-kasm-webtop %}
+
+- **Categoria:** `utility` | **Porta:** `80` | **Tipo:** `Arsenal Docker`
+
+### 🎯 Para que serve
+Um ambiente desktop completo ou navegador isolado executado dentro de um contêiner descartável acessível via web.
+
+### ⚙️ O que faz
+- Proteção absoluta contra phishing, cavalos de troia e malwares ao baixar arquivos desconhecidos de sites suspeitos.
+- Porta padrão mapeada: 80
+- Categoria operacional: utility
+- Integração com ecossistema N.O.M.A.D.
+
+### 🧠 Como funciona
+Renderiza uma janela de navegador ou desktop Linux diretamente em uma aba do Chrome. Qualquer arquivo baixado, vírus ou link estranho acessado fica confinado dentro do contêiner e é completamente destruído ao fechar a sessão.
+
+### 💡 Exemplo Real de Uso
+Você recebe um link estranho por e-mail dizendo ser um boleto ou nota fiscal; em vez de abrir no seu PC pessoal, você abre no Webtop: se houver vírus, seu computador real não sofre risco algum.
+
+---
+
+
+## Nginx Proxy Manager (Nomes Amigáveis) {% #nomad-npm %}
+
+- **Categoria:** `utility` | **Porta:** `80` | **Tipo:** `Arsenal Docker`
+
+### 🎯 Para que serve
+Gerenciador visual de proxy reverso e certificados SSL/TLS Let's Encrypt.
+
+### ⚙️ O que faz
+- Elimina a necessidade de decorar números de portas ou IPs para acessar as aplicações dentro e fora de casa.
+- Porta padrão mapeada: 80
+- Categoria operacional: utility
+- Integração com ecossistema N.O.M.A.D.
+
+### 🧠 Como funciona
+Mapeia portas e IPs locais para domínios elegantes e amigáveis (ex: `fotos.home.lan` para a porta 8560, `jellyfin.home.lan` para a porta 8096) com renovação automática de certificados criptografados.
+
+### 💡 Exemplo Real de Uso
+Elimina a necessidade de decorar números de portas ou IPs para acessar as aplicações dentro e fora de casa.
+
+---
+
+
+## Technitium DNS Server (DNS Avançado com DoH) {% #nomad-technitium-dns %}
+
+- **Categoria:** `utility` | **Porta:** `80` | **Tipo:** `Arsenal Docker`
+
+### 🎯 Para que serve
+O mais completo gerenciador financeiro auto-hospedado do mundo, construído sobre princípios rígidos de partidas dobradas (double-entry bookkeeping).
+
+### ⚙️ O que faz
+- É o único sistema capaz de suprir tudo o que você tinha no seu plugin de 2 anos: cartões com dias de fechamento e vencim...
+- Porta padrão mapeada: 80
+- Categoria operacional: utility
+- Integração com ecossistema N.O.M.A.D.
+
+### 🧠 Como funciona
+Trata cada centavo como uma entidade contábil: nenhuma despesa surge do nada; o dinheiro sai de uma conta de ativo (banco, carteira, vale-alimentação) e vai para uma conta de destino ou cartão de crédito. Possui motor robusto de regras automáticas, relatórios orçamentários, tags e acompanhamento de dívidas.
+
+### 💡 Exemplo Real de Uso
+Seu salário quinzenal cai no dia 15; o Firefly III aloca automaticamente as parcelas de investimentos, separa o orçamento do supermercado e abate o saldo devedor do financiamento veicular com atualização de patrimônio líquido em tempo real.
+
+---
+
+
+## Blocky (Controle de Horários & Filtro DNS) {% #nomad-blocky %}
+
+- **Categoria:** `utility` | **Porta:** `80` | **Tipo:** `Arsenal Docker`
+
+### 🎯 Para que serve
+Resolvedor e filtro de DNS leve escrito em Go, desenhado especificamente para controle de acessos por dispositivo e por horários.
+
+### ⚙️ O que faz
+- Controle parental soberano e saudável sem precisar instalar aplicativos espiões nos celulares dos filhos.
+- Porta padrão mapeada: 80
+- Categoria operacional: utility
+- Integração com ecossistema N.O.M.A.D.
+
+### 🧠 Como funciona
+Permite criar regras onde, por exemplo, os tablets e videogames das crianças têm o YouTube e redes sociais bloqueados após as 21h ou durante o horário de estudos, enquanto os PCs dos pais continuam com acesso livre.
+
+### 💡 Exemplo Real de Uso
+Configurar o horário de sono da casa: às 22h, o Wi-Fi das crianças desativa o acesso a vídeos e jogos automaticamente.
+
+---
+
+
+## AdGuard Home (Bloqueador de Anúncios na Rede) {% #nomad-adguard %}
+
+- **Categoria:** `utility` | **Porta:** `80` | **Tipo:** `Arsenal Docker`
+
+### 🎯 Para que serve
+Gerenciador gastronômico familiar com extração automática de receitas de qualquer site.
+
+### ⚙️ O que faz
+- Permite que você e sua esposa planejem as refeições da semana com visual limpo no tablet da cozinha e gerem a lista de c...
+- Porta padrão mapeada: 80
+- Categoria operacional: utility
+- Integração com ecossistema N.O.M.A.D.
+
+### 🧠 Como funciona
+Você cola a URL de qualquer receita da internet (sites de culinária, YouTube, blogs); o Mealie raspa a página, descarta pop-ups e biografias chatas, salva apenas os ingredientes exatos, modo de preparo passo a passo e fotos.
+
+### 💡 Exemplo Real de Uso
+Sua esposa encontra uma receita incrível na internet, envia o link para o Mealie pelo celular, clica em "Adicionar à lista de compras" e os ingredientes vão direto para a lista do supermercado.
+
+---
+
+
+## Pi-hole (Sumidouro de Telemetria DNS) {% #nomad-pihole %}
+
+- **Categoria:** `utility` | **Porta:** `80` | **Tipo:** `Arsenal Docker`
+
+### 🎯 Para que serve
+Servidores DNS de bloqueio na camada de rede para toda a residência.
+
+### ⚙️ O que faz
+- Limpa anúncios em aplicativos e sites para todos os aparelhos da casa sem precisar instalar extensões em cada dispositiv...
+- Porta padrão mapeada: 80
+- Categoria operacional: utility
+- Integração com ecossistema N.O.M.A.D.
+
+### 🧠 Como funciona
+Interceptam e descartam requisições para servidores de telemetria, rastreadores invasivos de Smart TVs e banners de propagandas antes mesmo que eles cheguem aos celulares ou computadores da casa.
+
+### 💡 Exemplo Real de Uso
+Limpa anúncios em aplicativos e sites para todos os aparelhos da casa sem precisar instalar extensões em cada dispositivo.
+
+---
+
+
+## SearXNG (Mecanismo de Busca Privativo) {% #nomad-searxng %}
+
+- **Categoria:** `utility` | **Porta:** `80` | **Tipo:** `Arsenal Docker`
+
+### 🎯 Para que serve
+Metamecanismo de busca privativo que agrega resultados do Google, Bing, DuckDuckGo, Wikipedia e Reddit em uma única interface limpa.
+
+### ⚙️ O que faz
+- Garante pesquisas completas na web sem criar perfis de comportamento ou direcionamento de anúncios comerciais.
+- Porta padrão mapeada: 80
+- Categoria operacional: utility
+- Integração com ecossistema N.O.M.A.D.
+
+### 🧠 Como funciona
+Faz as buscas em seu nome, removendo dados do seu IP, histórico, cookies e fingerprint de rastreamento.
+
+### 💡 Exemplo Real de Uso
+Garante pesquisas completas na web sem criar perfis de comportamento ou direcionamento de anúncios comerciais.
+
+---
+
+
+## SmokePing (Auditor de Latência & Micro-Quedas) {% #nomad-smokeping %}
+
+- **Categoria:** `utility` | **Porta:** `80` | **Tipo:** `Arsenal Docker`
+
+### 🎯 Para que serve
+Versão em C/C++ de alto desempenho do modelo de transcrição de voz da OpenAI, otimizada para CPUs e placas de vídeo locais.
+
+### ⚙️ O que faz
+- Transcreve reuniões, áudios longos e gravações familiares com 100% de privacidade e sem custos de nuvem.
+- Porta padrão mapeada: 80
+- Categoria operacional: utility
+- Integração com ecossistema N.O.M.A.D.
+
+### 🧠 Como funciona
+Expõe uma API compatível com OpenAI para onde você envia arquivos de áudio (.mp3, .ogg, .wav) ou notas de voz do WhatsApp e recebe a transcrição precisa em texto com pontuação correta e identificação de idioma.
+
+### 💡 Exemplo Real de Uso
+Integrar ao n8n para que qualquer áudio de voz enviado para um bot do Telegram seja transcrito na hora e arquivado no seu diário pessoal ou no Outline.
+
+---
+
+
+## Speedtest Tracker (Histórico de Velocidade) {% #nomad-speedtest %}
+
+- **Categoria:** `utility` | **Porta:** `80` | **Tipo:** `Arsenal Docker`
+
+### 🎯 Para que serve
+Painel autônomo que executa testes periódicos de velocidade de internet diretamente nos servidores oficiais da Ookla / Speedtest.
+
+### ⚙️ O que faz
+- Garante que você está recebendo os megabits contratados pelo plano de fibra ótica.
+- Porta padrão mapeada: 80
+- Categoria operacional: utility
+- Integração com ecossistema N.O.M.A.D.
+
+### 🧠 Como funciona
+Roda testes a cada hora de forma programada, registrando velocidade de download, upload e ping em um banco de dados com gráficos históricos e estatísticas de cumprimento de contrato.
+
+### 💡 Exemplo Real de Uso
+Descobrir que toda noite às 20h a operadora pratica "traffic shaping" e reduz sua velocidade de 600 Mbps para 120 Mbps.
+
+---
+
+
+## Uptime Kuma (Monitor de Quedas de Serviços) {% #nomad-uptime-kuma %}
+
+- **Categoria:** `utility` | **Porta:** `80` | **Tipo:** `Arsenal Docker`
+
+### 🎯 Para que serve
+O mais renomado sistema de medição e diagnóstico de qualidade de sinal de rede e rotas de internet.
+
+### ⚙️ O que faz
+- Prova de forma irrefutável para a sua operadora de internet quando a conexão está com instabilidade ou micro-quedas invi...
+- Porta padrão mapeada: 80
+- Categoria operacional: utility
+- Integração com ecossistema N.O.M.A.D.
+
+### 🧠 Como funciona
+Dispara rajadas periódicas de pacotes ICMP para múltiplos destinos estratégicos (servidores de DNS do Google, Cloudflare, gateway da sua operadora, servidores de jogos) e plota gráficos de dispersão de jitter e perda de pacotes ao longo do tempo.
+
+### 💡 Exemplo Real de Uso
+O jogo online ou a chamada de vídeo cai; você abre o SmokePing e vê o gráfico mostrando que exatamente às 15:20 a operadora teve 40% de perda de pacotes na rota externa.
+
+---
+
+
+## PeaNUT (Guardião do Nobreak & Energia) {% #nomad-peanut %}
+
+- **Categoria:** `utility` | **Porta:** `80` | **Tipo:** `Arsenal Docker`
+
+### 🎯 Para que serve
+Painel visual para o Network UPS Tools (NUT), monitorando o nobreak que alimenta seus servidores e roteadores.
+
+### ⚙️ O que faz
+- Evita corrupção de dados nos HDs e no sistema de arquivos ZFS durante apagões de energia elétrica.
+- Porta padrão mapeada: 80
+- Categoria operacional: utility
+- Integração com ecossistema N.O.M.A.D.
+
+### 🧠 Como funciona
+Conecta-se ao nobreak via cabo USB ou placa de rede e lê em tempo real a voltagem da tomada, carga da bateria, consumo em Watts e tempo de autonomia restante. Em caso de falta de luz prolongada, comanda o desligamento seguro do TrueNAS e dos contêineres antes que a bateria se esgote.
+
+### 💡 Exemplo Real de Uso
+A luz da rua acaba; o PeaNUT notifica no seu celular: *"Falta de energia detectada. Homelab operando na bateria com 42 minutos de autonomia estimada"*.
+
+---
+
+
+## Immich (Fotos & Vídeos com TrueNAS Mount) {% #nomad-immich %}
+
+- **Categoria:** `utility` | **Porta:** `80` | **Tipo:** `Arsenal Docker`
+
+### 🎯 Para que serve
+A mais avançada plataforma de backup e gerenciamento de fotos e vídeos familiares auto-hospedada do mundo.
+
+### ⚙️ O que faz
+- Você mencionou que tem 88GB de fotos; o Immich preserva os originais em resolução máxima no seu TrueNAS sem pagar assina...
+- Porta padrão mapeada: 80
+- Categoria operacional: utility
+- Integração com ecossistema N.O.M.A.D.
+
+### 🧠 Como funciona
+Aplicativo móvel para Android e iOS que faz upload automático em segundo plano das fotos tiradas pelo casal. Possui inteligência artificial local de reconhecimento facial (agrupando fotos por membro da família), busca semântica (*"fotos na praia comendo pizza"*), visualização em mapa mundi e suporte a montagem no TrueNAS.
+
+### 💡 Exemplo Real de Uso
+Sua esposa tira fotos na rua; ao entrar no Wi-Fi de casa, o app sincroniza tudo silenciosamente com o servidor e organiza o álbum do bebê por data e rostos.
+
+---
+
+
+## Audiobookshelf (Audiolivros & Podcasts) {% #nomad-audiobookshelf %}
+
+- **Categoria:** `utility` | **Porta:** `80` | **Tipo:** `Arsenal Docker`
+
+### 🎯 Para que serve
+Central de streaming e catálogo de audiolivros e podcasts auto-hospedada.
+
+### ⚙️ O que faz
+- Dá a comodidade do Audible sem mensalidades, reunindo sua biblioteca inteira de audiolivros em um só lugar.
+- Porta padrão mapeada: 80
+- Categoria operacional: utility
+- Integração com ecossistema N.O.M.A.D.
+
+### 🧠 Como funciona
+Organiza audiolivros em capítulos, sincroniza a posição exata da reprodução entre o computador e o aplicativo de celular, permite controle de velocidade (1.2x, 1.5x), notas de áudio e download offline no aparelho para escutar no trânsito ou avião.
+
+### 💡 Exemplo Real de Uso
+Você está ouvindo um audiolivro no computador da bancada; entra no carro, abre o app no celular e ele continua no mesmo segundo de onde você parou.
+
+---
+
+
+## TubeArchivist (Seu YouTube Offline Privado) {% #nomad-tubearchivist %}
+
+- **Categoria:** `utility` | **Porta:** `80` | **Tipo:** `Arsenal Docker`
+
+### 🎯 Para que serve
+Versão em C/C++ de alto desempenho do modelo de transcrição de voz da OpenAI, otimizada para CPUs e placas de vídeo locais.
+
+### ⚙️ O que faz
+- Transcreve reuniões, áudios longos e gravações familiares com 100% de privacidade e sem custos de nuvem.
+- Porta padrão mapeada: 80
+- Categoria operacional: utility
+- Integração com ecossistema N.O.M.A.D.
+
+### 🧠 Como funciona
+Expõe uma API compatível com OpenAI para onde você envia arquivos de áudio (.mp3, .ogg, .wav) ou notas de voz do WhatsApp e recebe a transcrição precisa em texto com pontuação correta e identificação de idioma.
+
+### 💡 Exemplo Real de Uso
+Integrar ao n8n para que qualquer áudio de voz enviado para um bot do Telegram seja transcrito na hora e arquivado no seu diário pessoal ou no Outline.
+
+---
+
+
+## Piwigo (Álbuns de Família com Acesso Restrito) {% #nomad-piwigo %}
+
+- **Categoria:** `utility` | **Porta:** `80` | **Tipo:** `Arsenal Docker`
+
+### 🎯 Para que serve
+Sistema completo de registro de cuidados diários, saúde, medicação e marcos de desenvolvimento da família e crianças.
+
+### ⚙️ O que faz
+- Elimina dúvidas sobre quem já deu o antibiótico da criança ou quando foi a última dose do antitérmico, evitando sobredos...
+- Porta padrão mapeada: 80
+- Categoria operacional: utility
+- Integração com ecossistema N.O.M.A.D.
+
+### 🧠 Como funciona
+Interface rápida para celular onde pai e mãe registram horários de medicamentos dados, sintomas de febre, doses de vacinas tomadas, curvas de peso/altura e consultas médicas.
+
+### 💡 Exemplo Real de Uso
+Na madrugada com a criança com febre, você olha no celular e vê exatamente que a última dose de remédio foi dada há 4 horas pela sua esposa.
+
+---
+
+
+## Music Assistant (Central de Som da Casa) {% #nomad-music-assistant %}
+
+- **Categoria:** `utility` | **Porta:** `80` | **Tipo:** `Arsenal Docker`
+
+### 🎯 Para que serve
+Gerenciador do seu bar pessoal, adega e catálogo de coquetéis artesanais.
+
+### ⚙️ O que faz
+- Perfeito para receber amigos e família em casa preparando drinks clássicos e autorais com receitas exatas e proporções m...
+- Porta padrão mapeada: 80
+- Categoria operacional: utility
+- Integração com ecossistema N.O.M.A.D.
+
+### 🧠 Como funciona
+Você cadastra os destilados, licores, xaropes e ingredientes que tem no armário; o sistema informa instantaneamente quais coquetéis mundiais você consegue preparar agora ou qual ingrediente barato falta comprar.
+
+### 💡 Exemplo Real de Uso
+Amigos chegam em casa no fim de semana; você abre o Bar Assistant, clica em "O que posso fazer?" e ele lista 15 drinks possíveis com os ingredientes que você tem.
+
+---
+
+
+## Snapcast (Áudio Multi-Room em Sincronia) {% #nomad-snapcast %}
+
+- **Categoria:** `utility` | **Porta:** `80` | **Tipo:** `Arsenal Docker`
+
+### 🎯 Para que serve
+Servidor e cliente de áudio multi-room com sincronização precisa no tempo.
+
+### ⚙️ O que faz
+- Porta padrão mapeada: 80
+- Categoria operacional: utility
+- Integração com ecossistema N.O.M.A.D.
+
+### 🧠 Como funciona
+Transmite o fluxo de áudio bruto pela rede local para vários alto-falantes e caixas sem delay percebido entre os cômodos da casa.
+
+### 💡 Exemplo Real de Uso
+
+
+---
+
+
+## Lyrion Music Server (Áudio Audiófilo Bit-Perfect) {% #nomad-lyrion-lms %}
+
+- **Categoria:** `utility` | **Porta:** `80` | **Tipo:** `Arsenal Docker`
+
+### 🎯 Para que serve
+Servidor de DNS local de padrão militar com suporte completo a DNS-over-HTTPS (DoH), DNS-over-TLS (DoT) e bloqueio avançado de requisições.
+
+### ⚙️ O que faz
+- Dá privacidade total de navegação para todos os dispositivos e acelera o carregamento de sites através de cache local na...
+- Porta padrão mapeada: 80
+- Categoria operacional: utility
+- Integração com ecossistema N.O.M.A.D.
+
+### 🧠 Como funciona
+Resolve todas as consultas de nomes da casa diretamente nos servidores raiz da internet, sem passar pelos servidores lentos e monitorados da sua operadora (Claro, Vivo, etc.).
+
+### 💡 Exemplo Real de Uso
+Impedir que a operadora de internet registre quais sites você e sua família estão acessando no dia a dia.
+
+---
+
+
+## Podgrab (Baixador Silencioso de Podcasts) {% #nomad-podgrab %}
+
+- **Categoria:** `utility` | **Porta:** `80` | **Tipo:** `Arsenal Docker`
+
+### 🎯 Para que serve
+Sistema autônomo de varredura e auditoria que monitora todos os equipamentos conectados na rede local em tempo real.
+
+### ⚙️ O que faz
+- Impede que vizinhos ou aparelhos comprometidos usem seu sinal de rede sem o seu consentimento.
+- Porta padrão mapeada: 80
+- Categoria operacional: utility
+- Integração com ecossistema N.O.M.A.D.
+
+### 🧠 Como funciona
+Executa varreduras ARP e ICMP periódicas no switch e ponto de acesso Wi-Fi. Quando um endereço MAC novo ou desconhecido aparece na rede, ele dispara um alerta imediato no Telegram ou Mattermost com o fabricante e o IP do dispositivo.
+
+### 💡 Exemplo Real de Uso
+Um convidado chega na sua casa e se conecta ao Wi-Fi; seu celular vibra avisando: *"Novo dispositivo detectado: Samsung Galaxy S24 (IP 192.168.1.145)"*.
+
+---
+
+
+## Your_Spotify (Telemetria Musical Privada) {% #nomad-your-spotify %}
+
+- **Categoria:** `utility` | **Porta:** `80` | **Tipo:** `Arsenal Docker`
+
+### 🎯 Para que serve
+A mais respeitada plataforma de genealogia científica mundial em versão web colaborativa para toda a família.
+
+### ⚙️ O que faz
+- Mantém a história dos seus antepassados e descendentes protegida, sem expor os dados da sua linhagem para bancos de dado...
+- Porta padrão mapeada: 80
+- Categoria operacional: utility
+- Integração com ecossistema N.O.M.A.D.
+
+### 🧠 Como funciona
+Constrói árvores genealógicas com vínculos de parentesco, digitalização de certidões antigas, fotos históricas restauradas, mapas de migração dos antepassados e linhagens.
+
+### 💡 Exemplo Real de Uso
+Cadastrar fotos dos bisavós e certidões históricas de nascimento/imigração para que seus filhos e netos tenham acesso permanente às suas origens.
+
+---
+
+
+## n8n (Automação de Processos & Conexão IA) {% #nomad-n8n %}
+
+- **Categoria:** `utility` | **Porta:** `80` | **Tipo:** `Arsenal Docker`
+
+### 🎯 Para que serve
+Automatize tarefas conectando notificações de bancos com Actual Budget, e-mails de contas com Paperless e alertas com IA
+
+### ⚙️ O que faz
+- Porta canônica: 80
+- Execução autônoma e segura
+- Pronto para deploy via Portainer ou Docker Compose
+
+### 🧠 Como funciona
+Executado em contêiner Docker isolado na porta 80, persistindo dados em volumes dedicados.
+
+### 💡 Exemplo Real de Uso
+Utilizado para operações de utility com controle e soberania local no seu homelab.
+
+---
+
+
+## Baserow (Banco de Dados Relacional Visual) {% #nomad-baserow %}
+
+- **Categoria:** `utility` | **Porta:** `80` | **Tipo:** `Arsenal Docker`
+
+### 🎯 Para que serve
+Sistema completo de registro de cuidados diários, saúde, medicação e marcos de desenvolvimento da família e crianças.
+
+### ⚙️ O que faz
+- Elimina dúvidas sobre quem já deu o antibiótico da criança ou quando foi a última dose do antitérmico, evitando sobredos...
+- Porta padrão mapeada: 80
+- Categoria operacional: utility
+- Integração com ecossistema N.O.M.A.D.
+
+### 🧠 Como funciona
+Interface rápida para celular onde pai e mãe registram horários de medicamentos dados, sintomas de febre, doses de vacinas tomadas, curvas de peso/altura e consultas médicas.
+
+### 💡 Exemplo Real de Uso
+Na madrugada com a criança com febre, você olha no celular e vê exatamente que a última dose de remédio foi dada há 4 horas pela sua esposa.
+
+---
+
+
+## NocoDB (Visualizador de Bancos como Planilha) {% #nomad-nocodb %}
+
+- **Categoria:** `utility` | **Porta:** `80` | **Tipo:** `Arsenal Docker`
+
+### 🎯 Para que serve
+Interface no-code que se conecta a bancos de dados relacionais existentes (PostgreSQL, MySQL, SQLite) e os transforma em uma interface visual de planilha colaborativa.
+
+### ⚙️ O que faz
+- Visualizar e consultar tabelas de dados de contêineres do homelab sem precisar abrir o terminal ou rodar comandos SQL co...
+- Porta padrão mapeada: 80
+- Categoria operacional: utility
+- Integração com ecossistema N.O.M.A.D.
+
+### 🧠 Como funciona
+Conecta-se ao banco de dados do seu próprio sistema ou de outros contêineres e expõe os dados em tabelas com filtros avançados e geração instantânea de APIs REST.
+
+### 💡 Exemplo Real de Uso
+Visualizar e consultar tabelas de dados de contêineres do homelab sem precisar abrir o terminal ou rodar comandos SQL complexos.
+
+---
+
+
+## Directus (Camada de Dados & Painel API) {% #nomad-directus %}
+
+- **Categoria:** `utility` | **Porta:** `80` | **Tipo:** `Arsenal Docker`
+
+### 🎯 Para que serve
+Sistema completo de registro de cuidados diários, saúde, medicação e marcos de desenvolvimento da família e crianças.
+
+### ⚙️ O que faz
+- Elimina dúvidas sobre quem já deu o antibiótico da criança ou quando foi a última dose do antitérmico, evitando sobredos...
+- Porta padrão mapeada: 80
+- Categoria operacional: utility
+- Integração com ecossistema N.O.M.A.D.
+
+### 🧠 Como funciona
+Interface rápida para celular onde pai e mãe registram horários de medicamentos dados, sintomas de febre, doses de vacinas tomadas, curvas de peso/altura e consultas médicas.
+
+### 💡 Exemplo Real de Uso
+Na madrugada com a criança com febre, você olha no celular e vê exatamente que a última dose de remédio foi dada há 4 horas pela sua esposa.
+
+---
+
+
+## ChangeDetection.io (Monitor de Páginas Web) {% #nomad-changedetection %}
+
+- **Categoria:** `utility` | **Porta:** `80` | **Tipo:** `Arsenal Docker`
+
+### 🎯 Para que serve
+Ferramentas visuais de monitoramento de integridade e tempo de atividade (uptime) de serviços e servidores.
+
+### ⚙️ O que faz
+- Permite saber que um serviço caiu antes mesmo de você ou sua família tentarem acessá-lo.
+- Porta padrão mapeada: 80
+- Categoria operacional: utility
+- Integração com ecossistema N.O.M.A.D.
+
+### 🧠 Como funciona
+Testam a cada 30 segundos se cada porta, site, contêiner Docker e ping de roteador está respondendo normalmente. Se qualquer serviço falhar, disparam alarmes sonoros e notificações imediatas.
+
+### 💡 Exemplo Real de Uso
+Permite saber que um serviço caiu antes mesmo de você ou sua família tentarem acessá-lo.
+
+---
+
+
+## Shlink + QR Engine (Links & Etiquetas QR) {% #nomad-shlink %}
+
+- **Categoria:** `utility` | **Porta:** `80` | **Tipo:** `Arsenal Docker`
+
+### 🎯 Para que serve
+Gerador e encurtador de links e códigos QR com suporte a domínio personalizado da sua rede e estatísticas de cliques.
+
+### ⚙️ O que faz
+- Você pode imprimir etiquetas com QR Codes para colar em gaveteiros de parafusos, disjuntores da casa ou manuais de eletr...
+- Porta padrão mapeada: 80
+- Categoria operacional: utility
+- Integração com ecossistema N.O.M.A.D.
+
+### 🧠 Como funciona
+Transforma links internos compridos em URLs curtas e amigáveis (`http://nx.lan/oficina`) e gera QR Codes vetoriais prontos para impressão.
+
+### 💡 Exemplo Real de Uso
+Você pode imprimir etiquetas com QR Codes para colar em gaveteiros de parafusos, disjuntores da casa ou manuais de eletrodomésticos: ao escanear com a câmera do celular, abre diretamente a página técnica correspondente no seu homelab.
+
+---
+
+
+## Apprise API (Gateway Central de Alertas) {% #nomad-apprise %}
+
+- **Categoria:** `utility` | **Porta:** `80` | **Tipo:** `Arsenal Docker`
+
+### 🎯 Para que serve
+Servidor PACS e visualizador de exames médicos de imagem (Raios-X, Tomografias, Ressonâncias Magnéticas e Ultrassons).
+
+### ⚙️ O que faz
+- Garante que o histórico radiológico de toda a sua vida fique guardado no TrueNAS sem perda de resolução ou compressão de...
+- Porta padrão mapeada: 80
+- Categoria operacional: utility
+- Integração com ecossistema N.O.M.A.D.
+
+### 🧠 Como funciona
+Recebe os arquivos digitais em formato nativo DICOM que vêm nos CDs/pen-drives de laboratórios e clínicas, permitindo visualização de cortes em alta fidelidade pelo navegador.
+
+### 💡 Exemplo Real de Uso
+Você precisa comparar uma ressonância de joelho ou coluna feita há 5 anos com uma atual; o Orthanc abre as duas lado a lado no navegador para o médico avaliar.
+
+---
+
+
+## Gotify (Notificações Push Independentes) {% #nomad-gotify %}
+
+- **Categoria:** `utility` | **Porta:** `80` | **Tipo:** `Arsenal Docker`
+
+### 🎯 Para que serve
+Servidores dedicados para envio de notificações instantâneas push para computadores e celulares sem intermediários comerciais.
+
+### ⚙️ O que faz
+- Suas notificações de segurança chegam diretamente até você mesmo se os servidores de notificações da Apple ou do Google ...
+- Porta padrão mapeada: 80
+- Categoria operacional: utility
+- Integração com ecossistema N.O.M.A.D.
+
+### 🧠 Como funciona
+O Gotify roda um aplicativo leve no seu celular Android mantendo um canal WebSocket aberto diretamente com o seu servidor, entregando alertas de discos cheios, invasões ou quedas de servidores em milissegundos.
+
+### 💡 Exemplo Real de Uso
+Suas notificações de segurança chegam diretamente até você mesmo se os servidores de notificações da Apple ou do Google estiverem fora do ar.
+
+---
+
+
+## InvenTree (Almoxarifado & Peças de Oficina) {% #nomad-inventree %}
+
+- **Categoria:** `utility` | **Porta:** `80` | **Tipo:** `Arsenal Docker`
+
+### 🎯 Para que serve
+O mais renomado sistema de controle de estoque de peças técnicas, projetos de hardware e montagens eletrônicas.
+
+### ⚙️ O que faz
+- Acaba com o clássico problema de comprar parafusos, relés ou conectores duplicados porque você não sabia que já tinha na...
+- Porta padrão mapeada: 80
+- Categoria operacional: utility
+- Integração com ecossistema N.O.M.A.D.
+
+### 🧠 Como funciona
+Cadastra fornecedores, códigos de peças de fabricantes (ex: Mouser, Farnell, Mercado Livre), localização exata no gaveteiro (Estante A, Gaveta 3, Divisória 2), listas de materiais (BOM - Bill of Materials) e etiquetas de código de barras.
+
+### 💡 Exemplo Real de Uso
+Antes de iniciar um projeto de solda, você abre o projeto no InvenTree e clica em "Verificar Estoque"; ele avisa na hora se você tem todos os componentes necessários ou quais faltam pedir.
+
+---
+
+
+## PartKeepr (Estoque de Componentes Eletrônicos) {% #nomad-partkeepr %}
+
+- **Categoria:** `utility` | **Porta:** `80` | **Tipo:** `Arsenal Docker`
+
+### 🎯 Para que serve
+Sistema especializado em catalogar resistores, capacitores, transistores, microcontroladores (ESP32, STM32, Arduino) e chips SMD.
+
+### ⚙️ O que faz
+- Porta padrão mapeada: 80
+- Categoria operacional: utility
+- Integração com ecossistema N.O.M.A.D.
+
+### 🧠 Como funciona
+Registra parâmetros elétricos (tolerância, encapsulamento 0805/0603, tensão máxima, datasheets em PDF anexados) e quantidade disponível em cada carretel ou fita.
+
+### 💡 Exemplo Real de Uso
+
+
+---
+
+
+## KiCad Web (Visualizador de Circuitos PCB) {% #nomad-kicad-web %}
+
+- **Categoria:** `utility` | **Porta:** `80` | **Tipo:** `Arsenal Docker`
+
+### 🎯 Para que serve
+Visualizadores leves no navegador para arquivos de circuitos impressos (.kicad_pcb, .sch) e plantas técnicas em 2D (.dxf, .dwg).
+
+### ⚙️ O que faz
+- Porta padrão mapeada: 80
+- Categoria operacional: utility
+- Integração com ecossistema N.O.M.A.D.
+
+### 🧠 Como funciona
+Permite abrir e inspecionar camadas de PCBs, esquemáticos e desenhos mecânicos em qualquer celular, tablet ou laptop sem precisar ter o software CAD pesado instalado na máquina.
+
+### 💡 Exemplo Real de Uso
+
+
+---
+
+
+## LibreCAD Web (Desenho Técnico 2D) {% #nomad-librecad-web %}
+
+- **Categoria:** `utility` | **Porta:** `80` | **Tipo:** `Arsenal Docker`
+
+### 🎯 Para que serve
+Visualizadores leves no navegador para arquivos de circuitos impressos (.kicad_pcb, .sch) e plantas técnicas em 2D (.dxf, .dwg).
+
+### ⚙️ O que faz
+- Porta padrão mapeada: 80
+- Categoria operacional: utility
+- Integração com ecossistema N.O.M.A.D.
+
+### 🧠 Como funciona
+Permite abrir e inspecionar camadas de PCBs, esquemáticos e desenhos mecânicos em qualquer celular, tablet ou laptop sem precisar ter o software CAD pesado instalado na máquina.
+
+### 💡 Exemplo Real de Uso
+
+
+---
+
+
+## Mainsail (Servidor de Impressão 3D) {% #nomad-mainsail %}
+
+- **Categoria:** `utility` | **Porta:** `80` | **Tipo:** `Arsenal Docker`
+
+### 🎯 Para que serve
+A mais rápida e elegante interface de controle e telemetria para impressoras 3D rodando firmware Klipper e Moonraker.
+
+### ⚙️ O que faz
+- Gerencia suas impressões de bancada direto do computador do escritório ou pelo celular.
+- Porta padrão mapeada: 80
+- Categoria operacional: utility
+- Integração com ecossistema N.O.M.A.D.
+
+### 🧠 Como funciona
+Conecta-se à impressora 3D via rede, exibindo temperaturas de bico e mesa em gráficos suaves, câmera ao vivo com time-lapses, controle de velocidade e upload de arquivos G-code.
+
+### 💡 Exemplo Real de Uso
+Gerencia suas impressões de bancada direto do computador do escritório ou pelo celular.
+
+---
+
+
+## OpenWebRX (Rádio SDR & Satélite NOAA) {% #nomad-openwebrx %}
+
+- **Categoria:** `utility` | **Porta:** `80` | **Tipo:** `Arsenal Docker`
+
+### 🎯 Para que serve
+Servidor SDR (Software Defined Radio) com interface web interativa de espectro em cascata (waterfall).
+
+### ⚙️ O que faz
+- Monitoramento de frequências de emergência e eventos meteorológicos severos mesmo se a internet da região cair completam...
+- Porta padrão mapeada: 80
+- Categoria operacional: utility
+- Integração com ecossistema N.O.M.A.D.
+
+### 🧠 Como funciona
+Conecta-se a um dongle USB RTL-SDR e permite sintonizar frequências de rádio AM/FM, escuta aérea, rádio amador, alertas de defesa civil e decodificar imagens ao vivo de satélites meteorológicos NOAA.
+
+### 💡 Exemplo Real de Uso
+Monitoramento de frequências de emergência e eventos meteorológicos severos mesmo se a internet da região cair completamente.
+
+---
+
+
+## Mattermost (Chat Corporativo & Familiar) {% #nomad-mattermost %}
+
+- **Categoria:** `utility` | **Porta:** `80` | **Tipo:** `Arsenal Docker`
+
+### 🎯 Para que serve
+Plataforma corporativa e familiar de mensagens instantâneas com canais, threads e suporte a bots.
+
+### ⚙️ O que faz
+- Um espaço limpo para a comunicação da família e para receber todas as notificações dos servidores em um aplicativo profi...
+- Porta padrão mapeada: 80
+- Categoria operacional: utility
+- Integração com ecossistema N.O.M.A.D.
+
+### 🧠 Como funciona
+Fornece canais organizados (ex: `#geral`, `#reformas-casa`, `#alertas-homelab`, `#ideias-projetos`), compartilhamento de arquivos pesados, chamadas e integração total com os webhooks do n8n e Frigate.
+
+### 💡 Exemplo Real de Uso
+Um espaço limpo para a comunicação da família e para receber todas as notificações dos servidores em um aplicativo profissional no celular.
+
+---
+
+
+## Matrix Synapse (Mensageiro Criptografado) {% #nomad-synapse %}
+
+- **Categoria:** `utility` | **Porta:** `80` | **Tipo:** `Arsenal Docker`
+
+### 🎯 Para que serve
+Servidor do protocolo federado Matrix com cliente web Cinny (interface com visual idêntico ao Discord).
+
+### ⚙️ O que faz
+- Porta padrão mapeada: 80
+- Categoria operacional: utility
+- Integração com ecossistema N.O.M.A.D.
+
+### 🧠 Como funciona
+Criptografia de ponta a ponta nativa (E2EE) onde somente você e o destinatário têm a chave de decodificação das conversas, sem possibilidade de leitura por terceiros.
+
+### 💡 Exemplo Real de Uso
+
+
+---
+
+
+## Cinny (Interface Web Matrix Estilo Discord) {% #nomad-cinny %}
+
+- **Categoria:** `utility` | **Porta:** `80` | **Tipo:** `Arsenal Docker`
+
+### 🎯 Para que serve
+Interface web de chat estilo ChatGPT / Claude com suporte nativo a Ollama, vLLM e OpenAI API.
+
+### ⚙️ O que faz
+- Permite aproveitar todo o potencial da sua **RTX 5060** rodando modelos como Llama 3.2, Mistral, Qwen e DeepSeek sem env...
+- Porta padrão mapeada: 80
+- Categoria operacional: utility
+- Integração com ecossistema N.O.M.A.D.
+
+### 🧠 Como funciona
+Conecta-se ao daemon do Ollama na porta 11434 e renderiza uma UI rica com suporte a RAG (Retrieval Augmented Generation), upload de documentos PDF/DOCX, navegação web privativa, execução de código e múltiplos usuários com controle de acesso.
+
+### 💡 Exemplo Real de Uso
+Você sobe o manual da sua placa-mãe ou um PDF de 500 páginas e pergunta *"Qual é o barramento PCIe correto para colocar o segundo SSD NVMe?"*, e o Open WebUI responde em segundos citando a página exata.
+
+---
+
+
+## Mumble Server (Voz de Ultra-Baixa Latência) {% #nomad-mumble %}
+
+- **Categoria:** `utility` | **Porta:** `80` | **Tipo:** `Arsenal Docker`
+
+### 🎯 Para que serve
+Versão em C/C++ de alto desempenho do modelo de transcrição de voz da OpenAI, otimizada para CPUs e placas de vídeo locais.
+
+### ⚙️ O que faz
+- Transcreve reuniões, áudios longos e gravações familiares com 100% de privacidade e sem custos de nuvem.
+- Porta padrão mapeada: 80
+- Categoria operacional: utility
+- Integração com ecossistema N.O.M.A.D.
+
+### 🧠 Como funciona
+Expõe uma API compatível com OpenAI para onde você envia arquivos de áudio (.mp3, .ogg, .wav) ou notas de voz do WhatsApp e recebe a transcrição precisa em texto com pontuação correta e identificação de idioma.
+
+### 💡 Exemplo Real de Uso
+Integrar ao n8n para que qualquer áudio de voz enviado para um bot do Telegram seja transcrito na hora e arquivado no seu diário pessoal ou no Outline.
+
+---
+
+
+## Jitsi Meet (Videoconferências em HD Sem Nuvem) {% #nomad-jitsi %}
+
+- **Categoria:** `utility` | **Porta:** `80` | **Tipo:** `Arsenal Docker`
+
+### 🎯 Para que serve
+Plataforma profissional de chamadas em vídeo e reuniões virtuais sem limite de tempo, sem anúncios e sem cadastro obrigatório.
+
+### ⚙️ O que faz
+- Porta padrão mapeada: 80
+- Categoria operacional: utility
+- Integração com ecossistema N.O.M.A.D.
+
+### 🧠 Como funciona
+Abre salas com compartilhamento de tela em alta taxa de quadros e criptografia direta no navegador.
+
+### 💡 Exemplo Real de Uso
+
+
+---
+
+
+## FreePBX / Asterisk (Central Telefônica IP) {% #nomad-freepbx %}
+
+- **Categoria:** `utility` | **Porta:** `80` | **Tipo:** `Arsenal Docker`
+
+### 🎯 Para que serve
+Gravador de vídeo em rede (NVR) de alto desempenho focado em detecção de objetos em tempo real utilizando inteligência artificial local.
+
+### ⚙️ O que faz
+- Segurança patrimonial profissional sem pagar assinaturas abusivas de nuvens de câmeras comerciais.
+- Porta padrão mapeada: 80
+- Categoria operacional: utility
+- Integração com ecossistema N.O.M.A.D.
+
+### 🧠 Como funciona
+Conecta-se às suas câmeras IP via stream RTSP e processa as imagens na GPU ou no acelerador Coral. Em vez de alarmes falsos de chuva ou folhas ao vento, ele só grava e notifica se detectar uma **pessoa**, **carro** ou **animal** na área delimitada.
+
+### 💡 Exemplo Real de Uso
+Uma pessoa se aproxima do portão da sua residência à noite; o Frigate detecta a silhueta humana em 50ms e envia a foto no seu Telegram com a notificação instantânea.
+
+---
+
+
+## Etherpad Lite (Editor em Tempo Real Colaborativo) {% #nomad-etherpad %}
+
+- **Categoria:** `utility` | **Porta:** `80` | **Tipo:** `Arsenal Docker`
+
+### 🎯 Para que serve
+Servidor SDR (Software Defined Radio) com interface web interativa de espectro em cascata (waterfall).
+
+### ⚙️ O que faz
+- Monitoramento de frequências de emergência e eventos meteorológicos severos mesmo se a internet da região cair completam...
+- Porta padrão mapeada: 80
+- Categoria operacional: utility
+- Integração com ecossistema N.O.M.A.D.
+
+### 🧠 Como funciona
+Conecta-se a um dongle USB RTL-SDR e permite sintonizar frequências de rádio AM/FM, escuta aérea, rádio amador, alertas de defesa civil e decodificar imagens ao vivo de satélites meteorológicos NOAA.
+
+### 💡 Exemplo Real de Uso
+Monitoramento de frequências de emergência e eventos meteorológicos severos mesmo se a internet da região cair completamente.
+
+---
+
+
+## HedgeDoc (Documentos Colaborativos em Markdown) {% #nomad-hedgedoc %}
+
+- **Categoria:** `utility` | **Porta:** `80` | **Tipo:** `Arsenal Docker`
+
+### 🎯 Para que serve
+Plataforma moderna de edição de notas e documentos colaborativos em tempo real, baseada em blocos e totalmente open-source.
+
+### ⚙️ O que faz
+- Excelente para atas de reuniões rápidas, listas de tarefas dinâmicas e brainstorming colaborativo sem depender de Google...
+- Porta padrão mapeada: 80
+- Categoria operacional: utility
+- Integração com ecossistema N.O.M.A.D.
+
+### 🧠 Como funciona
+Permite que várias pessoas editem o mesmo documento simultaneamente, com renderização de diagramas Mermaid, equações matemáticas KaTeX, tabelas e links bidirecionais.
+
+### 💡 Exemplo Real de Uso
+Planejar viagens ou reformas da casa com sua esposa, editando ao mesmo tempo a lista de compras de materiais e custos estimados.
+
+---
+
+
+## RustDesk Server (Suporte & Acesso Remoto) {% #nomad-rustdesk %}
+
+- **Categoria:** `utility` | **Porta:** `80` | **Tipo:** `Arsenal Docker`
+
+### 🎯 Para que serve
+Servidor de DNS local de padrão militar com suporte completo a DNS-over-HTTPS (DoH), DNS-over-TLS (DoT) e bloqueio avançado de requisições.
+
+### ⚙️ O que faz
+- Dá privacidade total de navegação para todos os dispositivos e acelera o carregamento de sites através de cache local na...
+- Porta padrão mapeada: 80
+- Categoria operacional: utility
+- Integração com ecossistema N.O.M.A.D.
+
+### 🧠 Como funciona
+Resolve todas as consultas de nomes da casa diretamente nos servidores raiz da internet, sem passar pelos servidores lentos e monitorados da sua operadora (Claro, Vivo, etc.).
+
+### 💡 Exemplo Real de Uso
+Impedir que a operadora de internet registre quais sites você e sua família estão acessando no dia a dia.
+
+---
+
+
+## Beszel (Telemetria Cyberpunk da Máquina & GPU) {% #nomad-beszel %}
+
+- **Categoria:** `utility` | **Porta:** `80` | **Tipo:** `Arsenal Docker`
+
+### 🎯 Para que serve
+Painel analítico pessoal que registra cada música que você escuta e gera seu próprio "Spotify Wrapped" privativo em tempo real durante o ano todo.
+
+### ⚙️ O que faz
+- Porta padrão mapeada: 80
+- Categoria operacional: utility
+- Integração com ecossistema N.O.M.A.D.
+
+### 🧠 Como funciona
+
+
+### 💡 Exemplo Real de Uso
+
+
+---
+
+
+## Dockge (Gerenciador Visual de Docker Compose) {% #nomad-dockge %}
+
+- **Categoria:** `utility` | **Porta:** `80` | **Tipo:** `Arsenal Docker`
+
+### 🎯 Para que serve
+Plataforma avançada para construção visual de fluxos de agentes de IA, RAG multi-etapas e assistentes automatizados.
+
+### ⚙️ O que faz
+- Transforma seus modelos locais de simples "chatbots" em verdadeiros funcionários digitais que executam tarefas complexas...
+- Porta padrão mapeada: 80
+- Categoria operacional: utility
+- Integração com ecossistema N.O.M.A.D.
+
+### 🧠 Como funciona
+Fornece um construtor de pipelines no-code onde você pode ligar modelos de IA locais, bancos vetoriais (Qdrant), raspadores de web e webhooks externos para criar ferramentas que tomam decisões de forma autônoma.
+
+### 💡 Exemplo Real de Uso
+Criar um agente que lê seus e-mails ou alertas do homelab, resume os pontos críticos e notifica você no Mattermost ou Gotify apenas se houver algo urgente.
+
+---
+
+
+## Forgejo / Gitea (Seu GitHub Privado no TrueNAS) {% #nomad-forgejo %}
+
+- **Categoria:** `utility` | **Porta:** `80` | **Tipo:** `Arsenal Docker`
+
+### 🎯 Para que serve
+Central de streaming e catálogo de audiolivros e podcasts auto-hospedada.
+
+### ⚙️ O que faz
+- Dá a comodidade do Audible sem mensalidades, reunindo sua biblioteca inteira de audiolivros em um só lugar.
+- Porta padrão mapeada: 80
+- Categoria operacional: utility
+- Integração com ecossistema N.O.M.A.D.
+
+### 🧠 Como funciona
+Organiza audiolivros em capítulos, sincroniza a posição exata da reprodução entre o computador e o aplicativo de celular, permite controle de velocidade (1.2x, 1.5x), notas de áudio e download offline no aparelho para escutar no trânsito ou avião.
+
+### 💡 Exemplo Real de Uso
+Você está ouvindo um audiolivro no computador da bancada; entra no carro, abre o app no celular e ele continua no mesmo segundo de onde você parou.
+
+---
+
+
+## Woodpecker CI (Compilação & Testes de Scripts) {% #nomad-woodpecker %}
+
+- **Categoria:** `utility` | **Porta:** `80` | **Tipo:** `Arsenal Docker`
+
+### 🎯 Para que serve
+Servidor leve de integração contínua (CI/CD) baseado em contêineres Docker, perfeitamente integrado ao Forgejo/Gitea.
+
+### ⚙️ O que faz
+- Porta padrão mapeada: 80
+- Categoria operacional: utility
+- Integração com ecossistema N.O.M.A.D.
+
+### 🧠 Como funciona
+
+
+### 💡 Exemplo Real de Uso
+
+
+---
+
+
+## ArchiveBox (Preservador Eterno da Internet) {% #nomad-archivebox %}
+
+- **Categoria:** `utility` | **Porta:** `80` | **Tipo:** `Arsenal Docker`
+
+### 🎯 Para que serve
+O mais renomado sistema de medição e diagnóstico de qualidade de sinal de rede e rotas de internet.
+
+### ⚙️ O que faz
+- Prova de forma irrefutável para a sua operadora de internet quando a conexão está com instabilidade ou micro-quedas invi...
+- Porta padrão mapeada: 80
+- Categoria operacional: utility
+- Integração com ecossistema N.O.M.A.D.
+
+### 🧠 Como funciona
+Dispara rajadas periódicas de pacotes ICMP para múltiplos destinos estratégicos (servidores de DNS do Google, Cloudflare, gateway da sua operadora, servidores de jogos) e plota gráficos de dispersão de jitter e perda de pacotes ao longo do tempo.
+
+### 💡 Exemplo Real de Uso
+O jogo online ou a chamada de vídeo cai; você abre o SmokePing e vê o gráfico mostrando que exatamente às 15:20 a operadora teve 40% de perda de pacotes na rota externa.
+
+---
+
+
+## Duplicati (Backup Criptografado & Desduplicado) {% #nomad-duplicati %}
+
+- **Categoria:** `utility` | **Porta:** `80` | **Tipo:** `Arsenal Docker`
+
+### 🎯 Para que serve
+Servidor do protocolo federado Matrix com cliente web Cinny (interface com visual idêntico ao Discord).
+
+### ⚙️ O que faz
+- Porta padrão mapeada: 80
+- Categoria operacional: utility
+- Integração com ecossistema N.O.M.A.D.
+
+### 🧠 Como funciona
+Criptografia de ponta a ponta nativa (E2EE) onde somente você e o destinatário têm a chave de decodificação das conversas, sem possibilidade de leitura por terceiros.
+
+### 💡 Exemplo Real de Uso
+
+
+---
+
+
+## Rclone Web (Painel Visual de Sincronização) {% #nomad-rclone-web %}
+
+- **Categoria:** `utility` | **Porta:** `80` | **Tipo:** `Arsenal Docker`
+
+### 🎯 Para que serve
+Plataforma avançada para construção visual de fluxos de agentes de IA, RAG multi-etapas e assistentes automatizados.
+
+### ⚙️ O que faz
+- Transforma seus modelos locais de simples "chatbots" em verdadeiros funcionários digitais que executam tarefas complexas...
+- Porta padrão mapeada: 80
+- Categoria operacional: utility
+- Integração com ecossistema N.O.M.A.D.
+
+### 🧠 Como funciona
+Fornece um construtor de pipelines no-code onde você pode ligar modelos de IA locais, bancos vetoriais (Qdrant), raspadores de web e webhooks externos para criar ferramentas que tomam decisões de forma autônoma.
+
+### 💡 Exemplo Real de Uso
+Criar um agente que lê seus e-mails ou alertas do homelab, resume os pontos críticos e notifica você no Mattermost ou Gotify apenas se houver algo urgente.
+
+---
+
+
+## Microbin (Pastebin Privado com Autodestruição) {% #nomad-microbin %}
+
+- **Categoria:** `utility` | **Porta:** `80` | **Tipo:** `Arsenal Docker`
+
+### 🎯 Para que serve
+Central de streaming e catálogo de audiolivros e podcasts auto-hospedada.
+
+### ⚙️ O que faz
+- Dá a comodidade do Audible sem mensalidades, reunindo sua biblioteca inteira de audiolivros em um só lugar.
+- Porta padrão mapeada: 80
+- Categoria operacional: utility
+- Integração com ecossistema N.O.M.A.D.
+
+### 🧠 Como funciona
+Organiza audiolivros em capítulos, sincroniza a posição exata da reprodução entre o computador e o aplicativo de celular, permite controle de velocidade (1.2x, 1.5x), notas de áudio e download offline no aparelho para escutar no trânsito ou avião.
+
+### 💡 Exemplo Real de Uso
+Você está ouvindo um audiolivro no computador da bancada; entra no carro, abre o app no celular e ele continua no mesmo segundo de onde você parou.
+
+---
+
+
+## CUPS Print Server (Central de Impressão da Casa) {% #nomad-cups %}
+
+- **Categoria:** `utility` | **Porta:** `80` | **Tipo:** `Arsenal Docker`
+
+### 🎯 Para que serve
+Interface gráfica web para execução do lendário auditor de segurança de rede Nmap.
+
+### ⚙️ O que faz
+- Permite que você audite sua própria casa antes que um invasor encontre uma brecha de segurança nos seus equipamentos de ...
+- Porta padrão mapeada: 80
+- Categoria operacional: utility
+- Integração com ecossistema N.O.M.A.D.
+
+### 🧠 Como funciona
+Realiza varreduras detalhadas nos roteadores, câmeras IP, impressoras e computadores da sua casa, identificando portas abertas por engano, protocolos inseguros (Telnet/HTTP sem senha) e serviços vulneráveis.
+
+### 💡 Exemplo Real de Uso
+Auditar uma lâmpada ou tomada inteligente comprada na internet para ter certeza de que ela não está tentando abrir portas UPnP ou se comunicar com servidores desconhecidos.
+
+---
+
+
+## UrBackup (Backup Invisível Bare-Metal dos PCs) {% #nomad-urbackup %}
+
+- **Categoria:** `utility` | **Porta:** `80` | **Tipo:** `Arsenal Docker`
+
+### 🎯 Para que serve
+Ferramentas de backup com criptografia AES-256 e sincronização de dados desduplicados entre discos locais e nuvens frias.
+
+### ⚙️ O que faz
+- Porta padrão mapeada: 80
+- Categoria operacional: utility
+- Integração com ecossistema N.O.M.A.D.
+
+### 🧠 Como funciona
+
+
+### 💡 Exemplo Real de Uso
+
+
+---
+
+
+## WeeWX (Estação Meteorológica & Histórico Climático) {% #nomad-weewx %}
+
+- **Categoria:** `utility` | **Porta:** `80` | **Tipo:** `Arsenal Docker`
+
+### 🎯 Para que serve
+Painel autônomo que executa testes periódicos de velocidade de internet diretamente nos servidores oficiais da Ookla / Speedtest.
+
+### ⚙️ O que faz
+- Garante que você está recebendo os megabits contratados pelo plano de fibra ótica.
+- Porta padrão mapeada: 80
+- Categoria operacional: utility
+- Integração com ecossistema N.O.M.A.D.
+
+### 🧠 Como funciona
+Roda testes a cada hora de forma programada, registrando velocidade de download, upload e ping em um banco de dados com gráficos históricos e estatísticas de cumprimento de contrato.
+
+### 💡 Exemplo Real de Uso
+Descobrir que toda noite às 20h a operadora pratica "traffic shaping" e reduz sua velocidade de 600 Mbps para 120 Mbps.
+
+---
+
+
+## Planka (Kanban para Projetos & Metas) {% #nomad-planka %}
+
+- **Categoria:** `utility` | **Porta:** `80` | **Tipo:** `Arsenal Docker`
+
+### 🎯 Para que serve
+A ferramenta definitiva de documentação de equipe e projetos, combinando a elegância do Notion com a velocidade do Markdown e segurança corporativa.
+
+### ⚙️ O que faz
+- É a resposta perfeita para quem não gostou da interface do BookStack. O Outline possui design limpo, moderno, suporte a ...
+- Porta padrão mapeada: 80
+- Categoria operacional: utility
+- Integração com ecossistema N.O.M.A.D.
+
+### 🧠 Como funciona
+Interface rápida com suporte a múltiplos espaços de trabalho, histórico de versões, busca textual em tempo real, suporte a IA para expansão de textos e controle fino de permissões.
+
+### 💡 Exemplo Real de Uso
+Documentar todo o seu homelab, topologias de rede, manuais dos seus projetos eletrônicos e procedimentos operacionais (SOPs) para que qualquer pessoa consiga manter a infraestrutura funcionando.
+
+---
+
+
+## FreshRSS (Notícias sem Algoritmo com Contas) {% #nomad-freshrss %}
+
+- **Categoria:** `utility` | **Porta:** `80` | **Tipo:** `Arsenal Docker`
+
+### 🎯 Para que serve
+Leitor de feeds RSS auto-hospedado com suporte nativo a contas de usuários independentes (uma para você, uma para sua esposa e contas futuras para os filhos).
+
+### ⚙️ O que faz
+- Porta padrão mapeada: 80
+- Categoria operacional: utility
+- Integração com ecossistema N.O.M.A.D.
+
+### 🧠 Como funciona
+Cada membro da família tem seus próprios feeds de notícias, categorias e histórico de leitura separados, com sincronização em aplicativos móveis como NetNewsWire e ReadYou.
+
+### 💡 Exemplo Real de Uso
+
+
+---
+
+
+## Pingvin Share (Envio Ultrarrápido de Arquivos) {% #nomad-pingvin-share %}
+
+- **Categoria:** `utility` | **Porta:** `80` | **Tipo:** `Arsenal Docker`
+
+### 🎯 Para que serve
+Alternativa soberana ao WeTransfer para compartilhamento de vídeos e arquivos grandes.
+
+### ⚙️ O que faz
+- Porta padrão mapeada: 80
+- Categoria operacional: utility
+- Integração com ecossistema N.O.M.A.D.
+
+### 🧠 Como funciona
+Você sobe arquivos pesados no servidor local e gera um link protegido por senha com data de expiração para enviar por WhatsApp ou e-mail.
+
+### 💡 Exemplo Real de Uso
+
+
+---
+
+
+## Wake-on-LAN Hub (Ligue Computadores à Distância) {% #nomad-wol-web %}
+
+- **Categoria:** `utility` | **Porta:** `80` | **Tipo:** `Arsenal Docker`
+
+### 🎯 Para que serve
+Painel web para envio de pacotes mágicos "Magic Packets" Wake-on-LAN.
+
+### ⚙️ O que faz
+- Porta padrão mapeada: 80
+- Categoria operacional: utility
+- Integração com ecossistema N.O.M.A.D.
+
+### 🧠 Como funciona
+Permite ligar seu PC do quarto ou da bancada de trabalho com um toque no celular mesmo se a máquina estiver totalmente desligada.
+
+### 💡 Exemplo Real de Uso
+
+
+---
+
+
+## DokuWiki Tático (Base de S.O.P. Sem Banco de Dados) {% #nomad-dokuwiki %}
+
+- **Categoria:** `utility` | **Porta:** `80` | **Tipo:** `Arsenal Docker`
+
+### 🎯 Para que serve
+Ferramentas visuais de monitoramento de integridade e tempo de atividade (uptime) de serviços e servidores.
+
+### ⚙️ O que faz
+- Permite saber que um serviço caiu antes mesmo de você ou sua família tentarem acessá-lo.
+- Porta padrão mapeada: 80
+- Categoria operacional: utility
+- Integração com ecossistema N.O.M.A.D.
+
+### 🧠 Como funciona
+Testam a cada 30 segundos se cada porta, site, contêiner Docker e ping de roteador está respondendo normalmente. Se qualquer serviço falhar, disparam alarmes sonoros e notificações imediatas.
+
+### 💡 Exemplo Real de Uso
+Permite saber que um serviço caiu antes mesmo de você ou sua família tentarem acessá-lo.
+
+---
+
+
+## Homepage (Painel Principal da Smart TV) {% #nomad-homepage %}
+
+- **Categoria:** `utility` | **Porta:** `80` | **Tipo:** `Arsenal Docker`
+
+### 🎯 Para que serve
+A interface web mais simples e direta do mundo para criar e gerenciar conexões VPN WireGuard com leitura de QR Code.
+
+### ⚙️ O que faz
+- Perfeito para setup rápido de conexões de emergência para familiares sem complicação técnica.
+- Porta padrão mapeada: 80
+- Categoria operacional: utility
+- Integração com ecossistema N.O.M.A.D.
+
+### 🧠 Como funciona
+Roda o núcleo do WireGuard com tráfego acelerado no kernel e entrega um painel limpo onde você clica em "Novo Cliente", escaneia o QR Code na câmera do celular e a VPN está pronta para navegar.
+
+### 💡 Exemplo Real de Uso
+Criar um acesso seguro em 30 segundos no tablet do seu filho para ele acessar os desenhos no Jellyfin durante uma viagem.
+
+---
+
+
+## Home Assistant (Automação Residencial) {% #nomad-homeassistant %}
+
+- **Categoria:** `utility` | **Porta:** `80` | **Tipo:** `Arsenal Docker`
+
+### 🎯 Para que serve
+Gerenciador do seu bar pessoal, adega e catálogo de coquetéis artesanais.
+
+### ⚙️ O que faz
+- Perfeito para receber amigos e família em casa preparando drinks clássicos e autorais com receitas exatas e proporções m...
+- Porta padrão mapeada: 80
+- Categoria operacional: utility
+- Integração com ecossistema N.O.M.A.D.
+
+### 🧠 Como funciona
+Você cadastra os destilados, licores, xaropes e ingredientes que tem no armário; o sistema informa instantaneamente quais coquetéis mundiais você consegue preparar agora ou qual ingrediente barato falta comprar.
+
+### 💡 Exemplo Real de Uso
+Amigos chegam em casa no fim de semana; você abre o Bar Assistant, clica em "O que posso fazer?" e ele lista 15 drinks possíveis com os ingredientes que você tem.
+
+---
+
+
+## Traccar & OSRM (Roteamento & GPS Offline) {% #nomad-traccar %}
+
+- **Categoria:** `utility` | **Porta:** `80` | **Tipo:** `Arsenal Docker`
+
+### 🎯 Para que serve
+Sistema focado no método "envelope budgeting" (dar um destino a cada real recebido), com interface ultra-rápida construída em React e SQLite.
+
+### ⚙️ O que faz
+- Excelente para o controle tático do orçamento mensal do casal quando você quer rapidez máxima para saber quanto ainda po...
+- Porta padrão mapeada: 80
+- Categoria operacional: utility
+- Integração com ecossistema N.O.M.A.D.
+
+### 🧠 Como funciona
+Funciona inteiramente no navegador local e sincroniza alterações criptografadas ponta a ponta com seu servidor N.O.M.A.D. e com o aplicativo de celular. Mesmo sem internet na rua, você lança despesas e ele sincroniza assim que reconectar.
+
+### 💡 Exemplo Real de Uso
+Você abre o app na fila do restaurante; ele mostra na hora: *"Você ainda tem R$ 180 no envelope de Lazer deste mês"*.
+
+---
+
+
+## Vikunja (Gestão de Crise & Checklists) {% #nomad-vikunja %}
+
+- **Categoria:** `utility` | **Porta:** `80` | **Tipo:** `Arsenal Docker`
+
+### 🎯 Para que serve
+Listas táticas de tarefas, protocolos de contingência e prazos com visual moderno e sincronização rápida
+
+### ⚙️ O que faz
+- Porta canônica: 80
+- Execução autônoma e segura
+- Pronto para deploy via Portainer ou Docker Compose
+
+### 🧠 Como funciona
+Executado em contêiner Docker isolado na porta 80, persistindo dados em volumes dedicados.
+
+### 💡 Exemplo Real de Uso
+Utilizado para operações de utility com controle e soberania local no seu homelab.
+
+---
+
+
+## Linkding (Bookmarks & Arquivamento Offline) {% #nomad-linkding %}
+
+- **Categoria:** `utility` | **Porta:** `80` | **Tipo:** `Arsenal Docker`
+
+### 🎯 Para que serve
+Sistema focado no método "envelope budgeting" (dar um destino a cada real recebido), com interface ultra-rápida construída em React e SQLite.
+
+### ⚙️ O que faz
+- Excelente para o controle tático do orçamento mensal do casal quando você quer rapidez máxima para saber quanto ainda po...
+- Porta padrão mapeada: 80
+- Categoria operacional: utility
+- Integração com ecossistema N.O.M.A.D.
+
+### 🧠 Como funciona
+Funciona inteiramente no navegador local e sincroniza alterações criptografadas ponta a ponta com seu servidor N.O.M.A.D. e com o aplicativo de celular. Mesmo sem internet na rua, você lança despesas e ele sincroniza assim que reconectar.
+
+### 💡 Exemplo Real de Uso
+Você abre o app na fila do restaurante; ele mostra na hora: *"Você ainda tem R$ 180 no envelope de Lazer deste mês"*.
+
+---

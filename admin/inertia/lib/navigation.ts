@@ -54,6 +54,9 @@ export function getServiceLink(ui_location: string, customUrl?: string | null): 
         if (parsedPort === 8100) {
             return '/apps-pt/cyberchef/';
         }
+        if (parsedPort === 8200) {
+            return '/apps-pt/flatnotes/';
+        }
         if (parsedPort === 8500) {
             return `http://${window.location.hostname}:9999`;
         }

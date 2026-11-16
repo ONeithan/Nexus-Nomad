@@ -607,21 +607,34 @@ export class DockerService {
       env.get('NOMAD_STORAGE_PATH', DockerService.DEFAULT_HOST_STORAGE_ROOT),
       DockerService.DEFAULT_HOST_STORAGE_ROOT,
     ].filter((r) => r !== root)
-    if (!seededRoots.length) return
-    containerConfig.HostConfig.Binds = binds.map((b) => {
-      // bind format: "<hostSrc>:<containerDest>[:opts]" — hostSrc is a Linux abs path.
+    if (seededRoots.length) {
+      containerConfig.HostConfig.Binds = binds.map((b) => {
+        // bind format: "<hostSrc>:<containerDest>[:opts]" — hostSrc is a Linux abs path.
+        const firstColon = b.indexOf(':')
+        if (firstColon < 0) return b
+        const hostSrc = b.slice(0, firstColon)
+        const rest = b.slice(firstColon) // includes leading ':'
+        const seededRoot = seededRoots.find(
+          (r) => hostSrc === r || hostSrc.startsWith(r + '/')
+        )
+        if (seededRoot) {
+          return `${root}${hostSrc.slice(seededRoot.length)}${rest}`
+        }
+        return b
+      })
+    }
+
+    // Pre-create host bind directories with permissive permissions to prevent UID/GID permission denied crashes
+    const resolvedBinds: string[] = containerConfig?.HostConfig?.Binds || []
+    for (const b of resolvedBinds) {
       const firstColon = b.indexOf(':')
-      if (firstColon < 0) return b
+      if (firstColon < 0) continue
       const hostSrc = b.slice(0, firstColon)
-      const rest = b.slice(firstColon) // includes leading ':'
-      const seededRoot = seededRoots.find(
-        (r) => hostSrc === r || hostSrc.startsWith(r + '/')
-      )
-      if (seededRoot) {
-        return `${root}${hostSrc.slice(seededRoot.length)}${rest}`
+      if (!hostSrc.startsWith('/var/run') && !hostSrc.startsWith('/dev')) {
+        await mkdir(hostSrc, { recursive: true }).catch(() => {})
+        await chmod(hostSrc, 0o777).catch(() => {})
       }
-      return b
-    })
+    }
   }
 
   /**
@@ -859,12 +872,8 @@ export class DockerService {
         }
       }
 
-      const appEnv: string[] = []
-      if (service.service_name === SERVICE_NAMES.HOMEBOX) {
-        // Homebox >= 0.26 panics at boot without a >= 32-byte pepper (#1043). Generate once,
-        // persist, and reuse so updates/reinstalls don't invalidate issued API keys.
-        appEnv.push(`HBOX_AUTH_API_KEY_PEPPER=${await this._resolveHomeboxPepper()}`)
-      }
+      const preinstall = await this.prepareServicePreinstall(service.service_name)
+      const appEnv: string[] = [...preinstall.extraEnv]
 
       this._broadcast(
         service.service_name,
@@ -1054,6 +1063,45 @@ export class DockerService {
         await this._runPreinstallActions__MeshCoreWeb()
       } else if (serviceName === SERVICE_NAMES.HOMEBOX) {
         extraEnv.push(`HBOX_AUTH_API_KEY_PEPPER=${await this._resolveHomeboxPepper()}`)
+      } else if (serviceName === SERVICE_NAMES.FIREFLY_III) {
+        extraEnv.push('APP_KEY=base64:c29tZXJhbmRvbXN0cmluZ2ZvcmZpcmVmbHlpaWk=')
+        extraEnv.push('DEFAULT_CURRENCY=BRL')
+      } else if (serviceName === SERVICE_NAMES.AUTHENTIK) {
+        extraEnv.push('AUTHENTIK_SECRET_KEY=authentik-secret-key-32-chars-nomad')
+        extraEnv.push('AUTHENTIK_DISABLE_STARTUP_CHECKS=true')
+      } else if (serviceName === SERVICE_NAMES.OUTLINE) {
+        extraEnv.push('SECRET_KEY=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef')
+        extraEnv.push('UTILS_SECRET=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef')
+      } else if (serviceName === SERVICE_NAMES.DOCMOST) {
+        extraEnv.push('APP_SECRET=docmost-secret-key-32-chars-nomad')
+      } else if (serviceName === SERVICE_NAMES.HOARDER) {
+        extraEnv.push('NEXTAUTH_SECRET=hoarder-auth-secret-key-nomad!')
+        extraEnv.push('DATA_DIR=/data')
+      } else if (serviceName === SERVICE_NAMES.GHOSTFOLIO) {
+        extraEnv.push('JWT_SECRET_KEY=ghostfolio-jwt-secret-nomad-key!')
+        extraEnv.push('NODE_ENV=production')
+      } else if (serviceName === SERVICE_NAMES.KITCHENOWL) {
+        extraEnv.push('JWT_SECRET=kitchenowl-jwt-secret-nomad-key!')
+      } else if (serviceName === SERVICE_NAMES.SHLINK) {
+        extraEnv.push('DEFAULT_DOMAIN=localhost')
+        extraEnv.push('IS_HTTPS_ENABLED=false')
+        extraEnv.push('DB_DRIVER=sqlite')
+      }
+
+      // Pre-create host bind directories for this service if on local host
+      const svc = await Service.query().where('service_name', serviceName).first()
+      if (svc?.container_config) {
+        const config = typeof svc.container_config === 'string' ? JSON.parse(svc.container_config) : svc.container_config
+        const binds: string[] = config?.HostConfig?.Binds || []
+        for (const b of binds) {
+          const firstColon = b.indexOf(':')
+          if (firstColon < 0) continue
+          const hostSrc = b.slice(0, firstColon)
+          if (!hostSrc.startsWith('/var/run') && !hostSrc.startsWith('/dev')) {
+            await mkdir(hostSrc, { recursive: true }).catch(() => {})
+            await chmod(hostSrc, 0o777).catch(() => {})
+          }
+        }
       }
     } catch (err: any) {
       logger.warn(`[DockerService] prepareServicePreinstall warning for ${serviceName}: ${err?.message}`)

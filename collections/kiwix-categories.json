@@ -1,12 +1,12 @@
 {
-  "spec_version": "2026-11-09",
+  "spec_version": "2026-11-15-pt",
   "categories": [
     {
       "name": "Medicina & Saúde",
       "slug": "medicine",
       "icon": "IconStethoscope",
       "description": "Referências médicas, guias práticos e enciclopédias de saúde para emergências e primeiros socorros.",
-      "language": "en",
+      "language": "pt",
       "tiers": [
         {
           "name": "Essencial",
@@ -17,32 +17,32 @@
             {
               "id": "zimgit-medicine_en",
               "version": "2024-08",
-              "title": "Medical Library",
-              "description": "Field and emergency medicine books and guides",
+              "title": "Biblioteca Médica de Emergência",
+              "description": "Livros e manuais práticos de medicina de campo, socorrismo e primeiros socorros",
               "url": "https://download.kiwix.org/zim/other/zimgit-medicine_en_2024-08.zim",
               "size_mb": 67
             },
             {
               "id": "nhs.uk_en_medicines",
               "version": "2025-12",
-              "title": "NHS Medicines A to Z",
-              "description": "How medicines work, dosages, side effects, and interactions",
+              "title": "Guia de Remédios e Posologia (NHS A a Z)",
+              "description": "Mecanismo de ação de medicamentos, dosagens recomendadas, efeitos colaterais e interações",
               "url": "https://download.kiwix.org/zim/zimit/nhs.uk_en_medicines_2025-12.zim",
               "size_mb": 16
             },
             {
               "id": "fas-military-medicine_en",
               "version": "2026-10",
-              "title": "Military Medicine",
-              "description": "Tactical and field medicine manuals",
+              "title": "Medicina Militar e Tática de Combate",
+              "description": "Manuais táticos de atendimento pré-hospitalar e socorro em zonas hostis",
               "url": "https://download.kiwix.org/zim/zimit/irp.fas.org_en_military-medicine_2026-10.zim",
               "size_mb": 78
             },
             {
               "id": "wwwnc.cdc.gov_en_all",
               "version": "2024-11",
-              "title": "CDC Health Information",
-              "description": "Disease prevention, travel health, and outbreak information",
+              "title": "Manual de Saúde Pública e Doenças (CDC)",
+              "description": "Prevenção de epidemias, controle sanitário, saúde preventiva e protocolos de surto",
               "url": "https://download.kiwix.org/zim/zimit/wwwnc.cdc.gov_en_all_2024-11.zim",
               "size_mb": 170
             }
@@ -57,8 +57,8 @@
             {
               "id": "medlineplus.gov_en_all",
               "version": "2025-01",
-              "title": "MedlinePlus",
-              "description": "NIH's consumer health encyclopedia - diseases, conditions, drugs, supplements",
+              "title": "Enciclopédia de Saúde MedlinePlus (NIH)",
+              "description": "Enciclopédia completa de saúde - doenças, sintomas, tratamentos e suplementos",
               "url": "https://download.kiwix.org/zim/zimit/medlineplus.gov_en_all_2025-01.zim",
               "size_mb": 1800
             },
@@ -66,8 +66,8 @@
               "id": "openfda-drug-labels",
               "type": "dataset",
               "version": "2025-01",
-              "title": "FDA Drug Reference",
-              "description": "Offline FDA drug labels - search by drug name",
+              "title": "Referência Farmacológica e Bulas de Medicamentos (FDA)",
+              "description": "Banco de dados farmacêutico offline - busca rápida por princípio ativo e nomes comerciais",
               "url": "https://api.fda.gov/download.json",
               "size_mb": 1700
             }
@@ -82,24 +82,24 @@
             {
               "id": "wikipedia_en_medicine_maxi",
               "version": "2026-10",
-              "title": "Wikipedia Medicine",
-              "description": "Curated medical articles from Wikipedia with images",
+              "title": "Wikipédia Médica Ilustrada",
+              "description": "Artigos médicos completos curados da Wikipédia com diagramas anatômicos em alta resolução",
               "url": "https://download.kiwix.org/zim/wikipedia/wikipedia_en_medicine_maxi_2026-10.zim",
               "size_mb": 2000
             },
             {
               "id": "libretexts.org_en_med",
               "version": "2025-01",
-              "title": "LibreTexts Medicine",
-              "description": "Open-source medical textbooks and educational content",
+              "title": "Livros Didáticos de Medicina (LibreTexts)",
+              "description": "Acervo universitário de livros didáticos abertos de medicina, enfermagem e fisiologia",
               "url": "https://download.kiwix.org/zim/libretexts/libretexts.org_en_med_2025-01.zim",
               "size_mb": 1100
             },
             {
               "id": "librepathology_en_all_maxi",
               "version": "2026-09",
-              "title": "LibrePathology",
-              "description": "Pathology reference for disease identification",
+              "title": "Patologia Clínica e Diagnóstico de Doenças (LibrePathology)",
+              "description": "Atlas e referência detalhada de patologia para identificação e diagnóstico de patologias",
               "url": "https://download.kiwix.org/zim/other/librepathology_en_all_maxi_2026-09.zim",
               "size_mb": 95
             }
@@ -112,7 +112,7 @@
       "slug": "survival",
       "icon": "IconShieldCheck",
       "description": "Guias de emergência, técnicas de sobrevivência, proteção e autonomia em situações críticas.",
-      "language": "en",
+      "language": "pt",
       "tiers": [
         {
           "name": "Essencial",
@@ -123,40 +123,40 @@
             {
               "id": "zimgit-water_en",
               "version": "2024-08",
-              "title": "Water Treatment Library",
-              "description": "Collecting, filtering, and purifying drinking water",
+              "title": "Guia de Captação e Purificação de Água",
+              "description": "Métodos práticos de coleta, filtragem, decantação e purificação de água potável",
               "url": "https://download.kiwix.org/zim/other/zimgit-water_en_2024-08.zim",
               "size_mb": 20
             },
             {
               "id": "zimgit-food-preparation_en",
               "version": "2025-04",
-              "title": "Food for Preppers",
-              "description": "Recipes and techniques for preparing and preserving food",
+              "title": "Alimentação e Racionamento para Sobrevivência",
+              "description": "Receitas, preservação caseira e métodos de conservação de alimentos sem eletricidade",
               "url": "https://download.kiwix.org/zim/other/zimgit-food-preparation_en_2025-04.zim",
               "size_mb": 97
             },
             {
               "id": "zimgit-knots_en",
               "version": "2024-08",
-              "title": "A Library of Knots",
-              "description": "Illustrated guides to knots, lashings, ladders, and sutures",
+              "title": "Manual Ilustrado de Nós, Amarras e Suturas",
+              "description": "Guias passo a passo com ilustrações para nós de resgate, amarrações de abrigo e suturas",
               "url": "https://download.kiwix.org/zim/other/zimgit-knots_en_2024-08.zim",
               "size_mb": 27
             },
             {
               "id": "canadian-prepper_en_winterprepping",
               "version": "2026-08",
-              "title": "Canadian Prepper: Winter Prepping",
-              "description": "Video guides for winter survival and cold weather emergencies",
+              "title": "Sobrevivência no Frio Extremo e Inverno Rigoroso",
+              "description": "Guias em vídeo sobre isolamento térmico, aquecimento de emergência e frio intenso",
               "url": "https://download.kiwix.org/zim/videos/canadian-prepper_en_winterprepping_2026-08.zim",
               "size_mb": 1342
             },
             {
               "id": "canadian-prepper_en_bugoutroll",
               "version": "2026-07",
-              "title": "Canadian Prepper: Bug Out Roll",
-              "description": "Essential gear selection for your bug-out bag",
+              "title": "Mochila de Fuga e Equipamentos Essenciais (Bug Out Bag)",
+              "description": "Seleção, organização e priorização de equipamentos críticos para evacuação",
               "url": "https://download.kiwix.org/zim/videos/canadian-prepper_en_bugoutroll_2026-07.zim",
               "size_mb": 879
             }
@@ -171,40 +171,40 @@
             {
               "id": "www.ready.gov_en",
               "version": "2024-12",
-              "title": "Ready.gov",
-              "description": "Official US disaster planning guidance - weather, fire, evacuation plans, and emergency kits",
+              "title": "Plano Oficial de Desastres e Emergências (Ready.gov)",
+              "description": "Diretrizes de resposta a desastres climáticos, incêndios, evacuação civil e kits de socorro",
               "url": "https://download.kiwix.org/zim/zimit/www.ready.gov_en_2024-12.zim",
               "size_mb": 2429
             },
             {
               "id": "outdoors.stackexchange.com_en_all",
               "version": "2026-10",
-              "title": "The Great Outdoors Q&A",
-              "description": "Answered questions on hiking, camping, navigation, and wilderness skills",
+              "title": "Sobrevivência Selvagem e Trekking (Stack Exchange)",
+              "description": "Perguntas e respostas especializadas sobre navegação por bússola, acampamento e vida selvagem",
               "url": "https://download.kiwix.org/zim/stack_exchange/outdoors.stackexchange.com_en_all_2026-10.zim",
               "size_mb": 142
             },
             {
               "id": "ham.stackexchange.com_en_all",
               "version": "2026-10",
-              "title": "Amateur Radio Q&A",
-              "description": "Answered questions on radio equipment, antennas, licensing, and emergency communications",
+              "title": "Rádio Amadorismo e Comunicação de Crise (Q&A)",
+              "description": "Antenas, frequências de emergência, transceptores e comunicação civil sem internet",
               "url": "https://download.kiwix.org/zim/stack_exchange/ham.stackexchange.com_en_all_2026-10.zim",
               "size_mb": 75
             },
             {
               "id": "canadian-prepper_en_bugoutconcepts",
               "version": "2026-08",
-              "title": "Canadian Prepper: Bug Out Concepts",
-              "description": "Strategies and planning for emergency evacuation",
+              "title": "Estratégias e Rotas de Evacuação Tática",
+              "description": "Planejamento logístico e tático para abandono de áreas de risco e sobrevivência em trânsito",
               "url": "https://download.kiwix.org/zim/videos/canadian-prepper_en_bugoutconcepts_2026-08.zim",
               "size_mb": 2886
             },
             {
               "id": "urban-prepper_en_all",
               "version": "2026-08",
-              "title": "Urban Prepper",
-              "description": "Comprehensive urban emergency preparedness video series",
+              "title": "Preparação e Defesa para Emergências Urbanas",
+              "description": "Série completa de vídeos sobre sobrevivência em ambientes urbanos e colapso de infraestrutura",
               "url": "https://download.kiwix.org/zim/videos/urban-prepper_en_all_2026-08.zim",
               "size_mb": 2245
             }
@@ -219,40 +219,40 @@
             {
               "id": "canadian-prepper_en_preppingfood",
               "version": "2026-07",
-              "title": "Canadian Prepper: Prepping Food",
-              "description": "Long-term food storage and survival meal preparation",
+              "title": "Armazenamento Alimentar de Longo Prazo",
+              "description": "Estocagem para anos de subsistência, selamento a vácuo e conservação em baldes de grau alimentar",
               "url": "https://download.kiwix.org/zim/videos/canadian-prepper_en_preppingfood_2026-07.zim",
               "size_mb": 2160
             },
             {
               "id": "zimgit-post-disaster_en",
               "version": "2024-05",
-              "title": "Post Disaster Resource Library",
-              "description": "Shelter, sanitation, salvage, and recovery guidance for the aftermath of a disaster",
+              "title": "Recuperação, Abrigo e Saneamento Pós-Desastre",
+              "description": "Construção de abrigos de emergência, fossas, descarte sanitário e recuperação de estruturas",
               "url": "https://download.kiwix.org/zim/other/zimgit-post-disaster_en_2024-05.zim",
               "size_mb": 644
             },
             {
               "id": "100r.co_en_all",
               "version": "2026-06",
-              "title": "Hundred Rabbits",
-              "description": "Field notes on low-tech living - solar power, water, food, and repair from a decade off-grid",
+              "title": "Vida Autossuficiente e Energia Solar Off-Grid (Hundred Rabbits)",
+              "description": "Relatórios de 10 anos vivendo fora da rede: energia solar, gestão de água e computação de baixo consumo",
               "url": "https://download.kiwix.org/zim/zimit/100r.co_en_all_2026-06.zim",
               "size_mb": 172
             },
             {
               "id": "gutenberg_en_lcc-u",
               "version": "2026-03",
-              "title": "Project Gutenberg: Military Science",
-              "description": "Classic military strategy, tactics, and field manuals",
+              "title": "Estratégia e Ciência Militar Clássica (Gutenberg)",
+              "description": "Acervo histórico de táticas, logística militar e manuais clássicos de fortificação",
               "url": "https://download.kiwix.org/zim/gutenberg/gutenberg_en_lcc-u_2026-03.zim",
               "size_mb": 1200
             },
             {
               "id": "cd3wdproject.org_en_all",
               "version": "2025-11",
-              "title": "CD3WD: Appropriate Technology Library",
-              "description": "Practical guides to food production, water and sanitation, construction, and village-scale manufacturing without industrial supply chains",
+              "title": "Tecnologia Apropriada e Engenharia de Aldeia (CD3WD)",
+              "description": "Manuais práticos para fabricação local de ferramentas, bombas manuais de água e energia sem fábricas industriais",
               "url": "https://download.kiwix.org/zim/zimit/cd3wdproject.org_en_all_2025-11.zim",
               "size_mb": 581
             }
@@ -265,7 +265,7 @@
       "slug": "education",
       "icon": "IconSchool",
       "description": "Enciclopédias gerais, livros didáticos, tutoriais práticos e material educativo abrangente.",
-      "language": "en",
+      "language": "pt",
       "tiers": [
         {
           "name": "Essencial",
@@ -276,8 +276,8 @@
             {
               "id": "wikibooks_en_all_nopic",
               "version": "2026-10",
-              "title": "Wikibooks",
-              "description": "Open-content textbooks covering math, science, computing, and more",
+              "title": "Livros Didáticos Livres (Wikibooks)",
+              "description": "Manuais educacionais abertos cobrindo ciências, matemática, idiomas e computação",
               "url": "https://download.kiwix.org/zim/wikibooks/wikibooks_en_all_nopic_2026-10.zim",
               "size_mb": 3100
             }
@@ -292,48 +292,48 @@
             {
               "id": "ted_mul_ted-ed",
               "version": "2026-09",
-              "title": "TED-Ed",
-              "description": "Educational video lessons on science, history, literature, and more",
+              "title": "Aulas e Animações Educativas (TED-Ed)",
+              "description": "Lições em vídeo legendadas cobrindo história, ciências, biologia e literatura",
               "url": "https://download.kiwix.org/zim/ted/ted_mul_ted-ed_2026-09.zim",
               "size_mb": 6381
             },
             {
               "id": "wikiversity_en_all_maxi",
               "version": "2026-11",
-              "title": "Wikiversity",
-              "description": "Tutorials, courses, and learning materials for all levels",
+              "title": "Universidade Aberta (Wikiversity)",
+              "description": "Cursos completos, ensaios acadêmicos e projetos de pesquisa abertos para todos os níveis",
               "url": "https://download.kiwix.org/zim/wikiversity/wikiversity_en_all_maxi_2026-11.zim",
               "size_mb": 2370
             },
             {
               "id": "libretexts.org_en_math",
               "version": "2026-01",
-              "title": "LibreTexts Mathematics",
-              "description": "Open-source math textbooks from algebra to calculus",
+              "title": "Matemática e Cálculo Diferencial (LibreTexts)",
+              "description": "Livros didáticos de matemática desde álgebra básica e geometria até cálculo avançado",
               "url": "https://download.kiwix.org/zim/libretexts/libretexts.org_en_math_2026-01.zim",
               "size_mb": 792
             },
             {
               "id": "libretexts.org_en_phys",
               "version": "2026-01",
-              "title": "LibreTexts Physics",
-              "description": "Physics courses and textbooks",
+              "title": "Física Clássica e Moderna (LibreTexts)",
+              "description": "Manuais e cursos universitários de física mecânica, termodinâmica, eletromagnetismo e óptica",
               "url": "https://download.kiwix.org/zim/libretexts/libretexts.org_en_phys_2026-01.zim",
               "size_mb": 534
             },
             {
               "id": "libretexts.org_en_chem",
               "version": "2025-01",
-              "title": "LibreTexts Chemistry",
-              "description": "Chemistry courses and textbooks",
+              "title": "Química Geral e Orgânica (LibreTexts)",
+              "description": "Livros de química teórica, laboratorial, físico-química e reações orgânicas",
               "url": "https://download.kiwix.org/zim/libretexts/libretexts.org_en_chem_2025-01.zim",
               "size_mb": 2180
             },
             {
               "id": "libretexts.org_en_bio",
               "version": "2025-01",
-              "title": "LibreTexts Biology",
-              "description": "Biology courses and textbooks",
+              "title": "Biologia Geral e Genética (LibreTexts)",
+              "description": "Cursos completos de biologia celular, ecologia, evolução, botânica e zoologia",
               "url": "https://download.kiwix.org/zim/libretexts/libretexts.org_en_bio_2025-01.zim",
               "size_mb": 2240
             }
@@ -348,48 +348,48 @@
             {
               "id": "wikibooks_en_all_maxi",
               "version": "2026-10",
-              "title": "Wikibooks (With Images)",
-              "description": "Open textbooks with full illustrations and diagrams",
+              "title": "Livros Didáticos Ilustrados (Wikibooks Maxi)",
+              "description": "Acervo didático completo com todas as imagens, diagramas e esquemas visuais",
               "url": "https://download.kiwix.org/zim/wikibooks/wikibooks_en_all_maxi_2026-10.zim",
               "size_mb": 5400
             },
             {
               "id": "ted_mul_ted-conference",
               "version": "2026-09",
-              "title": "TED Conference",
-              "description": "Main TED conference talks on ideas worth spreading",
+              "title": "Conferências Globais TED (Arquivo de Vídeos)",
+              "description": "Palestras inspiradoras sobre tecnologia, inovação, sociedade e desenvolvimento humano",
               "url": "https://download.kiwix.org/zim/ted/ted_mul_ted-conference_2026-09.zim",
               "size_mb": 18136
             },
             {
               "id": "libretexts.org_en_human",
               "version": "2025-01",
-              "title": "LibreTexts Humanities",
-              "description": "Literature, philosophy, history, and social sciences",
+              "title": "Ciências Humanas, Filosofia e História (LibreTexts)",
+              "description": "Literatura clássica, história universal, ciências sociais e fundamentos filosóficos",
               "url": "https://download.kiwix.org/zim/libretexts/libretexts.org_en_human_2025-01.zim",
               "size_mb": 3730
             },
             {
               "id": "libretexts.org_en_geo",
               "version": "2026-01",
-              "title": "LibreTexts Geosciences",
-              "description": "Earth science, geology, and environmental studies",
+              "title": "Geociências, Climatologia e Geologia (LibreTexts)",
+              "description": "Estudos sobre a Terra, formação mineral, placas tectônicas, recursos hídricos e meteorologia",
               "url": "https://download.kiwix.org/zim/libretexts/libretexts.org_en_geo_2026-01.zim",
               "size_mb": 1127
             },
             {
               "id": "libretexts.org_en_eng",
               "version": "2025-01",
-              "title": "LibreTexts Engineering",
-              "description": "Engineering courses and technical references",
+              "title": "Engenharia e Estruturas Mecânicas (LibreTexts)",
+              "description": "Manuais técnicos de engenharia civil, elétrica, mecânica dos materiais e projeto",
               "url": "https://download.kiwix.org/zim/libretexts/libretexts.org_en_eng_2025-01.zim",
               "size_mb": 678
             },
             {
               "id": "libretexts.org_en_biz",
               "version": "2026-01",
-              "title": "LibreTexts Business",
-              "description": "Business, economics, and management textbooks",
+              "title": "Administração, Finanças e Gestão Prática (LibreTexts)",
+              "description": "Princípios de gestão econômica, contabilidade básica, planejamento e administração",
               "url": "https://download.kiwix.org/zim/libretexts/libretexts.org_en_biz_2026-01.zim",
               "size_mb": 801
             }
@@ -402,7 +402,7 @@
       "slug": "diy",
       "icon": "IconTool",
       "description": "Manuais de conserto, melhorias caseiras, marcenaria, eletrônica e manutenção veicular.",
-      "language": "en",
+      "language": "pt",
       "tiers": [
         {
           "name": "Essencial",
@@ -413,16 +413,16 @@
             {
               "id": "woodworking.stackexchange.com_en_all",
               "version": "2026-10",
-              "title": "Woodworking Q&A",
-              "description": "Stack Exchange Q&A for carpentry, joinery, and woodcraft",
+              "title": "Marcenaria e Carpintaria Prática (Stack Exchange)",
+              "description": "Guia de cortes, junções, técnicas de marcenaria, ferramentas manuais e acabamento em madeira",
               "url": "https://download.kiwix.org/zim/stack_exchange/woodworking.stackexchange.com_en_all_2026-10.zim",
               "size_mb": 99
             },
             {
               "id": "mechanics.stackexchange.com_en_all",
               "version": "2026-10",
-              "title": "Motor Vehicle Maintenance Q&A",
-              "description": "Stack Exchange Q&A for car and motorcycle repair",
+              "title": "Mecânica Automotiva e Conserto de Veículos (Q&A)",
+              "description": "Diagnóstico de motores a combustão, parte elétrica de carros, freios e suspensão",
               "url": "https://download.kiwix.org/zim/stack_exchange/mechanics.stackexchange.com_en_all_2026-10.zim",
               "size_mb": 321
             }
@@ -437,8 +437,8 @@
             {
               "id": "diy.stackexchange.com_en_all",
               "version": "2026-10",
-              "title": "DIY & Home Improvement Q&A",
-              "description": "Stack Exchange Q&A for home repairs, electrical, plumbing, and construction",
+              "title": "Reformas, Hidráulica e Elétrica Residencial (Q&A)",
+              "description": "Conserto de fiação, tubulações de água, alvenaria, pisos e isolamento doméstico",
               "url": "https://download.kiwix.org/zim/stack_exchange/diy.stackexchange.com_en_all_2026-10.zim",
               "size_mb": 1900
             }
@@ -453,8 +453,8 @@
             {
               "id": "ifixit_en_all",
               "version": "2025-12",
-              "title": "iFixit Repair Guides",
-              "description": "Step-by-step repair guides for electronics, appliances, and vehicles",
+              "title": "Manuais Oficiais de Reparo iFixit",
+              "description": "Guias ilustrados passo a passo para desmontar e consertar celulares, computadores, eletrodomésticos e veículos",
               "url": "https://download.kiwix.org/zim/ifixit/ifixit_en_all_2025-12.zim",
               "size_mb": 3380
             }
@@ -467,7 +467,7 @@
       "slug": "agriculture",
       "icon": "IconPlant",
       "description": "Cultivo próprio, conservação de alimentos, técnicas de culinária e produção agrícola.",
-      "language": "en",
+      "language": "pt",
       "tiers": [
         {
           "name": "Essencial",
@@ -478,16 +478,16 @@
             {
               "id": "foss.cooking_en_all",
               "version": "2026-11",
-              "title": "FOSS Cooking",
-              "description": "Quick and easy cooking guides and recipes",
+              "title": "Culinária Básica e Nutritiva (FOSS Cooking)",
+              "description": "Guia de receitas práticas, simples e econômicas com ingredientes duráveis",
               "url": "https://download.kiwix.org/zim/zimit/foss.cooking_en_all_2026-11.zim",
               "size_mb": 24
             },
             {
               "id": "based.cooking_en_all",
               "version": "2026-08",
-              "title": "Based.Cooking",
-              "description": "Simple, practical recipes from the community",
+              "title": "Receitas Sem Firula (Based.Cooking)",
+              "description": "Preparo rápido de alimentos sem anúncios, focado em nutrição essencial e simplicidade",
               "url": "https://download.kiwix.org/zim/zimit/based.cooking_en_all_2026-08.zim",
               "size_mb": 16
             }
@@ -502,24 +502,24 @@
             {
               "id": "gardening.stackexchange.com_en_all",
               "version": "2026-10",
-              "title": "Gardening Q&A",
-              "description": "Stack Exchange Q&A for growing your own food, plant care, and landscaping",
+              "title": "Hortas, Cultivo e Jardinagem Produtiva (Q&A)",
+              "description": "Perguntas e respostas sobre plantio em canteiros, adubagem orgânica, controle de pragas e colheita",
               "url": "https://download.kiwix.org/zim/stack_exchange/gardening.stackexchange.com_en_all_2026-10.zim",
               "size_mb": 923
             },
             {
               "id": "cooking.stackexchange.com_en_all",
               "version": "2026-10",
-              "title": "Cooking Q&A",
-              "description": "Stack Exchange Q&A for cooking techniques, food safety, and recipes",
+              "title": "Técnicas Culinárias e Segurança dos Alimentos (Q&A)",
+              "description": "Prevenção de botulismo, fermentação, esterilização de conservas e manipulação segura de comida",
               "url": "https://download.kiwix.org/zim/stack_exchange/cooking.stackexchange.com_en_all_2026-10.zim",
               "size_mb": 236
             },
             {
               "id": "zimgit-food-preparation_en",
               "version": "2025-04",
-              "title": "Food for Preppers",
-              "description": "Recipes and techniques for food preservation and long-term storage",
+              "title": "Conservas e Secagem de Alimentos de Longa Duração",
+              "description": "Técnicas de desidratação, salgamento e preparação de alimentos para guarda prolongada",
               "url": "https://download.kiwix.org/zim/other/zimgit-food-preparation_en_2025-04.zim",
               "size_mb": 98
             }
@@ -534,16 +534,16 @@
             {
               "id": "lrnselfreliance_en_all",
               "version": "2026-06",
-              "title": "Learning Self-Reliance: Homesteading",
-              "description": "Beekeeping, animal husbandry, and sustainable living practices",
+              "title": "Vida no Campo e Autossuficiência Rural (Homesteading)",
+              "description": "Apicultura, criação de animais de pequeno porte, queijos caseiros e manejo sustentável da terra",
               "url": "https://download.kiwix.org/zim/videos/lrnselfreliance_en_all_2026-06.zim",
               "size_mb": 3790
             },
             {
               "id": "gutenberg_en_lcc-s",
               "version": "2026-03",
-              "title": "Project Gutenberg: Agriculture",
-              "description": "Classic texts on farming, animal husbandry, plant cultivation, and food preservation",
+              "title": "Tratados Históricos de Agropecuária (Gutenberg)",
+              "description": "Compêndio clássico de agricultura tradicional, rotação de culturas, arados e medicina veterinária",
               "url": "https://download.kiwix.org/zim/gutenberg/gutenberg_en_lcc-s_2026-03.zim",
               "size_mb": 4300
             }
@@ -556,7 +556,7 @@
       "slug": "computing",
       "icon": "IconCode",
       "description": "Tutoriais de programação, eletrônica, redes e documentação técnica para desenvolvedores.",
-      "language": "en",
+      "language": "pt",
       "tiers": [
         {
           "name": "Essencial",
@@ -567,40 +567,40 @@
             {
               "id": "freecodecamp_en_all",
               "version": "2026-08",
-              "title": "freeCodeCamp",
-              "description": "Interactive programming tutorials - JavaScript, algorithms, and data structures",
+              "title": "Cursos de Programação Web (freeCodeCamp)",
+              "description": "Tutoriais completos de desenvolvimento web, algoritmos, estruturas de dados e JavaScript",
               "url": "https://download.kiwix.org/zim/freecodecamp/freecodecamp_en_all_2026-08.zim",
               "size_mb": 8
             },
             {
               "id": "devdocs_en_python",
               "version": "2026-08",
-              "title": "Python Documentation",
-              "description": "Complete Python language reference and tutorials",
+              "title": "Documentação Oficial do Python",
+              "description": "Manual completo da linguagem Python, biblioteca padrão e exemplos de código",
               "url": "https://download.kiwix.org/zim/devdocs/devdocs_en_python_2026-08.zim",
               "size_mb": 4
             },
             {
               "id": "devdocs_en_javascript",
               "version": "2026-07",
-              "title": "JavaScript Documentation",
-              "description": "MDN JavaScript reference and guides",
+              "title": "Documentação Oficial de JavaScript (MDN)",
+              "description": "Referência completa de JavaScript, sintaxe moderna, funções e objetos globais",
               "url": "https://download.kiwix.org/zim/devdocs/devdocs_en_javascript_2026-07.zim",
               "size_mb": 3
             },
             {
               "id": "devdocs_en_html",
               "version": "2026-07",
-              "title": "HTML Documentation",
-              "description": "MDN HTML elements and attributes reference",
+              "title": "Manual de HTML5 (MDN)",
+              "description": "Tags, formulários, semântica web e elementos estruturais do HTML5",
               "url": "https://download.kiwix.org/zim/devdocs/devdocs_en_html_2026-07.zim",
               "size_mb": 2
             },
             {
               "id": "devdocs_en_css",
               "version": "2026-07",
-              "title": "CSS Documentation",
-              "description": "MDN CSS properties and selectors reference",
+              "title": "Manual de CSS3 e Estilos (MDN)",
+              "description": "Propriedades de layout, Flexbox, Grid, animações e folhas de estilo",
               "url": "https://download.kiwix.org/zim/devdocs/devdocs_en_css_2026-07.zim",
               "size_mb": 5
             }
@@ -615,40 +615,40 @@
             {
               "id": "arduino.stackexchange.com_en_all",
               "version": "2026-10",
-              "title": "Arduino Q&A",
-              "description": "Stack Exchange Q&A for Arduino microcontroller projects",
+              "title": "Automação e Microcontroladores Arduino (Q&A)",
+              "description": "Soluções de programação para Arduino, comunicação serial, sensores e circuitos de controle",
               "url": "https://download.kiwix.org/zim/stack_exchange/arduino.stackexchange.com_en_all_2026-10.zim",
               "size_mb": 247
             },
             {
               "id": "raspberrypi.stackexchange.com_en_all",
               "version": "2026-10",
-              "title": "Raspberry Pi Q&A",
-              "description": "Stack Exchange Q&A for Raspberry Pi projects and troubleshooting",
+              "title": "Sistemas Embarcados e Raspberry Pi (Q&A)",
+              "description": "Projetos práticos, pinos GPIO, Linux embarcado e automação com Raspberry Pi",
               "url": "https://download.kiwix.org/zim/stack_exchange/raspberrypi.stackexchange.com_en_all_2026-10.zim",
               "size_mb": 285
             },
             {
               "id": "devdocs_en_node",
               "version": "2026-08",
-              "title": "Node.js Documentation",
-              "description": "Node.js API reference and guides",
+              "title": "Documentação Oficial do Node.js",
+              "description": "APIs nativas de rede, sistema de arquivos, streams, buffers e servidores HTTP",
               "url": "https://download.kiwix.org/zim/devdocs/devdocs_en_node_2026-08.zim",
               "size_mb": 1
             },
             {
               "id": "devdocs_en_react",
               "version": "2026-02",
-              "title": "React Documentation",
-              "description": "React library reference and tutorials",
+              "title": "Documentação Oficial do React",
+              "description": "Guia de componentes, hooks modernos, ciclo de vida e estado reativo",
               "url": "https://download.kiwix.org/zim/devdocs/devdocs_en_react_2026-02.zim",
               "size_mb": 3
             },
             {
               "id": "devdocs_en_git",
               "version": "2026-07",
-              "title": "Git Documentation",
-              "description": "Git version control reference",
+              "title": "Manual de Controle de Versão Git",
+              "description": "Comandos de branch, commits, merges, histórico e gerenciamento de repositórios",
               "url": "https://download.kiwix.org/zim/devdocs/devdocs_en_git_2026-07.zim",
               "size_mb": 2
             }
@@ -663,32 +663,32 @@
             {
               "id": "electronics.stackexchange.com_en_all",
               "version": "2026-10",
-              "title": "Electronics Q&A",
-              "description": "Stack Exchange Q&A for circuit design, components, and electrical engineering",
+              "title": "Engenharia Eletrônica e Projetos de Circuitos (Q&A)",
+              "description": "Esquemáticos, transistores, semicondutores, fontes de alimentação e análise de sinais",
               "url": "https://download.kiwix.org/zim/stack_exchange/electronics.stackexchange.com_en_all_2026-10.zim",
               "size_mb": 3800
             },
             {
               "id": "robotics.stackexchange.com_en_all",
               "version": "2026-10",
-              "title": "Robotics Q&A",
-              "description": "Stack Exchange Q&A for robotics projects and automation",
+              "title": "Robótica, Sensores e Atuadores (Q&A)",
+              "description": "Cinemática, servomotores, controle PID, algoritmos de navegação e visão computacional",
               "url": "https://download.kiwix.org/zim/stack_exchange/robotics.stackexchange.com_en_all_2026-10.zim",
               "size_mb": 233
             },
             {
               "id": "devdocs_en_docker",
               "version": "2026-07",
-              "title": "Docker Documentation",
-              "description": "Docker container reference and guides",
+              "title": "Manual de Contêineres Docker",
+              "description": "Comandos CLI do Docker, Dockerfile, Docker Compose, redes e volumes virtuais",
               "url": "https://download.kiwix.org/zim/devdocs/devdocs_en_docker_2026-07.zim",
               "size_mb": 2
             },
             {
               "id": "devdocs_en_bash",
               "version": "2026-10",
-              "title": "Linux Documentation",
-              "description": "Linux command reference and system administration",
+              "title": "Manual do Sistema Operacional Linux e Terminal Bash",
+              "description": "Comandos de administração do sistema, scripts de automação Bash e permissões",
               "url": "https://download.kiwix.org/zim/devdocs/devdocs_en_bash_2026-10.zim",
               "size_mb": 1
             }

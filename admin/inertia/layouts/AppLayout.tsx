@@ -7,8 +7,9 @@ import useServiceInstalledStatus from '~/hooks/useServiceInstalledStatus'
 import { useThemeContext } from '~/providers/ThemeProvider'
 import { SERVICE_NAMES } from '../../constants/service_names'
 import { Link, router } from '@inertiajs/react'
-import { IconArrowLeft, IconHome, IconLock, IconServer } from '@tabler/icons-react'
+import { IconArrowLeft, IconHome, IconLock, IconServer, IconBook } from '@tabler/icons-react'
 import classNames from 'classnames'
+import AppCatalogModal from '~/components/AppCatalogModal'
 
 export default function AppLayout({
   children,
@@ -23,6 +24,7 @@ export default function AppLayout({
   compact?: boolean
 }) {
   const [isChatOpen, setIsChatOpen] = useState(false)
+  const [isCatalogOpen, setIsCatalogOpen] = useState(false)
   const aiAssistantInstalled = useServiceInstalledStatus(SERVICE_NAMES.OLLAMA)
   const { effectiveTacticalHome } = useThemeContext()
   const isHome =
@@ -86,6 +88,15 @@ export default function AppLayout({
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setIsCatalogOpen(true)}
+              title="Abrir Catálogo Completo & Guia Operacional das 114 Aplicações"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-desert-orange/40 bg-desert-orange/10 hover:bg-desert-orange hover:text-white text-xs sm:text-sm font-semibold text-desert-orange transition-colors cursor-pointer"
+            >
+              <IconBook size={16} />
+              <span>Catálogo &amp; Guias</span>
+            </button>
             <Link
               href="/settings/system#discos"
               title="Ver discos físicos conectados, partições e armazenamento do servidor"
@@ -143,6 +154,11 @@ export default function AppLayout({
             <ChatModal open={isChatOpen} onClose={() => setIsChatOpen(false)} />
           </>
         )}
+
+        <AppCatalogModal
+          isOpen={isCatalogOpen}
+          onClose={() => setIsCatalogOpen(false)}
+        />
       </div>
     </TacticalBootGate>
   )

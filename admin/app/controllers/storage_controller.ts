@@ -24,17 +24,19 @@ export default class StorageController {
 
   async move({ request, response }: HttpContext) {
     try {
-      const { sourcePath, destDir, createSymlink = true } = request.only([
+      const { sourcePath, destDir, targetDiskPath, createSymlink = true } = request.only([
         'sourcePath',
         'destDir',
+        'targetDiskPath',
         'createSymlink',
       ])
-      if (!sourcePath || !destDir) {
+      const destination = destDir || targetDiskPath
+      if (!sourcePath || !destination) {
         return response.badRequest({ error: 'Informe origem e destino.' })
       }
       const result = await this.storageManager.moveContent(
         sourcePath,
-        destDir,
+        destination,
         Boolean(createSymlink)
       )
       return response.ok(result)

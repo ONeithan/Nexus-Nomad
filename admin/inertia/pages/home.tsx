@@ -19,9 +19,15 @@ import {
   IconEye,
   IconEyeOff,
   IconX,
+  IconStar,
+  IconStarFilled,
+  IconLayoutGrid,
+  IconLayoutList,
+  IconBook,
 } from '@tabler/icons-react'
 import { Head, Link, router, usePage } from '@inertiajs/react'
 import AppLayout from '~/layouts/AppLayout'
+import AppCatalogModal from '~/components/AppCatalogModal'
 import { getServiceLink } from '~/lib/navigation'
 import { ServiceSlim } from '../../types/services'
 import DynamicIcon, { DynamicIconName } from '~/components/DynamicIcon'
@@ -140,6 +146,7 @@ const SYSTEM_ITEMS = [
 interface DashboardItem {
   label: string
   categoryTag?: string
+  category?: string
   portLabel?: string
   serviceName?: string
   to: string
@@ -151,6 +158,33 @@ interface DashboardItem {
   poweredBy: string | null
   /** Set only for user-added link tiles, which render differently and can be edited. */
   linkTile?: ServiceSlim
+}
+
+const HOME_CATEGORIES = [
+  { id: 'all', label: 'Todos' },
+  { id: 'favorites', label: '⭐ Fixados' },
+  { id: 'ai', label: 'IA & Cérebro' },
+  { id: 'home-family', label: 'Casa & Família' },
+  { id: 'finance', label: 'Finanças' },
+  { id: 'security', label: 'Segurança' },
+  { id: 'networking', label: 'Rede & Rádio' },
+  { id: 'media', label: 'Mídia & Som' },
+  { id: 'workshop', label: 'Oficina' },
+  { id: 'productivity', label: 'Produtividade' },
+  { id: 'utility', label: 'Utilitários' },
+]
+
+const CATEGORY_TAG_MAP: Record<string, string> = {
+  ai: 'INTELIGÊNCIA ARTIFICIAL',
+  'home-family': 'CASA & FAMÍLIA',
+  finance: 'FINANÇAS & NEGÓCIOS',
+  security: 'SEGURANÇA & DEFESA',
+  networking: 'REDE & COMUNICAÇÃO',
+  media: 'MÍDIA & ENTRETENIMENTO',
+  workshop: 'OFICINA & ENGENHARIA',
+  productivity: 'PRODUTIVIDADE & DADOS',
+  utility: 'UTILITÁRIOS & SISTEMA',
+  education: 'EDUCAÇÃO & ACERVO',
 }
 
 export default function Home(props: {
@@ -166,7 +200,61 @@ export default function Home(props: {
   const { aiAssistantName } = usePage<{ aiAssistantName: string }>().props
   const { effectiveTacticalHome, currentThemeDef } = useThemeContext()
 
+  const [searchQuery, setSearchQuery] = useState('')
+  const [activeCategory, setActiveCategory] = useState('all')
+  const [densityMode, setDensityMode] = useState<'cards' | 'compact'>(() => {
+    if (typeof window === 'undefined') return 'cards'
+    try {
+      return (localStorage.getItem('nomad:home_density_mode') as any) || 'cards'
+    } catch {
+      return 'cards'
+    }
+  })
+  const [pinnedServices, setPinnedServices] = useState<string[]>(() => {
+    if (typeof window === 'undefined') return []
+    try {
+      const raw = localStorage.getItem('nomad:home_pinned_services')
+      return raw ? JSON.parse(raw) : []
+    } catch {
+      return []
+    }
+  })
+
+  const saveDensityMode = (mode: 'cards' | 'compact') => {
+    setDensityMode(mode)
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('nomad:home_density_mode', mode)
+      } catch {
+        // ignore
+      }
+    }
+  }
+
+  const togglePin = (key: string, e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    const next = pinnedServices.includes(key)
+      ? pinnedServices.filter((k) => k !== key)
+      : [...pinnedServices, key]
+    setPinnedServices(next)
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('nomad:home_pinned_services', JSON.stringify(next))
+      } catch {
+        // ignore
+      }
+    }
+  }
+
   const [linkModalOpen, setLinkModalOpen] = useState(false)
+  const [catalogModalOpen, setCatalogModalOpen] = useState(false)
+  const [catalogAppId, setCatalogAppId] = useState<string | null>(null)
+
+  const openAppCatalog = (appId?: string) => {
+    setCatalogAppId(appId || null)
+    setCatalogModalOpen(true)
+  }
   const [editingTile, setEditingTile] = useState<ServiceSlim | null>(null)
   const [pendingDelete, setPendingDelete] = useState<string | null>(null)
   const [linkError, setLinkError] = useState<string | null>(null)
@@ -248,8 +336,7 @@ export default function Home(props: {
       (service) =>
         service.installed &&
         (service.ui_location || service.custom_url) &&
-        !service.is_link_tile &&
-        service.node !== 'portainer'
+        !service.is_link_tile
     )
     .forEach((service) => {
       const resolvedAiName =
@@ -263,14 +350,19 @@ export default function Home(props: {
 
       const isOllama = service.service_name === SERVICE_NAMES.OLLAMA
       const isKiwix = service.service_name === SERVICE_NAMES.KIWIX
+      const catTag =
+        service.category && CATEGORY_TAG_MAP[service.category]
+          ? CATEGORY_TAG_MAP[service.category]
+          : isKiwix
+            ? 'ENCICLOPÉDIA & ACERVO ZIM'
+            : isOllama
+              ? 'INTELIGÊNCIA ARTIFICIAL (RAG)'
+              : 'MÓDULO OPERACIONAL'
 
       items.push({
         label: isOllama ? resolvedAiName : service.friendly_name || service.service_name,
-        categoryTag: isKiwix
-          ? 'ENCICLOPÉDIA & ACERVO ZIM'
-          : isOllama
-            ? 'INTELIGÊNCIA ARTIFICIAL (RAG)'
-            : 'MÓDULO OPERACIONAL',
+        categoryTag: catTag,
+        category: service.category || (isOllama ? 'ai' : isKiwix ? 'education' : 'utility'),
         portLabel: service.ui_location
           ? `${service.ui_location} // ${service.service_name.toUpperCase()}`
           : service.service_name.toUpperCase(),
@@ -296,11 +388,12 @@ export default function Home(props: {
 
   // User-added link tiles: shortcuts to things NOMAD does not manage.
   props.system.services
-    .filter((service) => service.is_link_tile && service.custom_url && service.node !== 'portainer')
+    .filter((service) => service.is_link_tile && service.custom_url)
     .forEach((service) => {
       items.push({
         label: service.friendly_name || service.service_name,
         categoryTag: 'ATALHO DE REDE LAN',
+        category: 'utility',
         portLabel: 'EXTERNO // LAN',
         serviceName: service.service_name,
         to: getServiceLink('', service.custom_url),
@@ -648,126 +741,433 @@ export default function Home(props: {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {(() => {
-                const ordered = [...items].sort((a, b) => {
-                  const idxA = divisionsPrefs.order.indexOf(a.label)
-                  const idxB = divisionsPrefs.order.indexOf(b.label)
-                  if (idxA === -1 && idxB === -1) return 0
-                  if (idxA === -1) return 1
-                  if (idxB === -1) return -1
-                  return idxA - idxB
-                })
-                const visible = ordered.filter((it) => !divisionsPrefs.hidden.includes(it.label))
-                return visible
-              })().map((item, idx) => {
-                const divisionNum = String(idx + 1).padStart(2, '0')
-                const isEasySetup = item.to === '/easy-setup'
-                const shouldHighlight = isEasySetup && shouldHighlightEasySetup
-                const isKiwix = item.serviceName === SERVICE_NAMES.KIWIX
-                const isLinkTile = Boolean(item.linkTile)
-                const confirming =
-                  isLinkTile && pendingDelete === item.linkTile!.service_name
+            {/* BARRA TÁTICA DE BUSCA, FILTROS & DENSIDADE */}
+            <div className="space-y-3 mb-2">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+                {/* Campo de Busca Rápida */}
+                <div className="relative flex-1">
+                  <IconSearch size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Buscar aplicação ou serviço por nome, porta ou função..."
+                    className="w-full bg-surface-secondary border border-border-default rounded px-9 py-2 text-xs font-mono-mil text-text-primary placeholder:text-text-muted focus:outline-none focus:border-desert-tan"
+                  />
+                  {searchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => setSearchQuery('')}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-primary p-0.5 cursor-pointer"
+                    >
+                      <IconX size={14} />
+                    </button>
+                  )}
+                </div>
 
-                const cardInner = (
-                  <div className="chamfer-box nomad-interactive-card relative p-5 h-full flex flex-col justify-between transition-all hover:border-desert-tan group">
-                    <div className="rivet absolute top-2.5 left-2.5" />
-                    <div className="rivet absolute top-2.5 right-2.5" />
-                    <div className="rivet absolute bottom-2.5 left-2.5" />
-                    <div className="rivet absolute bottom-2.5 right-2.5" />
+                {/* Alternador de Densidade (Cards vs Compacto) */}
+                <div className="flex items-center gap-1 bg-surface-secondary border border-border-default p-1 rounded self-end sm:self-auto shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => saveDensityMode('cards')}
+                    title="Modo Grade Detalhada"
+                    className={`px-2.5 py-1 rounded text-xs font-mono-mil flex items-center gap-1.5 transition-colors cursor-pointer ${
+                      densityMode === 'cards'
+                        ? 'bg-desert-green text-white font-bold'
+                        : 'text-text-muted hover:text-text-primary'
+                    }`}
+                  >
+                    <IconLayoutGrid size={14} />
+                    <span>CARDS</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => saveDensityMode('compact')}
+                    title="Modo Launcher Compacto (Alta Densidade)"
+                    className={`px-2.5 py-1 rounded text-xs font-mono-mil flex items-center gap-1.5 transition-colors cursor-pointer ${
+                      densityMode === 'compact'
+                        ? 'bg-desert-green text-white font-bold'
+                        : 'text-text-muted hover:text-text-primary'
+                    }`}
+                  >
+                    <IconLayoutList size={14} />
+                    <span>COMPACTO</span>
+                  </button>
+                </div>
 
-                    <div>
-                      {/* Top Division Metadata Row */}
-                      <div className="flex items-center justify-between gap-2 mb-3 pb-2 border-b border-border-default px-1">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <span className="px-2 py-0.5 bg-surface-secondary border border-desert-tan/40 text-desert-tan text-[10px] font-mono-mil font-bold shrink-0">
-                            {divisionNum} // DIVISÃO
-                          </span>
-                          <span className="text-[11px] font-mono-mil font-bold uppercase tracking-wider text-desert-olive truncate">
-                            {item.categoryTag || 'MÓDULO NOMAD'}
-                          </span>
-                        </div>
-                        <span className="text-[10px] font-mono-mil text-text-muted shrink-0">
-                          {item.portLabel || item.to.toUpperCase()}
-                        </span>
-                      </div>
+                {/* Botão de Acesso Direto ao Catálogo */}
+                <button
+                  type="button"
+                  onClick={() => openAppCatalog()}
+                  title="Abrir Catálogo Completo & Guia Operacional de todas as Aplicações"
+                  className="px-3 py-1.5 rounded text-xs font-mono-mil flex items-center gap-1.5 bg-desert-orange/10 border border-desert-orange/40 text-desert-orange hover:bg-desert-orange hover:text-white transition-colors cursor-pointer shrink-0 font-bold"
+                >
+                  <IconBook size={14} />
+                  <span>CATÁLOGO &amp; GUIAS</span>
+                </button>
+              </div>
 
-                      {shouldHighlight && (
-                        <div className="mb-3 inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded bg-desert-orange text-white text-xs font-bold">
-                          <span>⚡ COMECE AQUI — CONFIGURAÇÃO RÁPIDA</span>
-                        </div>
-                      )}
+              {/* Pílulas de Domínio / Categorias Operacionais */}
+              <div className="flex flex-wrap items-center gap-1.5">
+                {HOME_CATEGORIES.map((cat) => {
+                  const isActive = activeCategory === cat.id
+                  return (
+                    <button
+                      key={cat.id}
+                      type="button"
+                      onClick={() => setActiveCategory(cat.id)}
+                      className={`px-3 py-1 rounded text-[11px] font-mono-mil transition-all cursor-pointer border ${
+                        isActive
+                          ? 'bg-desert-green text-white border-desert-green font-bold shadow-sm'
+                          : 'bg-surface-secondary text-text-muted border-border-default/60 hover:text-text-primary hover:border-desert-tan/50'
+                      }`}
+                    >
+                      {cat.label}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
 
-                      {/* Icon + Title + Description */}
-                      <div className="flex items-start gap-3.5 px-1">
-                        <div className="chamfer-inner p-2.5 text-desert-tan group-hover:text-text-primary transition-colors shrink-0">
-                          {item.icon}
-                        </div>
-                        <div className="min-w-0">
-                          <h3 className="text-xl font-bold font-stencil uppercase tracking-wide text-text-primary group-hover:text-desert-tan transition-colors">
-                            {item.label}
-                          </h3>
-                          {item.poweredBy && (
-                            <div className="text-[11px] font-mono-mil text-desert-olive mt-0.5">
-                              MOTOR: {item.poweredBy}
-                            </div>
-                          )}
-                          <p className="text-xs text-text-secondary mt-1.5 leading-relaxed">
-                            {item.description}
-                          </p>
-                        </div>
-                      </div>
+            {/* GRADE DE APLICAÇÕES */}
+            {(() => {
+              const query = searchQuery.trim().toLowerCase()
+              let visible = [...items].filter((it) => !divisionsPrefs.hidden.includes(it.label))
 
-                      {/* Optional Direct Kiwix Search Box */}
-                      {isKiwix && (
-                        <div
-                          className="chamfer-inner p-2 mt-3 flex items-center gap-2"
-                          onClick={(e) => {
-                            e.preventDefault()
-                            e.stopPropagation()
-                          }}
-                        >
-                          <IconSearch size={14} className="text-desert-tan ml-1 shrink-0" />
-                          <input
-                            type="text"
-                            value={kiwixQuery}
-                            onChange={(e) => setKiwixQuery(e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') {
-                                e.preventDefault()
-                                window.open(item.to, '_blank', 'noopener,noreferrer')
-                              }
-                            }}
-                            placeholder="Buscar no acervo Kiwix..."
-                            className="bg-transparent text-xs font-mono-mil text-text-primary focus:outline-none w-full placeholder:text-text-muted"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => window.open(item.to, '_blank', 'noopener,noreferrer')}
-                            className="mil-tactical-btn px-2.5 py-1 text-[10px] font-mono-mil shrink-0 cursor-pointer"
-                          >
-                            ABRIR
-                          </button>
-                        </div>
-                      )}
-                    </div>
+              if (activeCategory === 'favorites') {
+                visible = visible.filter((it) => pinnedServices.includes(it.serviceName || it.label))
+              } else if (activeCategory !== 'all') {
+                visible = visible.filter((it) => it.category === activeCategory)
+              }
 
-                    {/* Footer Action Row */}
-                    <div className="flex items-center justify-between text-[11px] font-mono-mil text-text-muted pt-3 mt-4 border-t border-border-default px-1">
-                      <span>STATUS: PRONTO</span>
-                      <span className="text-desert-tan font-bold group-hover:underline inline-flex items-center gap-1">
-                        <span>ACESSAR MÓDULO</span>
-                        <IconArrowUpRight size={14} />
-                      </span>
-                    </div>
+              if (query) {
+                visible = visible.filter(
+                  (it) =>
+                    it.label.toLowerCase().includes(query) ||
+                    (it.description && it.description.toLowerCase().includes(query)) ||
+                    (it.categoryTag && it.categoryTag.toLowerCase().includes(query)) ||
+                    (it.serviceName && it.serviceName.toLowerCase().includes(query)) ||
+                    (it.poweredBy && it.poweredBy.toLowerCase().includes(query))
+                )
+              }
+
+              visible.sort((a, b) => {
+                const pinA = pinnedServices.includes(a.serviceName || a.label) ? 1 : 0
+                const pinB = pinnedServices.includes(b.serviceName || b.label) ? 1 : 0
+                if (pinA !== pinB) return pinB - pinA
+
+                const idxA = divisionsPrefs.order.indexOf(a.label)
+                const idxB = divisionsPrefs.order.indexOf(b.label)
+                if (idxA !== -1 && idxB !== -1) return idxA - idxB
+                if (idxA !== -1) return -1
+                if (idxB !== -1) return 1
+                return a.displayOrder - b.displayOrder
+              })
+
+              if (visible.length === 0) {
+                return (
+                  <div className="chamfer-box p-8 text-center border border-dashed border-border-default rounded">
+                    <p className="text-sm font-mono-mil text-text-muted">
+                      Nenhum módulo encontrado para o filtro selecionado.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSearchQuery('')
+                        setActiveCategory('all')
+                      }}
+                      className="mt-3 mil-tactical-btn px-4 py-1.5 text-xs font-mono-mil"
+                    >
+                      LIMPAR FILTROS
+                    </button>
                   </div>
                 )
+              }
 
-                if (isLinkTile) {
-                  const tile = item.linkTile!
-                  return (
-                    <div key={item.label} className="group relative h-full">
+              if (densityMode === 'compact') {
+                return (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
+                    {visible.map((item) => {
+                      const isPinned = pinnedServices.includes(item.serviceName || item.label)
+                      const isLinkTile = Boolean(item.linkTile)
+
+                      return (
+                        <div
+                          key={item.serviceName || item.label}
+                          className="chamfer-box nomad-interactive-card relative p-3.5 flex flex-col justify-between transition-all hover:border-desert-tan group"
+                        >
+                          <div className="flex items-center justify-between gap-1 mb-2">
+                            <span className="text-[9px] font-mono-mil text-desert-olive font-bold truncate max-w-[100px]">
+                              {item.categoryTag || 'MÓDULO'}
+                            </span>
+                            <div className="flex items-center gap-1 shrink-0">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  e.preventDefault()
+                                  openAppCatalog(item.serviceName)
+                                }}
+                                className="text-text-muted hover:text-desert-green p-0.5 cursor-pointer"
+                                title="Ver guia, o que faz e exemplos reais no Catálogo"
+                              >
+                                <IconBook size={13} />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={(e) => togglePin(item.serviceName || item.label, e)}
+                                className="text-text-muted hover:text-amber-400 p-0.5 cursor-pointer"
+                                title={isPinned ? 'Desafixar dos favoritos' : 'Fixar nos favoritos'}
+                              >
+                                {isPinned ? (
+                                  <IconStarFilled size={13} className="text-amber-400" />
+                                ) : (
+                                  <IconStar size={13} className="opacity-30 hover:opacity-100" />
+                                )}
+                              </button>
+                            </div>
+                          </div>
+
+                          <a
+                            href={item.to}
+                            target={item.target || (isLinkTile ? '_blank' : undefined)}
+                            rel={item.target === '_blank' || isLinkTile ? 'noopener noreferrer' : undefined}
+                            className="flex flex-col items-center text-center my-1.5 flex-1"
+                          >
+                            <div className="chamfer-inner p-2.5 text-desert-tan group-hover:text-text-primary transition-colors mb-2 shrink-0">
+                              {item.icon}
+                            </div>
+                            <h4 className="text-xs font-bold font-stencil uppercase tracking-wide text-text-primary group-hover:text-desert-tan transition-colors line-clamp-2">
+                              {item.label}
+                            </h4>
+                          </a>
+
+                          <div className="flex items-center justify-between text-[9px] font-mono-mil text-text-muted mt-2 pt-2 border-t border-border-default/40">
+                            <span className="truncate">{item.portLabel?.split(' // ')[0] || 'ATIVO'}</span>
+                            <a
+                              href={item.to}
+                              target={item.target || (isLinkTile ? '_blank' : undefined)}
+                              rel={item.target === '_blank' || isLinkTile ? 'noopener noreferrer' : undefined}
+                              className="text-desert-tan hover:underline inline-flex items-center"
+                            >
+                              <IconArrowUpRight size={12} />
+                            </a>
+                          </div>
+                        </div>
+                      )
+                    })}
+                    {/* Add-a-link compact tile */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingTile(null)
+                        setLinkModalOpen(true)
+                      }}
+                      className="chamfer-box relative p-3.5 flex flex-col items-center justify-center text-center cursor-pointer border-dashed hover:border-desert-tan transition-colors group min-h-[140px]"
+                    >
+                      <div className="chamfer-inner p-2 text-desert-tan group-hover:scale-105 transition-transform mb-1">
+                        <IconPlus size={20} />
+                      </div>
+                      <span className="text-xs font-bold font-stencil uppercase tracking-wide text-text-primary group-hover:text-desert-tan">
+                        + Novo Atalho
+                      </span>
+                    </button>
+                  </div>
+                )
+              }
+
+              return (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {visible.map((item, idx) => {
+                    const divisionNum = String(idx + 1).padStart(2, '0')
+                    const isEasySetup = item.to === '/easy-setup'
+                    const shouldHighlight = isEasySetup && shouldHighlightEasySetup
+                    const isKiwix = item.serviceName === SERVICE_NAMES.KIWIX
+                    const isLinkTile = Boolean(item.linkTile)
+                    const isPinned = pinnedServices.includes(item.serviceName || item.label)
+                    const confirming =
+                      isLinkTile && pendingDelete === item.linkTile!.service_name
+
+                    const cardInner = (
+                      <div className="chamfer-box nomad-interactive-card relative p-5 h-full flex flex-col justify-between transition-all hover:border-desert-tan group">
+                        <div className="rivet absolute top-2.5 left-2.5" />
+                        <div className="rivet absolute top-2.5 right-2.5" />
+                        <div className="rivet absolute bottom-2.5 left-2.5" />
+                        <div className="rivet absolute bottom-2.5 right-2.5" />
+
+                        <div>
+                          {/* Top Division Metadata Row */}
+                          <div className="flex items-center justify-between gap-2 mb-3 pb-2 border-b border-border-default px-1">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span className="px-2 py-0.5 bg-surface-secondary border border-desert-tan/40 text-desert-tan text-[10px] font-mono-mil font-bold shrink-0">
+                                {divisionNum} // DIVISÃO
+                              </span>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  e.preventDefault()
+                                  openAppCatalog(item.serviceName)
+                                }}
+                                title="Ver guia operacional, para que serve e exemplos reais no Catálogo"
+                                className="p-0.5 text-text-muted hover:text-desert-green cursor-pointer shrink-0"
+                              >
+                                <IconBook size={13} />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={(e) => togglePin(item.serviceName || item.label, e)}
+                                title={isPinned ? 'Desafixar dos favoritos' : 'Fixar nos favoritos'}
+                                className="p-0.5 text-text-muted hover:text-amber-400 cursor-pointer shrink-0"
+                              >
+                                {isPinned ? (
+                                  <IconStarFilled size={13} className="text-amber-400" />
+                                ) : (
+                                  <IconStar size={13} className="opacity-40 hover:opacity-100" />
+                                )}
+                              </button>
+                              <span className="text-[11px] font-mono-mil font-bold uppercase tracking-wider text-desert-olive truncate">
+                                {item.categoryTag || 'MÓDULO NOMAD'}
+                              </span>
+                            </div>
+                            <span className="text-[10px] font-mono-mil text-text-muted shrink-0">
+                              {item.portLabel || item.to.toUpperCase()}
+                            </span>
+                          </div>
+
+                          {shouldHighlight && (
+                            <div className="mb-3 inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded bg-desert-orange text-white text-xs font-bold">
+                              <span>⚡ COMECE AQUI — CONFIGURAÇÃO RÁPIDA</span>
+                            </div>
+                          )}
+
+                          {/* Icon + Title + Description */}
+                          <div className="flex items-start gap-3.5 px-1">
+                            <div className="chamfer-inner p-2.5 text-desert-tan group-hover:text-text-primary transition-colors shrink-0">
+                              {item.icon}
+                            </div>
+                            <div className="min-w-0">
+                              <h3 className="text-xl font-bold font-stencil uppercase tracking-wide text-text-primary group-hover:text-desert-tan transition-colors">
+                                {item.label}
+                              </h3>
+                              {item.poweredBy && (
+                                <div className="text-[11px] font-mono-mil text-desert-olive mt-0.5">
+                                  MOTOR: {item.poweredBy}
+                                </div>
+                              )}
+                              <p className="text-xs text-text-secondary mt-1.5 leading-relaxed">
+                                {item.description}
+                              </p>
+                            </div>
+                          </div>
+
+                          {/* Optional Direct Kiwix Search Box */}
+                          {isKiwix && (
+                            <div
+                              className="chamfer-inner p-2 mt-3 flex items-center gap-2"
+                              onClick={(e) => {
+                                e.preventDefault()
+                                e.stopPropagation()
+                              }}
+                            >
+                              <IconSearch size={14} className="text-desert-tan ml-1 shrink-0" />
+                              <input
+                                type="text"
+                                value={kiwixQuery}
+                                onChange={(e) => setKiwixQuery(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    e.preventDefault()
+                                    window.open(item.to, '_blank', 'noopener,noreferrer')
+                                  }
+                                }}
+                                placeholder="Buscar no acervo Kiwix..."
+                                className="bg-transparent text-xs font-mono-mil text-text-primary focus:outline-none w-full placeholder:text-text-muted"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => window.open(item.to, '_blank', 'noopener,noreferrer')}
+                                className="mil-tactical-btn px-2.5 py-1 text-[10px] font-mono-mil shrink-0 cursor-pointer"
+                              >
+                                ABRIR
+                              </button>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Footer Action Row */}
+                        <div className="flex items-center justify-between text-[11px] font-mono-mil text-text-muted pt-3 mt-4 border-t border-border-default px-1">
+                          <span>STATUS: PRONTO</span>
+                          <span className="text-desert-tan font-bold group-hover:underline inline-flex items-center gap-1">
+                            <span>ACESSAR MÓDULO</span>
+                            <IconArrowUpRight size={14} />
+                          </span>
+                        </div>
+                      </div>
+                    )
+
+                    if (isLinkTile) {
+                      const tile = item.linkTile!
+                      return (
+                        <div key={item.label} className="group relative h-full">
+                          <a
+                            href={item.to}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="block h-full"
+                          >
+                            {cardInner}
+                          </a>
+
+                          {confirming ? (
+                            <div className="absolute top-3 right-3 flex items-center gap-1 z-20">
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteTile(tile.service_name)}
+                                className="rounded bg-desert-red px-2 py-1 text-xs font-medium text-white hover:brightness-110 cursor-pointer"
+                              >
+                                Remover
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setPendingDelete(null)}
+                                className="rounded border border-border-default bg-surface-primary px-2 py-1 text-xs text-text-secondary hover:bg-surface-secondary cursor-pointer"
+                              >
+                                Cancelar
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="absolute top-3 right-3 flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 z-20">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEditingTile(tile)
+                                  setLinkModalOpen(true)
+                                }}
+                                title="Editar este atalho"
+                                aria-label="Editar este atalho"
+                                className="rounded p-1.5 bg-surface-secondary border border-border-default text-text-secondary hover:text-desert-tan cursor-pointer"
+                              >
+                                <IconPencil size={14} />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setPendingDelete(tile.service_name)}
+                                title="Remover este atalho"
+                                aria-label="Remover este atalho"
+                                className="rounded p-1.5 bg-surface-secondary border border-border-default text-text-secondary hover:text-desert-red cursor-pointer"
+                              >
+                                <IconTrash size={14} />
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      )
+                    }
+
+                    return item.target === '_blank' ? (
                       <a
+                        key={item.label}
                         href={item.to}
                         target="_blank"
                         rel="noopener noreferrer"
@@ -775,95 +1175,40 @@ export default function Home(props: {
                       >
                         {cardInner}
                       </a>
+                    ) : (
+                      <Link key={item.label} href={item.to} className="block h-full">
+                        {cardInner}
+                      </Link>
+                    )
+                  })}
 
-                      {confirming ? (
-                        <div className="absolute top-3 right-3 flex items-center gap-1 z-20">
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteTile(tile.service_name)}
-                            className="rounded bg-desert-red px-2 py-1 text-xs font-medium text-white hover:brightness-110 cursor-pointer"
-                          >
-                            Remover
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setPendingDelete(null)}
-                            className="rounded border border-border-default bg-surface-primary px-2 py-1 text-xs text-text-secondary hover:bg-surface-secondary cursor-pointer"
-                          >
-                            Cancelar
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="absolute top-3 right-3 flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 z-20">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setEditingTile(tile)
-                              setLinkModalOpen(true)
-                            }}
-                            title="Editar este atalho"
-                            aria-label="Editar este atalho"
-                            className="rounded p-1.5 bg-surface-secondary border border-border-default text-text-secondary hover:text-desert-tan cursor-pointer"
-                          >
-                            <IconPencil size={14} />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setPendingDelete(tile.service_name)}
-                            title="Remover este atalho"
-                            aria-label="Remover este atalho"
-                            className="rounded p-1.5 bg-surface-secondary border border-border-default text-text-secondary hover:text-desert-red cursor-pointer"
-                          >
-                            <IconTrash size={14} />
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  )
-                }
-
-                return item.target === '_blank' ? (
-                  <a
-                    key={item.label}
-                    href={item.to}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="block h-full"
+                  {/* Add-a-link affordance in Tactical HUD */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingTile(null)
+                      setLinkModalOpen(true)
+                    }}
+                    className="chamfer-box relative p-5 min-h-[190px] flex flex-col items-center justify-center text-center cursor-pointer border-dashed hover:border-desert-tan transition-colors group"
                   >
-                    {cardInner}
-                  </a>
-                ) : (
-                  <Link key={item.label} href={item.to} className="block h-full">
-                    {cardInner}
-                  </Link>
-                )
-              })}
+                    <div className="rivet absolute top-2.5 left-2.5" />
+                    <div className="rivet absolute top-2.5 right-2.5" />
+                    <div className="rivet absolute bottom-2.5 left-2.5" />
+                    <div className="rivet absolute bottom-2.5 right-2.5" />
 
-              {/* Add-a-link affordance in Tactical HUD */}
-              <button
-                type="button"
-                onClick={() => {
-                  setEditingTile(null)
-                  setLinkModalOpen(true)
-                }}
-                className="chamfer-box relative p-5 min-h-[190px] flex flex-col items-center justify-center text-center cursor-pointer border-dashed hover:border-desert-tan transition-colors group"
-              >
-                <div className="rivet absolute top-2.5 left-2.5" />
-                <div className="rivet absolute top-2.5 right-2.5" />
-                <div className="rivet absolute bottom-2.5 left-2.5" />
-                <div className="rivet absolute bottom-2.5 right-2.5" />
-
-                <div className="chamfer-inner p-3 text-desert-tan group-hover:scale-105 transition-transform">
-                  <IconPlus size={32} />
+                    <div className="chamfer-inner p-3 text-desert-tan group-hover:scale-105 transition-transform">
+                      <IconPlus size={32} />
+                    </div>
+                    <h3 className="font-bold text-lg uppercase tracking-wider text-text-primary mt-3 group-hover:text-desert-tan">
+                      + Adicionar Atalho de Rede
+                    </h3>
+                    <p className="text-xs font-mono text-text-secondary mt-1 max-w-xs">
+                      Vincular um novo serviço ou endereço local da sua LAN ao Centro de Comando
+                    </p>
+                  </button>
                 </div>
-                <h3 className="font-bold text-lg uppercase tracking-wider text-text-primary mt-3 group-hover:text-desert-tan">
-                  + Adicionar Atalho de Rede
-                </h3>
-                <p className="text-xs font-mono text-text-secondary mt-1 max-w-xs">
-                  Vincular um novo serviço ou endereço local da sua LAN ao Centro de Comando
-                </p>
-              </button>
-            </div>
+              )
+            })()}
           </section>
         </div>
       ) : (
@@ -1141,6 +1486,13 @@ export default function Home(props: {
           </div>
         </div>
       )}
+
+      <AppCatalogModal
+        isOpen={catalogModalOpen}
+        onClose={() => setCatalogModalOpen(false)}
+        initialAppId={catalogAppId}
+        installedServiceNames={new Set(props.system.services.filter((s) => s.installed).map((s) => s.service_name))}
+      />
     </AppLayout>
   )
 }

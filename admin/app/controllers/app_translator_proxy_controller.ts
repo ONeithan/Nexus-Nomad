@@ -5,6 +5,7 @@ import { SERVICE_NAMES } from '../../constants/service_names.js'
 const APP_MAP: Record<string, { serviceName: string; defaultPort: string }> = {
   'it-tools': { serviceName: SERVICE_NAMES.IT_TOOLS, defaultPort: '8430' },
   'cyberchef': { serviceName: SERVICE_NAMES.CYBERCHEF, defaultPort: '8100' },
+  'flatnotes': { serviceName: SERVICE_NAMES.FLATNOTES, defaultPort: '8200' },
 }
 
 export default class AppTranslatorProxyController {

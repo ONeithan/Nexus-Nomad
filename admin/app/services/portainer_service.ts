@@ -454,6 +454,7 @@ export class PortainerService {
       fullId: string
       id: string
       name: string
+      image: string
       projectName: string
       state: string
       publicPort?: number
@@ -485,6 +486,7 @@ export class PortainerService {
               fullId: c.Id || '',
               id: c.Id ? c.Id.slice(0, 12) : '',
               name: cleanName,
+              image: c.Image || '',
               projectName: projectName.toLowerCase(),
               state: c.State || 'unknown',
               publicPort,
@@ -524,13 +526,29 @@ export class PortainerService {
     // 2. Reconcile & Enrich catalog services deployed to Portainer
     const deployedSet = new Set(deployedServices)
 
-    // Also auto-discover any catalog service whose `nomad-<service_name>` container exists on Portainer
+    // Auto-discover any catalog service whose container exists on Portainer (by name, stack name, or Docker image)
     if (portainerReachable) {
       for (const svc of services) {
-        const targetContName = `nomad-${svc.service_name}`.toLowerCase()
-        const found = liveContainers.find(
-          (c) => !c.name.endsWith('-init') && c.name.toLowerCase() === targetContName
-        )
+        const sName = svc.service_name.toLowerCase()
+        const sImageBase = (svc.container_image || '').split(':')[0].toLowerCase()
+
+        const found = liveContainers.find((c) => {
+          if (c.name.endsWith('-init')) return false
+          const cName = c.name.toLowerCase()
+          const pName = (c.projectName || '').toLowerCase()
+          const cImage = (c.image || '').split(':')[0].toLowerCase()
+
+          // 1. Exact or prefix match on container name (nomad-jellyfin, nomad_jellyfin, jellyfin)
+          if (cName === `nomad-${sName}` || cName === `nomad_${sName}` || cName === sName) return true
+          // 2. Exact match on stack / project name
+          if (pName === `nomad-${sName}` || pName === `nomad_${sName}` || pName === sName) return true
+          // 3. Exact or substring match on Docker image repository (e.g. jellyfin/jellyfin, vaultwarden/server)
+          if (sImageBase && (cImage === sImageBase || cImage.includes(sImageBase) || sImageBase.includes(cImage))) return true
+          // 4. Name keyword match for services with >= 5 chars
+          if (sName.length >= 5 && (cName.includes(sName) || pName.includes(sName))) return true
+          return false
+        })
+
         if (found && !deployedSet.has(svc.service_name)) {
           deployedSet.add(svc.service_name)
           await this.markAsDeployedRemotely(svc.service_name)
@@ -540,13 +558,32 @@ export class PortainerService {
 
     for (const deployedName of Array.from(deployedSet)) {
       const index = services.findIndex((s) => s.service_name === deployedName)
-      const matchedCont = liveContainers.find(
-        (c) =>
-          !c.name.endsWith('-init') &&
-          (c.name.toLowerCase() === `nomad-${deployedName.toLowerCase()}` ||
-            c.name.toLowerCase() === deployedName.toLowerCase() ||
-            c.projectName.toLowerCase() === `nomad-${deployedName.toLowerCase()}`)
-      )
+      const targetSvc = services.find((s) => s.service_name === deployedName)
+      const sImageBase = (targetSvc?.container_image || '').split(':')[0].toLowerCase()
+
+      const matchedCont = liveContainers.find((c) => {
+        if (c.name.endsWith('-init')) return false
+        const cName = c.name.toLowerCase()
+        const pName = (c.projectName || '').toLowerCase()
+        const cImage = (c.image || '').split(':')[0].toLowerCase()
+
+        if (
+          cName === `nomad-${deployedName.toLowerCase()}` ||
+          cName === `nomad_${deployedName.toLowerCase()}` ||
+          cName === deployedName.toLowerCase() ||
+          pName === `nomad-${deployedName.toLowerCase()}` ||
+          pName === deployedName.toLowerCase()
+        ) {
+          return true
+        }
+        if (sImageBase && (cImage === sImageBase || cImage.includes(sImageBase) || sImageBase.includes(cImage))) {
+          return true
+        }
+        if (deployedName.length >= 5 && (cName.includes(deployedName.toLowerCase()) || pName.includes(deployedName.toLowerCase()))) {
+          return true
+        }
+        return false
+      })
 
       // If Portainer is reachable and the container no longer exists (e.g. removed by user or failed deploy),
       // automatically unmark it so NOMAD shows "Instalar" instead of a phantom "Ativo" card!
