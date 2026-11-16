@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react'
+import { Dialog, DialogBackdrop, DialogPanel } from '@headlessui/react'
 import {
   IconSearch,
   IconBook,
@@ -12,7 +13,6 @@ import {
   IconShieldCheck,
   IconCheck,
 } from '@tabler/icons-react'
-import StyledModal from '~/components/StyledModal'
 import DynamicIcon, { DynamicIconName } from '~/components/DynamicIcon'
 import {
   APP_CATALOG,
@@ -84,16 +84,19 @@ export default function AppCatalogModal({
   if (!isOpen) return null
 
   return (
-    <StyledModal
-      isOpen={isOpen}
-      onClose={onClose}
-      title=""
-      size="5xl"
-      className="p-0 overflow-hidden"
-    >
-      <div className="flex flex-col h-[85vh] max-h-[850px] bg-surface-primary text-text-primary rounded-xl overflow-hidden">
-        {/* Header Bar */}
-        <div className="px-6 py-4 border-b border-border-subtle bg-surface-secondary/70 flex flex-wrap items-center justify-between gap-4">
+    <Dialog open={isOpen} onClose={onClose} className="relative z-50">
+      <DialogBackdrop
+        transition
+        className="fixed inset-0 bg-black/70 backdrop-blur-sm transition-opacity data-[closed]:opacity-0 data-[enter]:duration-300 data-[leave]:duration-200 data-[enter]:ease-out data-[leave]:ease-in"
+      />
+
+      <div className="fixed inset-0 flex items-center justify-center p-3 sm:p-6 overflow-y-auto">
+        <DialogPanel
+          transition
+          className="relative bg-surface-primary rounded-2xl shadow-2xl w-full max-w-6xl h-[90vh] max-h-[900px] flex flex-col overflow-hidden border border-border-subtle transition-all data-[closed]:scale-95 data-[closed]:opacity-0 data-[enter]:duration-300 data-[leave]:duration-200 data-[enter]:ease-out data-[leave]:ease-in"
+        >
+          {/* Header Bar */}
+          <div className="px-6 py-4 border-b border-border-subtle bg-surface-secondary/70 flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-lg bg-desert-green/15 border border-desert-green/30 flex items-center justify-center text-desert-green">
               <IconApps size={22} />
@@ -379,7 +382,8 @@ export default function AppCatalogModal({
             </a>
           </div>
         </div>
-      </div>
-    </StyledModal>
-  )
+      </DialogPanel>
+    </div>
+  </Dialog>
+)
 }

@@ -187,6 +187,27 @@ const TierSelectionModal: React.FC<TierSelectionModalProps> = ({
     return Math.max(0, primary.totalSize - primary.totalUsed)
   }, [systemInfo])
 
+  const availableDisks = useMemo(() => {
+    const list = [...(storageOverview?.mountTargets || [])]
+    if (systemInfo?.disk && Array.isArray(systemInfo.disk)) {
+      for (const d of systemInfo.disk) {
+        if (d.filesystems && Array.isArray(d.filesystems)) {
+          for (const fs of d.filesystems) {
+            if (fs.mount && !list.some((item) => item.path === fs.mount)) {
+              list.push({
+                label: `Disco ${d.name} (${fs.mount}) • ${d.model || d.vendor || 'Disco Local'}`,
+                path: fs.mount,
+                freeBytes: Math.max(0, (fs.size || 0) - (fs.used || 0)),
+                totalBytes: fs.size || 0,
+              })
+            }
+          }
+        }
+      }
+    }
+    return list
+  }, [storageOverview?.mountTargets, systemInfo?.disk])
+
   const ingestPolicy: 'Always' | 'Manual' =
     ingestPolicySetting?.value === 'Manual' ? 'Manual' : 'Always'
 
@@ -430,7 +451,7 @@ const TierSelectionModal: React.FC<TierSelectionModalProps> = ({
                   )}
 
                   {/* Seletor de HD de Destino */}
-                  {storageOverview?.mountTargets && storageOverview.mountTargets.length > 0 && (
+                  {availableDisks.length > 0 && (
                     <div className="mt-4 p-3.5 bg-surface-secondary border border-border-default rounded-xl space-y-2.5">
                       <div className="flex items-center justify-between">
                         <span className="text-xs font-bold text-text-primary uppercase tracking-wide flex items-center gap-1.5">
@@ -439,8 +460,8 @@ const TierSelectionModal: React.FC<TierSelectionModalProps> = ({
                         <span className="text-[11px] text-text-secondary">Destino de gravação ZIM</span>
                       </div>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                        {storageOverview.mountTargets.map((disk) => {
-                          const isChosen = (targetDisk || storageOverview.preferredDownloadDisk || storageOverview.storageRoot) === disk.path
+                        {availableDisks.map((disk) => {
+                          const isChosen = (targetDisk || storageOverview?.preferredDownloadDisk || storageOverview?.storageRoot) === disk.path
                           return (
                             <div
                               key={`tier-disk-${disk.path}`}

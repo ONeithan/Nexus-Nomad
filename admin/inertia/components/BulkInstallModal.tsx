@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react'
+import { Dialog, DialogBackdrop, DialogPanel } from '@headlessui/react'
 import {
   IconBolt,
   IconCheck,
@@ -10,7 +11,6 @@ import {
   IconPlayerStop,
   IconRefresh,
 } from '@tabler/icons-react'
-import StyledModal from '~/components/StyledModal'
 import StyledButton from '~/components/StyledButton'
 import DynamicIcon, { DynamicIconName } from '~/components/DynamicIcon'
 import { ServiceSlim } from '../../types/services'
@@ -262,16 +262,19 @@ export default function BulkInstallModal({
   if (!isOpen) return null
 
   return (
-    <StyledModal
-      isOpen={isOpen}
-      onClose={isRunning ? () => {} : onClose}
-      title=""
-      size="2xl"
-      className="p-0 overflow-hidden"
-    >
-      <div className="flex flex-col max-h-[85vh] bg-surface-primary text-text-primary rounded-xl overflow-hidden">
-        {/* Header */}
-        <div className="px-6 py-4 border-b border-border-subtle bg-surface-secondary/70 flex items-center justify-between gap-3">
+    <Dialog open={isOpen} onClose={isRunning ? () => {} : onClose} className="relative z-50">
+      <DialogBackdrop
+        transition
+        className="fixed inset-0 bg-black/70 backdrop-blur-sm transition-opacity data-[closed]:opacity-0 data-[enter]:duration-300 data-[leave]:duration-200 data-[enter]:ease-out data-[leave]:ease-in"
+      />
+
+      <div className="fixed inset-0 flex items-center justify-center p-3 sm:p-6 overflow-y-auto">
+        <DialogPanel
+          transition
+          className="relative bg-surface-primary rounded-2xl shadow-2xl w-full max-w-3xl max-h-[85vh] flex flex-col overflow-hidden border border-border-subtle transition-all data-[closed]:scale-95 data-[closed]:opacity-0 data-[enter]:duration-300 data-[leave]:duration-200 data-[enter]:ease-out data-[leave]:ease-in"
+        >
+          {/* Header */}
+          <div className="px-6 py-4 border-b border-border-subtle bg-surface-secondary/70 flex items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-lg bg-desert-orange/15 border border-desert-orange/30 flex items-center justify-center text-desert-orange">
               <IconBolt size={22} />
@@ -504,7 +507,8 @@ export default function BulkInstallModal({
             )}
           </div>
         </div>
-      </div>
-    </StyledModal>
-  )
+      </DialogPanel>
+    </div>
+  </Dialog>
+)
 }

@@ -1,5 +1,5 @@
 name: Build Primary Docker Image
-# Build release trigger: v1.0.20
+# Build release trigger: v1.0.21
 
 on:
   push:
@@ -8,9 +8,9 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Versão para marcar a imagem Docker (sem prefixo "v", ex: "1.0.20-nexus")'
+        description: 'Versão para marcar a imagem Docker (sem prefixo "v", ex: "1.0.21-nexus")'
         required: false
-        default: '1.0.20-nexus'
+        default: '1.0.21-nexus'
         type: string
 
 jobs:

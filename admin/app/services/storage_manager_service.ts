@@ -12,6 +12,7 @@ import {
 } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { basename, dirname, join, resolve } from 'node:path'
+import si from 'systeminformation'
 import logger from '@adonisjs/core/services/logger'
 import KVStore from '#models/kv_store'
 import { DockerService } from './docker_service.js'
@@ -50,22 +51,50 @@ const FOLDER_LABELS: Record<string, string> = {
 const SAMBA_CONTAINER_NAME = 'nomad_samba'
 
 export class StorageManagerService {
+  private _allowedRootsCache: Set<string> | null = null
+
   private getStorageRoot(): string {
     return resolve(process.cwd(), 'storage')
   }
 
-  private getAllowedRoots(): string[] {
-    const roots = [this.getStorageRoot()]
-    if (existsSync('/mnt')) {
-      roots.push('/mnt')
+  private async getAllowedRoots(): Promise<string[]> {
+    if (this._allowedRootsCache && this._allowedRootsCache.size > 0) {
+      return Array.from(this._allowedRootsCache)
     }
-    return roots
+    const roots = new Set<string>([resolve(this.getStorageRoot())])
+    const candidateDirs = ['/mnt', '/media', '/run/media', '/data', '/disks', '/volumes']
+    for (const d of candidateDirs) {
+      if (existsSync(d)) roots.add(resolve(d))
+    }
+
+    try {
+      const fsSizes = await si.fsSize().catch(() => [])
+      for (const fs of fsSizes) {
+        if (fs.mount && !fs.mount.startsWith('/sys') && !fs.mount.startsWith('/proc') && !fs.mount.startsWith('/dev')) {
+          roots.add(resolve(fs.mount))
+        }
+      }
+    } catch {}
+
+    const preferredDisk = await KVStore.getValue('storage.preferredDownloadDisk')
+    if (preferredDisk && typeof preferredDisk === 'string' && preferredDisk.trim()) {
+      roots.add(resolve(preferredDisk.trim()))
+    }
+
+    this._allowedRootsCache = roots
+    return Array.from(roots)
   }
 
-  private isPathAllowed(targetPath: string): boolean {
+  private async isPathAllowed(targetPath: string): Promise<boolean> {
     const resolved = resolve(targetPath)
-    return this.getAllowedRoots().some(
-      (root) => resolved === root || resolved.startsWith(`${root}/`) || resolved.startsWith(`${root}\\`)
+    const allowed = await this.getAllowedRoots()
+    return allowed.some(
+      (root) =>
+        resolved === root ||
+        resolved.startsWith(`${root}/`) ||
+        resolved.startsWith(`${root}\\`) ||
+        // Windows drive root check: e.g. D:\path starting with D:
+        (root.endsWith(':') && resolved.toUpperCase().startsWith(root.toUpperCase()))
     )
   }
 
@@ -122,35 +151,153 @@ export class StorageManagerService {
 
     folderUsage.sort((a, b) => b.sizeBytes - a.sizeBytes)
 
-    // Discover available mount targets (/mnt/* + storageRoot)
-    const mountTargets: Array<{ label: string; path: string; freeBytes: number; totalBytes: number }> = []
-    const checkPoints = [
-      { label: 'Armazenamento Interno NOMAD (storage)', path: storageRoot },
-    ]
-    if (existsSync('/mnt')) {
-      const mnts = await readdir('/mnt', { withFileTypes: true }).catch(() => [])
-      for (const m of mnts) {
-        if (m.isDirectory()) {
-          checkPoints.push({ label: `Disco Externo (/mnt/${m.name})`, path: `/mnt/${m.name}` })
+    // Discover all physical disks and mounted filesystems on the system
+    const mountTargets: Array<{
+      label: string
+      path: string
+      freeBytes: number
+      totalBytes: number
+      isPrimary?: boolean
+      diskType?: string
+    }> = []
+
+    // 1. Primary storage root
+    let primaryFree = 0
+    let primaryTotal = 0
+    try {
+      const fsStats = await statfs(storageRoot)
+      primaryTotal = Number(fsStats.blocks) * Number(fsStats.bsize)
+      primaryFree = Number(fsStats.bavail) * Number(fsStats.bsize)
+    } catch {}
+
+    mountTargets.push({
+      label: `Armazenamento Interno NOMAD (storage)`,
+      path: storageRoot,
+      freeBytes: primaryFree,
+      totalBytes: primaryTotal,
+      isPrimary: true,
+      diskType: 'Sistema',
+    })
+
+    // 2. Discover filesystems and physical disks via systeminformation
+    try {
+      const [fsSizes, diskLayout, blockDevices] = await Promise.all([
+        si.fsSize().catch(() => []),
+        si.diskLayout().catch(() => []),
+        si.blockDevices().catch(() => []),
+      ])
+
+      const ignoredTypes = new Set([
+        'tmpfs',
+        'devtmpfs',
+        'overlay',
+        'squashfs',
+        'shm',
+        'proc',
+        'sysfs',
+        'cgroup',
+        'devpts',
+        'mqueue',
+        'none',
+        'rootfs',
+      ])
+
+      for (const fs of fsSizes) {
+        if (!fs.size || fs.size <= 0) continue
+        if (ignoredTypes.has(fs.type?.toLowerCase())) continue
+        if (fs.mount.startsWith('/sys') || fs.mount.startsWith('/proc') || fs.mount.startsWith('/dev')) continue
+
+        const resolvedMount = resolve(fs.mount)
+        const resolvedStorageRoot = resolve(storageRoot)
+
+        // If this filesystem is the one hosting storageRoot, update its label if helpful, but don't duplicate
+        if (
+          resolvedMount === resolvedStorageRoot ||
+          resolvedStorageRoot.startsWith(resolvedMount + '/') ||
+          resolvedStorageRoot.startsWith(resolvedMount + '\\')
+        ) {
+          const matchingDisk = diskLayout.find((d: any) => d.name && (fs.fs.includes(d.name) || d.device === fs.fs))
+          if (matchingDisk) {
+            const diskName = matchingDisk.vendor ? `${matchingDisk.vendor} ${matchingDisk.name}` : matchingDisk.name
+            mountTargets[0].label = `Armazenamento Interno NOMAD (${fs.mount}) • ${diskName}`
+            mountTargets[0].diskType = matchingDisk.interfaceType || (matchingDisk.type === 'NVMe' ? 'NVMe' : 'SSD')
+          }
+          continue
         }
+
+        // Already added?
+        if (mountTargets.some((m) => resolve(m.path) === resolvedMount)) continue
+
+        // Find disk model / info for this secondary filesystem
+        const matchingBlk = blockDevices.find(
+          (b: any) => b.name === fs.fs || b.mount === fs.mount || (b.label && fs.fs.includes(b.label))
+        )
+        const matchingDl = diskLayout.find(
+          (d: any) => (d.name && fs.fs.includes(d.name)) || (matchingBlk && matchingBlk.device === d.device)
+        )
+
+        let diskDesc = ''
+        let typeBadge = 'Disco Secundário'
+        if (matchingDl) {
+          const vendor = matchingDl.vendor ? `${matchingDl.vendor} ` : ''
+          diskDesc = `${vendor}${matchingDl.name}`.trim()
+          typeBadge = matchingDl.interfaceType || matchingDl.type || (matchingBlk?.removable ? 'USB' : 'HD')
+        } else if (matchingBlk?.label) {
+          diskDesc = matchingBlk.label
+        } else {
+          diskDesc = fs.fs || 'Disco Local'
+        }
+
+        mountTargets.push({
+          label: `Disco Secundário (${fs.mount}) • ${diskDesc}`,
+          path: fs.mount,
+          freeBytes: fs.available || Math.max(0, fs.size - fs.used),
+          totalBytes: fs.size,
+          isPrimary: false,
+          diskType: typeBadge,
+        })
       }
+    } catch (err: any) {
+      logger.warn(`[StorageManager] systeminformation disk scan warning: ${err.message}`)
     }
 
-    for (const cp of checkPoints) {
+    // 3. Scan directory candidate mounts (/mnt/*, /media/*, /run/media/*, /data, /disks/*, /volumes/*)
+    const candidateDirs = ['/mnt', '/media', '/run/media', '/data', '/disks', '/volumes']
+    for (const baseDir of candidateDirs) {
+      if (!existsSync(baseDir)) continue
       try {
-        const fsStats = await statfs(cp.path)
-        const totalBytes = Number(fsStats.blocks) * Number(fsStats.bsize)
-        const freeBytes = Number(fsStats.bavail) * Number(fsStats.bsize)
-        mountTargets.push({
-          label: cp.label,
-          path: cp.path,
-          freeBytes,
-          totalBytes,
-        })
-      } catch {
-        mountTargets.push({ label: cp.label, path: cp.path, freeBytes: 0, totalBytes: 0 })
-      }
+        const entries = await readdir(baseDir, { withFileTypes: true }).catch(() => [])
+        for (const entry of entries) {
+          if (!entry.isDirectory()) continue
+          const fullPath = join(baseDir, entry.name)
+          const resolvedPath = resolve(fullPath)
+          if (mountTargets.some((m) => resolve(m.path) === resolvedPath)) continue
+
+          try {
+            const fsStats = await statfs(fullPath)
+            const totalBytes = Number(fsStats.blocks) * Number(fsStats.bsize)
+            const freeBytes = Number(fsStats.bavail) * Number(fsStats.bsize)
+            if (totalBytes > 0) {
+              mountTargets.push({
+                label: `Disco Externo (${fullPath})`,
+                path: fullPath,
+                freeBytes,
+                totalBytes,
+                isPrimary: false,
+                diskType: 'Ponto de Montagem',
+              })
+            }
+          } catch {}
+        }
+      } catch {}
     }
+
+    // Update allowed roots cache so all discovered targets are permitted
+    const newAllowedRoots = new Set<string>([resolve(storageRoot)])
+    for (const mt of mountTargets) {
+      newAllowedRoots.add(resolve(mt.path))
+    }
+    this._allowedRootsCache = newAllowedRoots
 
     const preferredDownloadDisk = (await KVStore.getValue('storage.preferredDownloadDisk')) || storageRoot
 
@@ -169,7 +316,7 @@ export class StorageManagerService {
   }> {
     const storageRoot = this.getStorageRoot()
     const target = requestedPath ? resolve(requestedPath) : storageRoot
-    if (!this.isPathAllowed(target) || !existsSync(target)) {
+    if (!(await this.isPathAllowed(target)) || !existsSync(target)) {
       throw new Error('Caminho inválido ou fora dos diretórios permitidos do N.O.M.A.D.')
     }
 
@@ -201,7 +348,7 @@ export class StorageManagerService {
     })
 
     const parent = dirname(target)
-    const parentPath = this.isPathAllowed(parent) && parent !== target ? parent : null
+    const parentPath = (await this.isPathAllowed(parent)) && parent !== target ? parent : null
 
     return {
       currentPath: target,
@@ -214,11 +361,8 @@ export class StorageManagerService {
     const src = resolve(sourcePath)
     const dstDir = resolve(destDir)
 
-    if (!this.isPathAllowed(src) || !this.isPathAllowed(dstDir)) {
+    if (!(await this.isPathAllowed(src)) || !(await this.isPathAllowed(dstDir))) {
       throw new Error('Origem ou destino fora dos diretórios permitidos.')
-    }
-    if (!existsSync(src)) {
-      throw new Error('Arquivo ou pasta de origem não encontrado.')
     }
 
     await mkdir(dstDir, { recursive: true })
@@ -226,6 +370,20 @@ export class StorageManagerService {
 
     if (src === destPath) {
       throw new Error('A origem e o destino são idênticos.')
+    }
+
+    // If source doesn't exist yet (e.g. initial download preparation on a new disk)
+    if (!existsSync(src)) {
+      await mkdir(destPath, { recursive: true })
+      await mkdir(dirname(src), { recursive: true })
+      if (createSymlink) {
+        try {
+          await symlink(destPath, src)
+        } catch (err) {
+          logger.warn(`[StorageManager] Não foi possível criar link simbólico inicial ${src} -> ${destPath}:`, err)
+        }
+      }
+      return { success: true, sourcePath: src, destPath, symlinkCreated: createSymlink }
     }
 
     try {
@@ -242,7 +400,7 @@ export class StorageManagerService {
       await rename(src, destPath)
     } catch (err: any) {
       if (err?.code === 'EXDEV') {
-        // Cross-device move (e.g. NVMe -> /mnt/nomad_storage HDD)
+        // Cross-device move (e.g. NVMe -> HDD)
         await cp(src, destPath, { recursive: true })
         await rm(src, { recursive: true, force: true })
       } else {
@@ -263,7 +421,7 @@ export class StorageManagerService {
 
   async deleteContent(targetPath: string) {
     const resolved = resolve(targetPath)
-    if (!this.isPathAllowed(resolved) || resolved === this.getStorageRoot() || resolved === '/mnt') {
+    if (!(await this.isPathAllowed(resolved)) || resolved === this.getStorageRoot() || resolved === '/mnt') {
       throw new Error('Não é permitido excluir o diretório raiz de armazenamento.')
     }
     if (!existsSync(resolved)) {
@@ -277,7 +435,7 @@ export class StorageManagerService {
     const cleanName = name.replace(/[<>:"/\\|?*]+/g, '').trim()
     if (!cleanName) throw new Error('Nome de pasta inválido.')
     const target = resolve(parentDir, cleanName)
-    if (!this.isPathAllowed(target)) {
+    if (!(await this.isPathAllowed(target))) {
       throw new Error('Caminho fora dos diretórios permitidos.')
     }
     await mkdir(target, { recursive: true })
