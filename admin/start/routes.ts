@@ -8,6 +8,7 @@
 */
 import AppTranslatorProxyController from '#controllers/app_translator_proxy_controller'
 import BenchmarkController from '#controllers/benchmark_controller'
+import CatalogController from '#controllers/catalog_controller'
 import ChatsController from '#controllers/chats_controller'
 import ConditionsController from '#controllers/conditions_controller'
 import DocsController from '#controllers/docs_controller'
@@ -103,6 +104,7 @@ router.on('/about').renderInertia('about')
 router.get('/chat', [ChatsController, 'inertia'])
 router.get('/maps', [MapsController, 'index'])
 router.get('/supply-depot', [SupplyDepotController, 'index'])
+router.get('/catalog', [CatalogController, 'index'])
 router.on('/knowledge-base').redirectToPath('/chat?knowledge_base=true') // redirect for legacy knowledge-base links
 
 router.get('/easy-setup', [EasySetupController, 'index'])
