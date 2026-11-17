@@ -7,7 +7,7 @@ import {
 import { ServiceSlim } from '../../types/services'
 import { FileEntry } from '../../types/files'
 import { AppAutoUpdateStatus, AutoUpdateStatus, CheckLatestVersionResult, ContentAutoUpdateStatus, SystemInformationResponse, SystemUpdateStatus } from '../../types/system'
-import { DownloadJobWithProgress, WikipediaState } from '../../types/downloads'
+import { DownloadJobWithProgress, IncompleteDownloadItem, WikipediaState } from '../../types/downloads'
 import type { Country, CountryCode, CountryGroup, MapExtractPreflight } from '../../types/maps'
 import { EmbedJobWithProgress, FileWarningsResult, StoredFileInfo } from '../../types/rag'
 import type { CategoryWithStatus, CollectionWithStatus, ContentUpdateCheckResult, CreatorPackWithStatus, ResourceUpdateInfo } from '../../types/collections'
@@ -1042,6 +1042,43 @@ class API {
     return catchInternal(async () => {
       const response = await this.client.post<{ success: boolean; message: string }>(
         `/downloads/jobs/${jobId}/retry`
+      )
+      return response.data
+    })()
+  }
+
+  async resumeAllDownloads(): Promise<{ success: boolean; resumedCount: number; message: string } | undefined> {
+    return catchInternal(async () => {
+      const response = await this.client.post<{ success: boolean; resumedCount: number; message: string }>(
+        '/downloads/jobs/resume-all'
+      )
+      return response.data
+    })()
+  }
+
+  async listIncompleteDownloads(): Promise<{ files: IncompleteDownloadItem[]; totalBytes: number } | undefined> {
+    return catchInternal(async () => {
+      const response = await this.client.get<{ files: IncompleteDownloadItem[]; totalBytes: number }>(
+        '/downloads/incomplete'
+      )
+      return response.data
+    })()
+  }
+
+  async deleteIncompleteDownload(tempPath: string): Promise<{ success: boolean; message: string } | undefined> {
+    return catchInternal(async () => {
+      const response = await this.client.delete<{ success: boolean; message: string }>(
+        '/downloads/incomplete',
+        { data: { tempPath } }
+      )
+      return response.data
+    })()
+  }
+
+  async clearOrphanedIncompleteDownloads(): Promise<{ success: boolean; count: number; freedBytes: number; message: string } | undefined> {
+    return catchInternal(async () => {
+      const response = await this.client.post<{ success: boolean; count: number; freedBytes: number; message: string }>(
+        '/downloads/incomplete/clear'
       )
       return response.data
     })()

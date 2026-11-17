@@ -210,6 +210,17 @@ export function lockTacticalConsole() {
   window.dispatchEvent(new CustomEvent('nomad:lock-console'))
 }
 
+export function rebootNomadSystem() {
+  if (typeof window === 'undefined') return
+  const db = loadAuthDB()
+  db.activeSession = null
+  db.lockedExplicitly = true
+  saveAuthDB(db)
+  syncAuthDBToServer(db)
+  sessionStorage.removeItem(SESSION_UNLOCKED_KEY)
+  window.dispatchEvent(new CustomEvent('nomad:system-reboot'))
+}
+
 type BootStage =
   | 'UNLOCKED'
   | 'CRT_POWERON'
@@ -507,7 +518,7 @@ export default function TacticalBootGate({ children }: { children: React.ReactNo
   const displayVersion =
     appVersion && appVersion !== '0.0.0' && appVersion !== 'dev'
       ? `v${appVersion.replace(/^v/i, '').replace(/-nexus$/i, '')}`
-      : 'v1.0.22'
+      : 'v1.0.23'
 
   const [stage, setStage] = useState<BootStage>(() => {
     if (hasBootedInCurrentDocument) return 'UNLOCKED'
@@ -629,10 +640,29 @@ export default function TacticalBootGate({ children }: { children: React.ReactNo
       setLoginError('')
       setStage('LOGIN_SCREEN')
     }
+
+    const handleReboot = async () => {
+      const db = loadAuthDB(tacticalAuth)
+      if (db.operators.length > 0) {
+        setLoginUser(db.operators[0].username)
+      }
+      setLoginPass('')
+      setLoginError('')
+
+      try {
+        await fetch('/api/system/restart-nomad', { method: 'POST' }).catch(() => null)
+      } catch {}
+
+      hasBootedInCurrentDocument = true
+      runCleanStabilizedOSBoot('LOGIN_SCREEN', 550)
+    }
+
     window.addEventListener('nomad:lock-console', handleLock)
+    window.addEventListener('nomad:system-reboot', handleReboot)
     return () => {
       mounted = false
       window.removeEventListener('nomad:lock-console', handleLock)
+      window.removeEventListener('nomad:system-reboot', handleReboot)
     }
   }, [])
 

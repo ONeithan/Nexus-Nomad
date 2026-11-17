@@ -45,6 +45,7 @@ import useDownloads from '~/hooks/useDownloads'
 import ActiveDownloads from '~/components/ActiveDownloads'
 import { SERVICE_NAMES } from '../../../../constants/service_names'
 import { ZimFileWithMetadata } from '../../../../types/zim'
+import { getServiceLink } from '~/lib/navigation'
 
 const CURATED_CATEGORIES_KEY = 'curated-categories'
 const WIKIPEDIA_STATE_KEY = 'wikipedia-state'
@@ -75,12 +76,15 @@ export default function ZimRemoteExplorer() {
   })
   const kolibriServiceMatch = systemServicesData?.services?.find(
     (s: any) =>
-      s.installed &&
-      (s.service_name?.toLowerCase().includes('kolibri') ||
-        s.friendly_name?.toLowerCase().includes('kolibri'))
+      s.service_name === SERVICE_NAMES.KOLIBRI_GEN2 ||
+      s.service_name === SERVICE_NAMES.KOLIBRI ||
+      s.service_name?.toLowerCase().includes('kolibri') ||
+      s.friendly_name?.toLowerCase().includes('kolibri')
   )
   const kolibriInstalled =
-    kolibriV1Installed || kolibriGen2Installed || Boolean(kolibriServiceMatch)
+    kolibriV1Installed ||
+    kolibriGen2Installed ||
+    Boolean(kolibriServiceMatch?.installed || kolibriServiceMatch)
   const { data: zimDownloads = [] } = useDownloads({ filetype: 'zim' })
   const { debounce } = useDebounce()
 
@@ -1242,10 +1246,12 @@ export default function ZimRemoteExplorer() {
                           {kolibriInstalled && (
                             <a
                               href={
-                                kolibriServiceMatch?.custom_url ||
-                                (kolibriServiceMatch?.ui_location?.startsWith('http')
-                                  ? kolibriServiceMatch.ui_location
-                                  : `http://${typeof window !== 'undefined' ? window.location.hostname : 'localhost'}:${kolibriServiceMatch?.ui_location || '8095'}`)
+                                typeof window !== 'undefined'
+                                  ? getServiceLink(
+                                      kolibriServiceMatch?.ui_location || '8310',
+                                      kolibriServiceMatch?.custom_url
+                                    )
+                                  : 'http://localhost:8310'
                               }
                               target="_blank"
                               rel="noopener noreferrer"

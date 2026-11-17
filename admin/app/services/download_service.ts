@@ -5,9 +5,11 @@ import { RunExtractPmtilesJob } from '#jobs/run_extract_pmtiles_job'
 import type { RunExtractPmtilesJobParams } from '#jobs/run_extract_pmtiles_job'
 import { DownloadModelJob } from '#jobs/download_model_job'
 import { DownloadDrugDataJob } from '#jobs/download_drug_data_job'
-import { DownloadJobWithProgress, DownloadProgressData, RunDownloadJobParams } from '../../types/downloads.js'
+import { DownloadJobWithProgress, DownloadProgressData, IncompleteDownloadItem, RunDownloadJobParams } from '../../types/downloads.js'
 import type { Job, Queue } from 'bullmq'
-import { normalize } from 'path'
+import { normalize, join, basename, resolve } from 'node:path'
+import { readdir, stat } from 'node:fs/promises'
+import { existsSync } from 'node:fs'
 import { deleteFileIfExists } from '../utils/fs.js'
 import transmit from '@adonisjs/transmit/services/main'
 import { BROADCAST_CHANNELS } from '../../constants/broadcast.js'
@@ -214,6 +216,45 @@ export class DownloadService {
     }
 
     return { success: false, message: 'Failed job not found. It may have already been dismissed.' }
+  }
+
+  async resumeAllInterruptedDownloads(): Promise<{ success: boolean; resumedCount: number; message: string }> {
+    const queue = this.queueService.getQueue(RunDownloadJob.queue)
+    let resumedCount = 0
+
+    // 1. Recover active jobs with stale locks
+    const activeJobs = await queue.getJobs(['active'])
+    for (const job of activeJobs) {
+      const params = job.data as RunDownloadJobParams
+      if (params && params.url && params.filepath) {
+        try {
+          const client = await queue.client
+          await client.del(`bull:${RunDownloadJob.queue}:${job.id}:lock`)
+          await job.remove().catch(() => {})
+          await RunDownloadJob.dispatch(params)
+          resumedCount++
+        } catch {}
+      }
+    }
+
+    // 2. Recover failed jobs
+    const failedJobs = await queue.getJobs(['failed'])
+    for (const job of failedJobs) {
+      const params = job.data as RunDownloadJobParams
+      if (params && params.url && params.filepath) {
+        try {
+          await job.remove().catch(() => {})
+          await RunDownloadJob.dispatch(params)
+          resumedCount++
+        } catch {}
+      }
+    }
+
+    return {
+      success: true,
+      resumedCount,
+      message: `${resumedCount} download(s) retomado(s) com sucesso.`,
+    }
   }
 
   async cancelJob(jobId: string): Promise<{ success: boolean; message: string }> {
@@ -427,6 +468,172 @@ export class DownloadService {
       } catch {
         // Best effort - job will be cleaned up on next dismiss attempt
       }
+    }
+  }
+
+  private async _scanDirectoryForTemp(
+    dirPath: string,
+    category: string
+  ): Promise<Array<{ name: string; tempPath: string; sizeBytes: number; modifiedAt: string; category: string }>> {
+    const list: Array<{ name: string; tempPath: string; sizeBytes: number; modifiedAt: string; category: string }> = []
+    if (!existsSync(dirPath)) return list
+    try {
+      const items = await readdir(dirPath, { withFileTypes: true })
+      for (const item of items) {
+        if (item.isFile()) {
+          const lower = item.name.toLowerCase()
+          if (lower.endsWith('.tmp') || lower.endsWith('.part') || lower.endsWith('.crdownload')) {
+            const fullPath = join(dirPath, item.name)
+            try {
+              const fileStats = await stat(fullPath)
+              const cleanName = item.name.replace(/\.(tmp|part|crdownload)$/i, '')
+              list.push({
+                name: cleanName,
+                tempPath: fullPath,
+                sizeBytes: Number(fileStats.size),
+                modifiedAt: fileStats.mtime.toISOString(),
+                category,
+              })
+            } catch {}
+          }
+        }
+      }
+    } catch {}
+    return list
+  }
+
+  async listIncompleteDownloads(): Promise<{ files: IncompleteDownloadItem[]; totalBytes: number }> {
+    const candidateDirs: Array<{ path: string; category: string }> = [
+      { path: resolve(process.cwd(), 'storage', 'zim'), category: 'zim' },
+      { path: resolve(process.cwd(), 'storage', 'maps'), category: 'maps' },
+      { path: resolve(process.cwd(), 'storage', 'kb_uploads'), category: 'kb_uploads' },
+      { path: resolve(process.cwd(), 'storage', 'books'), category: 'books' },
+      { path: resolve(process.cwd(), 'storage', 'media'), category: 'media' },
+      { path: '/storage/zim', category: 'zim' },
+      { path: '/storage/maps', category: 'maps' },
+      { path: '/storage/kb_uploads', category: 'kb_uploads' },
+      { path: '/app/storage/zim', category: 'zim' },
+      { path: '/app/storage/maps', category: 'maps' },
+      { path: '/mnt/nomad_storage/zim', category: 'zim' },
+      { path: '/mnt/nomad_storage/maps', category: 'maps' },
+      { path: '/mnt/nomad_storage/kb_uploads', category: 'kb_uploads' },
+    ]
+
+    const scannedFilesMap = new Map<string, { name: string; tempPath: string; sizeBytes: number; modifiedAt: string; category: string }>()
+
+    for (const { path: dir, category } of candidateDirs) {
+      const files = await this._scanDirectoryForTemp(dir, category)
+      for (const f of files) {
+        const normKey = normalize(f.tempPath)
+        if (!scannedFilesMap.has(normKey)) {
+          scannedFilesMap.set(normKey, f)
+        }
+      }
+    }
+
+    const currentJobs = await this.listDownloadJobs()
+
+    const files: IncompleteDownloadItem[] = []
+    let totalBytes = 0
+
+    for (const rawFile of scannedFilesMap.values()) {
+      const normPath = normalize(rawFile.tempPath)
+      const baseName = basename(normPath)
+
+      // Check matching job in BullMQ
+      const matchingJob = currentJobs.find((job) => {
+        if (!job.filepath) return false
+        const expectedTemp = normalize(job.filepath + '.tmp')
+        return (
+          normPath === expectedTemp ||
+          baseName === basename(expectedTemp) ||
+          baseName.startsWith(basename(job.filepath))
+        )
+      })
+
+      let status: 'active' | 'queued' | 'orphaned' = 'orphaned'
+      if (matchingJob) {
+        if (matchingJob.status === 'active') {
+          status = 'active'
+        } else if (matchingJob.status === 'waiting' || matchingJob.status === 'delayed') {
+          status = 'queued'
+        } else {
+          status = 'orphaned'
+        }
+      }
+
+      totalBytes += rawFile.sizeBytes
+      files.push({
+        ...rawFile,
+        status,
+        jobId: matchingJob?.jobId,
+      })
+    }
+
+    // Sort: orphaned first, then descending by size
+    files.sort((a, b) => {
+      if (a.status === 'orphaned' && b.status !== 'orphaned') return -1
+      if (a.status !== 'orphaned' && b.status === 'orphaned') return 1
+      return b.sizeBytes - a.sizeBytes
+    })
+
+    return { files, totalBytes }
+  }
+
+  async deleteIncompleteDownload(tempPath: string): Promise<{ success: boolean; message: string }> {
+    if (!tempPath) {
+      return { success: false, message: 'Caminho do arquivo não fornecido.' }
+    }
+
+    const norm = normalize(tempPath)
+    const lower = norm.toLowerCase()
+    if (!lower.endsWith('.tmp') && !lower.endsWith('.part') && !lower.endsWith('.crdownload')) {
+      return { success: false, message: 'Operação recusada: apenas arquivos temporários (.tmp, .part) podem ser excluídos.' }
+    }
+
+    // Check if an active job is writing to this file
+    const currentJobs = await this.listDownloadJobs()
+    const activeMatch = currentJobs.find((j) => {
+      if (!j.filepath || j.status !== 'active') return false
+      const expected = normalize(j.filepath + '.tmp')
+      return norm === expected || basename(norm) === basename(expected)
+    })
+
+    if (activeMatch) {
+      return {
+        success: false,
+        message: 'Este arquivo está sendo baixado ativamente no momento. Cancele o download antes de excluí-lo.',
+      }
+    }
+
+    try {
+      await deleteFileIfExists(norm)
+      return { success: true, message: 'Arquivo temporário excluído com sucesso.' }
+    } catch (err: any) {
+      return { success: false, message: `Erro ao excluir: ${err?.message || String(err)}` }
+    }
+  }
+
+  async clearOrphanedIncompleteDownloads(): Promise<{ success: boolean; count: number; freedBytes: number; message: string }> {
+    const { files } = await this.listIncompleteDownloads()
+    const orphaned = files.filter((f) => f.status === 'orphaned')
+
+    let count = 0
+    let freedBytes = 0
+
+    for (const f of orphaned) {
+      try {
+        await deleteFileIfExists(f.tempPath)
+        count++
+        freedBytes += f.sizeBytes
+      } catch {}
+    }
+
+    return {
+      success: true,
+      count,
+      freedBytes,
+      message: `${count} arquivo(s) temporário(s) órfão(s) excluído(s). Espaço liberado.`,
     }
   }
 }

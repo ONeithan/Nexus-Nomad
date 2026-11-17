@@ -79,6 +79,16 @@ export type DownloadJobWithProgress = {
   failedReason?: string
 }
 
+export type IncompleteDownloadItem = {
+  name: string
+  tempPath: string
+  sizeBytes: number
+  modifiedAt: string
+  category: string
+  status: 'active' | 'queued' | 'orphaned'
+  jobId?: string
+}
+
 // Wikipedia selector types
 export type WikipediaOption = {
   id: string

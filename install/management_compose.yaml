@@ -31,6 +31,8 @@ services:
       - /opt/project-nomad/storage:/app/storage
       - /var/run/docker.sock:/var/run/docker.sock # Allows the admin service to communicate with the Host's Docker daemon
       - nomad-update-shared:/app/update-shared # Shared volume for update communication
+      - /mnt:/mnt # Secondary host storage mounts (SATA/NVMe HDs)
+      - /media:/media # External USB and auto-mounted storage media
     environment:
       - NODE_ENV=production
       # NOMAD_STORAGE_PATH should equal the host path of the /app/storage volume above. The admin

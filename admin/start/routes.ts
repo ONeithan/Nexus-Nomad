@@ -294,6 +294,22 @@ router
       summary: 'Retry a download job',
       tags: ['downloads'],
     })
+    documented(router.post('/jobs/resume-all', [DownloadsController, 'resumeAll']), {
+      summary: 'Resume all interrupted download jobs',
+      tags: ['downloads'],
+    })
+    documented(router.get('/incomplete', [DownloadsController, 'incomplete']), {
+      summary: 'List incomplete download files on disk',
+      tags: ['downloads'],
+    })
+    documented(router.delete('/incomplete', [DownloadsController, 'deleteIncomplete']), {
+      summary: 'Delete an incomplete download file on disk',
+      tags: ['downloads'],
+    })
+    documented(router.post('/incomplete/clear', [DownloadsController, 'clearOrphaned']), {
+      summary: 'Clear all orphaned incomplete download files on disk',
+      tags: ['downloads'],
+    })
   })
   .prefix('/api/downloads')
 
@@ -567,6 +583,10 @@ router
     })
     documented(router.post('/services/truenas/test', [SystemController, 'testTruenasConnection']), {
       summary: 'Test connection to TrueNAS server',
+      tags: ['system'],
+    })
+    documented(router.post('/restart-nomad', [SystemController, 'restartNomad']), {
+      summary: 'Reinicia exclusivamente o contêiner do Nexus N.O.M.A.D.',
       tags: ['system'],
     })
     documented(router.post('/services/affect', [SystemController, 'affectService']), {

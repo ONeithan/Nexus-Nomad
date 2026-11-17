@@ -15,6 +15,7 @@ import { ContentAutoUpdateJob } from '#jobs/content_auto_update_job'
 import { DownloadDrugDataJob } from '#jobs/download_drug_data_job'
 import { IngestDrugDataJob } from '#jobs/ingest_drug_data_job'
 import { stallOptionsForQueue, type StallOptions } from '../../app/utils/queue_stall_options.js'
+import type { RunDownloadJobParams } from '../../types/downloads.js'
 
 export default class QueueWork extends BaseCommand {
   static commandName = 'queue:work'
@@ -144,6 +145,9 @@ export default class QueueWork extends BaseCommand {
       this.logger.info(`Worker started for queue: ${queueName}`)
     }
 
+    // Auto-resume any downloads interrupted by container reboot, update or stall
+    await this.autoResumeInterruptedDownloads()
+
     // Schedule nightly update checks (idempotent, will persist over restarts)
     await CheckUpdateJob.scheduleNightly()
     await CheckServiceUpdatesJob.scheduleNightly()
@@ -240,5 +244,57 @@ export default class QueueWork extends BaseCommand {
     }
 
     return concurrencyMap[queueName] || concurrencyMap.default
+  }
+
+  private async autoResumeInterruptedDownloads(): Promise<void> {
+    try {
+      const { QueueService } = await import('#services/queue_service')
+      const queueService = QueueService.getInstance()
+      const queue = queueService.getQueue(RunDownloadJob.queue)
+
+      // 1. Recover active jobs with stale locks left by the previous dead container
+      const activeJobs = await queue.getJobs(['active'])
+      for (const job of activeJobs) {
+        const params = job.data as RunDownloadJobParams
+        if (params && params.url && params.filepath) {
+          try {
+            const client = await queue.client
+            await client.del(`bull:${RunDownloadJob.queue}:${job.id}:lock`)
+            await job.remove().catch(() => {})
+            await RunDownloadJob.dispatch(params)
+            this.logger.info(`[QueueWork] Auto-resumed interrupted active download on boot: ${params.url}`)
+          } catch (e: any) {
+            this.logger.error(`[QueueWork] Failed to auto-resume active job ${job.id}: ${e?.message}`)
+          }
+        }
+      }
+
+      // 2. Auto-recover failed jobs that were interrupted by container shutdown/reboot/stalls
+      const failedJobs = await queue.getJobs(['failed'])
+      for (const job of failedJobs) {
+        const params = job.data as RunDownloadJobParams
+        const reason = (job.failedReason || '').toLowerCase()
+        const isInterrupted =
+          reason.includes('stall') ||
+          reason.includes('restart') ||
+          reason.includes('sigterm') ||
+          reason.includes('abort') ||
+          reason.includes('econnreset') ||
+          reason.includes('etimedout') ||
+          reason.includes('socket hang up')
+
+        if (isInterrupted && params && params.url && params.filepath) {
+          try {
+            await job.remove().catch(() => {})
+            await RunDownloadJob.dispatch(params)
+            this.logger.info(`[QueueWork] Auto-resumed interrupted failed download on boot: ${params.url}`)
+          } catch (e: any) {
+            this.logger.error(`[QueueWork] Failed to auto-resume failed job ${job.id}: ${e?.message}`)
+          }
+        }
+      }
+    } catch (err: any) {
+      this.logger.error(`[QueueWork] Error during auto-resume on startup: ${err?.message}`)
+    }
   }
 }

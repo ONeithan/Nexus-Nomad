@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Head } from '@inertiajs/react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import axios from 'axios'
+import { Dialog, DialogBackdrop, DialogPanel } from '@headlessui/react'
 import {
   IconArrowRight,
   IconCheck,
@@ -14,6 +15,10 @@ import {
   IconServer,
   IconTrash,
   IconArrowUp,
+  IconAlertTriangle,
+  IconLoader2,
+  IconX,
+  IconRotateClockwise,
 } from '@tabler/icons-react'
 import SettingsLayout from '~/layouts/SettingsLayout'
 import StyledSectionHeader from '~/components/StyledSectionHeader'
@@ -22,6 +27,7 @@ import StyledModal from '~/components/StyledModal'
 import Alert from '~/components/Alert'
 import { useNotifications } from '~/context/NotificationContext'
 import { formatBytes } from '~/lib/util'
+import { rebootNomadSystem } from '~/components/TacticalBootGate'
 
 interface FolderUsageItem {
   name: string
@@ -47,6 +53,15 @@ interface StorageFileEntry {
   modifiedAt: string
 }
 
+interface ConfirmMoveModalState {
+  isOpen: boolean
+  type: 'all' | 'single'
+  targetDisk: MountTarget
+  moduleKey?: string
+  moduleName?: string
+  sourcePath?: string
+}
+
 export default function SettingsStorage() {
   const queryClient = useQueryClient()
   const { addNotification } = useNotifications()
@@ -57,6 +72,7 @@ export default function SettingsStorage() {
   const [keepSymlink, setKeepSymlink] = useState<boolean>(true)
   const [moving, setMoving] = useState<boolean>(false)
   const [movingItem, setMovingItem] = useState<string | null>(null)
+  const [confirmMoveModal, setConfirmMoveModal] = useState<ConfirmMoveModalState | null>(null)
   const [newFolderName, setNewFolderName] = useState<string>('')
 
   // Samba state
@@ -66,6 +82,7 @@ export default function SettingsStorage() {
   const [sambaPassword, setSambaPassword] = useState('')
   const [sambaHostPath, setSambaHostPath] = useState('')
   const [sambaSaving, setSambaSaving] = useState(false)
+  const [rebootModalOpen, setRebootModalOpen] = useState(false)
 
   const {
     data: overview,
@@ -79,6 +96,7 @@ export default function SettingsStorage() {
         preferredDownloadDisk: string
         folderUsage: FolderUsageItem[]
         mountTargets: MountTarget[]
+        unmountedDisks?: Array<{ name: string; size: string; model: string; vendor: string }>
       }>('/api/system/storage/overview')
       return res.data
     },
@@ -168,6 +186,55 @@ export default function SettingsStorage() {
     }
   }
 
+  const executeConfirmedMove = async () => {
+    if (!confirmMoveModal || !overview) return
+    const { type, targetDisk, moduleKey, moduleName, sourcePath } = confirmMoveModal
+
+    try {
+      if (type === 'all') {
+        setMovingItem(`all-${targetDisk.path}`)
+        const MODULE_KEYS = ['zim', 'maps', 'kolibri-gen2', 'ollama', 'books', 'media', 'kb_uploads']
+        let successCount = 0
+        for (const k of MODULE_KEYS) {
+          try {
+            await axios.post('/api/system/storage/move', {
+              sourcePath: `${overview.storageRoot}/${k}`,
+              targetDiskPath: targetDisk.path,
+            })
+            successCount++
+          } catch (e) {
+            console.warn(`[Storage] Erro ao mover ${k}:`, e)
+          }
+        }
+        addNotification({
+          message: `${successCount} módulos de download mapeados para ${targetDisk.label}!`,
+          type: 'success',
+        })
+      } else {
+        if (!moduleKey || !sourcePath) return
+        setMovingItem(moduleKey)
+        const res = await axios.post('/api/system/storage/move', {
+          sourcePath,
+          targetDiskPath: targetDisk.path,
+        })
+        addNotification({
+          message: res.data?.message || `${moduleName || moduleKey} mapeado com sucesso para ${targetDisk.label}!`,
+          type: 'success',
+        })
+      }
+    } catch (err: any) {
+      addNotification({
+        message: err?.response?.data?.error || `Falha ao mapear itens.`,
+        type: 'error',
+      })
+    } finally {
+      setMovingItem(null)
+      setConfirmMoveModal(null)
+      refetchOverview()
+      refetchBrowse()
+    }
+  }
+
   const handleDeleteEntry = async (entry: StorageFileEntry) => {
     try {
       await axios.post('/api/system/storage/delete', { path: entry.path })
@@ -252,13 +319,23 @@ export default function SettingsStorage() {
           <section className="space-y-4">
             <div className="flex items-center justify-between">
               <StyledSectionHeader title="Raio-X de Uso de Disco &amp; Destino de Downloads" className="!mb-0" />
-              <StyledButton
-                size="sm"
-                icon="IconRefresh"
-                onClick={() => queryClient.invalidateQueries({ queryKey: ['storage-overview'] })}
-              >
-                Atualizar
-              </StyledButton>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setRebootModalOpen(true)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-desert-orange/50 bg-desert-orange/10 hover:bg-desert-orange hover:text-black text-xs font-bold text-desert-orange transition-colors cursor-pointer"
+                >
+                  <IconRotateClockwise size={14} />
+                  <span>Reiniciar N.O.M.A.D.</span>
+                </button>
+                <StyledButton
+                  size="sm"
+                  icon="IconRefresh"
+                  onClick={() => queryClient.invalidateQueries({ queryKey: ['storage-overview'] })}
+                >
+                  Atualizar
+                </StyledButton>
+              </div>
             </div>
 
             {overviewLoading ? (
@@ -306,6 +383,23 @@ export default function SettingsStorage() {
                       )
                     })}
                   </div>
+
+                  {overview?.unmountedDisks && overview.unmountedDisks.length > 0 && (
+                    <div className="mt-3 p-3 rounded-lg border border-desert-orange/40 bg-desert-orange/10 text-xs space-y-1.5">
+                      <div className="font-bold text-desert-orange flex items-center gap-1.5">
+                        <IconAlertTriangle size={15} />
+                        <span>Discos Físicos Detectados no Host (Sem Partição Montada):</span>
+                      </div>
+                      {overview.unmountedDisks.map((ud) => (
+                        <div key={ud.name} className="text-text-secondary pl-5">
+                          • <strong className="text-text-primary">/dev/{ud.name}</strong> ({ud.size}) - {ud.vendor} {ud.model}
+                          <span className="block text-[11px] text-text-muted mt-0.5">
+                            Para usar este disco para downloads e dados, formate e monte-o no Linux do host (ex: <code className="text-desert-orange font-bold">/mnt/hd2</code>). Ele aparecerá como destino selecionável imediatamente.
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 {/* Ocupação por Pasta */}
@@ -357,40 +451,33 @@ export default function SettingsStorage() {
                 {/* Ação Mestre: Mapear TUDO de uma vez */}
                 <div className="flex items-center gap-2 shrink-0 bg-surface-secondary p-2.5 rounded-xl border border-border-default">
                   <span className="text-xs font-semibold text-text-primary">Mapear TUDO para:</span>
-                  {overview.mountTargets.map((m) => (
-                    <button
-                      key={`map-all-${m.path}`}
-                      type="button"
-                      disabled={Boolean(movingItem)}
-                      onClick={async () => {
-                        const confirm = window.confirm(`Deseja mover e mapear TODAS as pastas de downloads para o disco ${m.label}? Isso criará links simbólicos automáticos.`)
-                        if (!confirm) return
-                        setMovingItem('all')
-                        let successCount = 0
-                        for (const f of overview.folderUsage) {
-                          try {
-                            await axios.post('/api/system/storage/move', {
-                              sourcePath: f.path,
-                              targetDiskPath: m.path,
-                            })
-                            successCount++
-                          } catch {
-                            // Continua para as demais
-                          }
-                        }
-                        addNotification({
-                          message: `${successCount} pastas mapeadas com sucesso para ${m.label}!`,
-                          type: 'success',
-                        })
-                        refetchOverview()
-                        refetchBrowse()
-                        setMovingItem(null)
-                      }}
-                      className="px-3 py-1.5 rounded-lg bg-desert-green hover:bg-desert-green-dark text-white text-xs font-bold cursor-pointer disabled:opacity-50"
-                    >
-                      {movingItem === 'all' ? 'Mapeando...' : `⚡ ${m.label}`}
-                    </button>
-                  ))}
+                  {overview.mountTargets.map((m) => {
+                    const isThisAllMoving = movingItem === `all-${m.path}`
+                    return (
+                      <button
+                        key={`map-all-${m.path}`}
+                        type="button"
+                        disabled={Boolean(movingItem)}
+                        onClick={() => {
+                          setConfirmMoveModal({
+                            isOpen: true,
+                            type: 'all',
+                            targetDisk: m,
+                          })
+                        }}
+                        className="px-3 py-1.5 rounded-lg bg-desert-green hover:bg-desert-green-dark text-white text-xs font-bold cursor-pointer disabled:opacity-50 inline-flex items-center gap-1.5"
+                      >
+                        {isThisAllMoving ? (
+                          <>
+                            <IconLoader2 size={13} className="animate-spin" />
+                            <span>Mapeando...</span>
+                          </>
+                        ) : (
+                          <span>⚡ {m.label}</span>
+                        )}
+                      </button>
+                    )
+                  })}
                 </div>
               </div>
 
@@ -406,7 +493,7 @@ export default function SettingsStorage() {
                   { key: 'kb_uploads', name: 'Base de Conhecimento RAG', icon: '📄', desc: 'Documentos e PDFs indexados' },
                 ].map((mod) => {
                   const currentFolder = overview.folderUsage.find((f) => f.name === mod.key)
-                  const isMovingThis = movingItem === mod.key
+                  const isMovingThis = movingItem === mod.key || (Boolean(movingItem) && movingItem.startsWith('all-'))
                   return (
                     <div
                       key={`module-card-${mod.key}`}
@@ -436,28 +523,16 @@ export default function SettingsStorage() {
                               key={`btn-${mod.key}-${m.path}`}
                               type="button"
                               disabled={Boolean(movingItem)}
-                              onClick={async () => {
-                                setMovingItem(mod.key)
-                                try {
-                                  const targetFolder = currentFolder || { path: `${overview.storageRoot}/${mod.key}` }
-                                  const res = await axios.post('/api/system/storage/move', {
-                                    sourcePath: targetFolder.path,
-                                    targetDiskPath: m.path,
-                                  })
-                                  addNotification({
-                                    message: res.data?.message || `${mod.name} mapeado para ${m.label}!`,
-                                    type: 'success',
-                                  })
-                                  refetchOverview()
-                                  refetchBrowse()
-                                } catch (err: any) {
-                                  addNotification({
-                                    message: err?.response?.data?.error || `Falha ao mapear ${mod.name}.`,
-                                    type: 'error',
-                                  })
-                                } finally {
-                                  setMovingItem(null)
-                                }
+                              onClick={() => {
+                                const targetFolder = currentFolder || { path: `${overview.storageRoot}/${mod.key}` }
+                                setConfirmMoveModal({
+                                  isOpen: true,
+                                  type: 'single',
+                                  targetDisk: m,
+                                  moduleKey: mod.key,
+                                  moduleName: mod.name,
+                                  sourcePath: targetFolder.path,
+                                })
                               }}
                               className="px-2.5 py-1 rounded border border-border-default bg-surface-primary hover:border-desert-tan text-[11px] font-medium text-text-primary cursor-pointer disabled:opacity-50"
                             >
@@ -784,6 +859,155 @@ export default function SettingsStorage() {
               </label>
             </div>
           </StyledModal>
+
+          {/* Modal Tático In-System de Confirmação de Mapeamento de Discos */}
+          <Dialog
+            open={Boolean(confirmMoveModal?.isOpen)}
+            onClose={() => {
+              if (!movingItem) setConfirmMoveModal(null)
+            }}
+            className="relative z-50"
+          >
+            <DialogBackdrop
+              transition
+              className="fixed inset-0 bg-black/80 backdrop-blur-sm transition-opacity data-[closed]:opacity-0"
+            />
+
+            <div className="fixed inset-0 flex items-center justify-center p-4 overflow-y-auto">
+              <DialogPanel
+                transition
+                className="relative bg-surface-primary border border-desert-green/40 rounded-2xl shadow-2xl max-w-lg w-full p-6 space-y-5 data-[closed]:scale-95 data-[closed]:opacity-0 transition-all"
+              >
+                <div className="flex items-start gap-4">
+                  <div className="w-12 h-12 rounded-xl bg-desert-green/15 border border-desert-green/30 flex items-center justify-center text-desert-green shrink-0">
+                    <IconServer size={26} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h3 className="text-base font-bold font-mono-mil tracking-wide uppercase text-text-primary">
+                      {confirmMoveModal?.type === 'all'
+                        ? 'Mapeamento Geral de Armazenamento'
+                        : `Mapear ${confirmMoveModal?.moduleName || 'Módulo'}`}
+                    </h3>
+                    <p className="text-xs text-text-muted mt-1 leading-relaxed">
+                      {confirmMoveModal?.type === 'all'
+                        ? 'Deseja mover e mapear TODAS as pastas de downloads para este disco? O NOMAD criará links simbólicos automáticos sem quebrar as aplicações.'
+                        : `Mover os arquivos deste módulo para o disco selecionado e criar atalhos transparentes no sistema.`}
+                    </p>
+                  </div>
+                  {!movingItem && (
+                    <button
+                      onClick={() => setConfirmMoveModal(null)}
+                      className="p-1 rounded-lg text-text-muted hover:text-text-primary transition-colors cursor-pointer"
+                    >
+                      <IconX size={18} />
+                    </button>
+                  )}
+                </div>
+
+                <div className="p-3.5 rounded-xl bg-surface-secondary border border-border-default space-y-2">
+                  <div className="text-[11px] font-semibold text-text-secondary uppercase tracking-wider">
+                    Disco de Destino:
+                  </div>
+                  <div className="flex items-center gap-2 text-sm font-bold text-text-primary">
+                    <span className="text-desert-green font-mono">💾</span>
+                    <span className="truncate">{confirmMoveModal?.targetDisk?.label}</span>
+                  </div>
+                  <div className="text-xs font-mono text-text-muted flex items-center gap-2">
+                    <span className="truncate">Caminho: {confirmMoveModal?.targetDisk?.path}</span>
+                    <span>•</span>
+                    <span className="shrink-0">
+                      Livre: {confirmMoveModal?.targetDisk?.freeBytes ? formatBytes(confirmMoveModal.targetDisk.freeBytes, 1) : 'Calculando...'}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="p-3 rounded-lg bg-desert-orange/10 border border-desert-orange/25 text-xs text-desert-orange leading-relaxed flex items-start gap-2.5">
+                  <IconAlertTriangle size={18} className="shrink-0 mt-0.5" />
+                  <span>
+                    Operação segura: os arquivos são movidos com verificação de integridade e o contêiner continua acessando os dados no mesmo caminho original através de links simbólicos.
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-end gap-3 pt-2">
+                  <button
+                    type="button"
+                    disabled={Boolean(movingItem)}
+                    onClick={() => setConfirmMoveModal(null)}
+                    className="px-4 py-2 rounded-lg bg-surface-secondary hover:bg-surface-secondary/80 border border-border-default text-xs font-semibold text-text-secondary transition-colors cursor-pointer disabled:opacity-50"
+                  >
+                    Cancelar
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={Boolean(movingItem)}
+                    onClick={executeConfirmedMove}
+                    className="px-4 py-2 rounded-lg bg-desert-green hover:bg-desert-green-dark text-white text-xs font-bold font-mono-mil flex items-center gap-2 cursor-pointer shadow-md disabled:opacity-50"
+                  >
+                    {movingItem ? (
+                      <>
+                        <IconLoader2 size={16} className="animate-spin" />
+                        <span>Mapeando arquivos...</span>
+                      </>
+                    ) : (
+                      <>
+                        <IconCheck size={16} />
+                        <span>Confirmar e Mapear</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </DialogPanel>
+            </div>
+          </Dialog>
+
+          {/* Modal Tático de Confirmação de Reinicialização */}
+          <Dialog
+            open={rebootModalOpen}
+            onClose={() => setRebootModalOpen(false)}
+            className="relative z-50"
+          >
+            <DialogBackdrop className="fixed inset-0 bg-black/80 backdrop-blur-sm transition-opacity" />
+            <div className="fixed inset-0 z-10 w-screen overflow-y-auto">
+              <div className="flex min-h-full items-center justify-center p-4 text-center">
+                <DialogPanel className="w-full max-w-md transform overflow-hidden rounded-2xl bg-surface-primary border border-desert-orange/60 p-6 text-left align-middle shadow-2xl transition-all">
+                  <div className="flex items-center gap-3 text-desert-orange mb-3">
+                    <IconRotateClockwise size={26} className="shrink-0" />
+                    <h3 className="text-base font-bold text-text-primary">
+                      Reiniciar Nexus N.O.M.A.D.
+                    </h3>
+                  </div>
+                  <p className="text-xs text-text-secondary leading-relaxed mb-4">
+                    Esta ação reinicia <strong>apenas o contêiner do Nexus N.O.M.A.D.</strong>. Suas aplicações ativas no Portainer/Docker (Kiwix, Ollama, Jellyfin, etc.) <strong>NÃO</strong> serão interrompidas.
+                  </p>
+                  <div className="p-3 rounded-lg bg-surface-secondary border border-border-subtle text-[11px] text-text-muted mb-5 space-y-1">
+                    <div>• O sistema executará a animação tática inicial de boot estabilizado.</div>
+                    <div>• Ao finalizar, solicitará novamente a autenticação do operador (login).</div>
+                  </div>
+                  <div className="flex justify-end gap-2.5">
+                    <button
+                      type="button"
+                      onClick={() => setRebootModalOpen(false)}
+                      className="px-3.5 py-1.5 rounded-lg border border-border-default bg-surface-secondary text-xs font-semibold text-text-secondary hover:text-text-primary cursor-pointer"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setRebootModalOpen(false)
+                        rebootNomadSystem()
+                      }}
+                      className="px-4 py-1.5 rounded-lg bg-desert-orange hover:bg-desert-orange-dark text-black text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <IconRotateClockwise size={14} />
+                      <span>Confirmar e Reiniciar</span>
+                    </button>
+                  </div>
+                </DialogPanel>
+              </div>
+            </div>
+          </Dialog>
         </main>
       </div>
     </SettingsLayout>

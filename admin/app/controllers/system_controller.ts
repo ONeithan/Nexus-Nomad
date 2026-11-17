@@ -179,6 +179,31 @@ export default class SystemController {
         }
     }
 
+    async restartNomad({ response }: HttpContext) {
+        try {
+            logger.info('[SystemController] Solicitação de reinicialização do Nexus N.O.M.A.D. recebida.');
+            response.ok({
+                success: true,
+                message: 'Reinicialização do Nexus N.O.M.A.D. iniciada com sucesso.',
+            });
+
+            setTimeout(async () => {
+                try {
+                    logger.info('[SystemController] Executando restart do contêiner nomad_admin...');
+                    const adminCont = this.dockerService.docker.getContainer(DockerService.ADMIN_CONTAINER_NAME);
+                    await adminCont.restart({ t: 1 }).catch(() => null);
+                } catch (err: any) {
+                    logger.warn(`[SystemController] Erro no docker restart, finalizando processo node: ${err?.message}`);
+                } finally {
+                    process.exit(0);
+                }
+            }, 350);
+        } catch (error: any) {
+            logger.error(`[SystemController] Falha ao solicitar reinicialização: ${error.message}`);
+            return response.internalServerError({ error: 'Falha ao reiniciar o sistema.' });
+        }
+    }
+
     async getSystemUpdateStatus({ response }: HttpContext) {
         const status = this.systemUpdateService.getUpdateStatus();
 

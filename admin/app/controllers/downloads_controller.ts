@@ -28,4 +28,21 @@ export default class DownloadsController {
   async retryJob({ params }: HttpContext) {
     return this.downloadService.retryFailedJob(params.jobId)
   }
+
+  async resumeAll() {
+    return this.downloadService.resumeAllInterruptedDownloads()
+  }
+
+  async incomplete() {
+    return this.downloadService.listIncompleteDownloads()
+  }
+
+  async deleteIncomplete({ request }: HttpContext) {
+    const tempPath = request.input('tempPath')
+    return this.downloadService.deleteIncompleteDownload(tempPath)
+  }
+
+  async clearOrphaned() {
+    return this.downloadService.clearOrphanedIncompleteDownloads()
+  }
 }

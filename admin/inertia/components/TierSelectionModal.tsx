@@ -188,25 +188,8 @@ const TierSelectionModal: React.FC<TierSelectionModalProps> = ({
   }, [systemInfo])
 
   const availableDisks = useMemo(() => {
-    const list = [...(storageOverview?.mountTargets || [])]
-    if (systemInfo?.disk && Array.isArray(systemInfo.disk)) {
-      for (const d of systemInfo.disk) {
-        if (d.filesystems && Array.isArray(d.filesystems)) {
-          for (const fs of d.filesystems) {
-            if (fs.mount && !list.some((item) => item.path === fs.mount)) {
-              list.push({
-                label: `Disco ${d.name} (${fs.mount}) • ${d.model || d.vendor || 'Disco Local'}`,
-                path: fs.mount,
-                freeBytes: Math.max(0, (fs.size || 0) - (fs.used || 0)),
-                totalBytes: fs.size || 0,
-              })
-            }
-          }
-        }
-      }
-    }
-    return list
-  }, [storageOverview?.mountTargets, systemInfo?.disk])
+    return storageOverview?.mountTargets || []
+  }, [storageOverview?.mountTargets])
 
   const ingestPolicy: 'Always' | 'Manual' =
     ingestPolicySetting?.value === 'Manual' ? 'Manual' : 'Always'

@@ -9,6 +9,7 @@ import {
   symlink,
   cp,
   statfs,
+  readFile,
 } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { basename, dirname, join, resolve } from 'node:path'
@@ -57,6 +58,30 @@ export class StorageManagerService {
     return resolve(process.cwd(), 'storage')
   }
 
+  private async readNomadDiskInfo(): Promise<{
+    diskLayout?: { blockdevices?: any[] }
+    fsSize?: Array<{ fs: string; size: number; used: number; available: number; use: number; mount: string }>
+  } | null> {
+    const candidates = [
+      join(this.getStorageRoot(), 'nomad-disk-info.json'),
+      '/storage/nomad-disk-info.json',
+      '/tmp/nomad-disk-info.json',
+      join(process.cwd(), 'storage', 'nomad-disk-info.json'),
+    ]
+    for (const p of candidates) {
+      if (existsSync(p)) {
+        try {
+          const content = await readFile(p, 'utf8')
+          const parsed = JSON.parse(content)
+          if (parsed && (parsed.fsSize || parsed.diskLayout)) {
+            return parsed
+          }
+        } catch {}
+      }
+    }
+    return null
+  }
+
   private async getAllowedRoots(): Promise<string[]> {
     if (this._allowedRootsCache && this._allowedRootsCache.size > 0) {
       return Array.from(this._allowedRootsCache)
@@ -68,9 +93,30 @@ export class StorageManagerService {
     }
 
     try {
+      const hostInfo = await this.readNomadDiskInfo()
+      if (hostInfo?.fsSize) {
+        for (const fs of hostInfo.fsSize) {
+          if (
+            fs.mount &&
+            !fs.mount.startsWith('/sys') &&
+            !fs.mount.startsWith('/proc') &&
+            !fs.mount.startsWith('/dev') &&
+            !fs.mount.startsWith('/app/update')
+          ) {
+            roots.add(resolve(fs.mount))
+          }
+        }
+      }
+
       const fsSizes = await si.fsSize().catch(() => [])
       for (const fs of fsSizes) {
-        if (fs.mount && !fs.mount.startsWith('/sys') && !fs.mount.startsWith('/proc') && !fs.mount.startsWith('/dev')) {
+        if (
+          fs.mount &&
+          !fs.mount.startsWith('/sys') &&
+          !fs.mount.startsWith('/proc') &&
+          !fs.mount.startsWith('/dev') &&
+          !fs.mount.startsWith('/app/update')
+        ) {
           roots.add(resolve(fs.mount))
         }
       }
@@ -179,7 +225,100 @@ export class StorageManagerService {
       diskType: 'Sistema',
     })
 
-    // 2. Discover filesystems and physical disks via systeminformation
+    // 2. Discover filesystems and host disks from nomad-disk-info.json (host collector sidecar)
+    const hostDiskInfo = await this.readNomadDiskInfo()
+    const unmountedDisks: Array<{ name: string; size: string; model: string; vendor: string }> = []
+    let rootDevPrefix = ''
+
+    if (hostDiskInfo) {
+      const hostFsList = hostDiskInfo.fsSize || []
+      const hostBlockDevices = hostDiskInfo.diskLayout?.blockdevices || []
+
+      // Identifica o prefixo do dispositivo raiz do sistema para não duplicar partições do mesmo disco
+      const rootFsEntry = hostFsList.find((f) => f.mount === '/' || resolve(f.mount) === resolve(storageRoot))
+      rootDevPrefix = rootFsEntry ? rootFsEntry.fs.replace(/[0-9]+$/, '').replace(/p$/, '') : ''
+
+      for (const fs of hostFsList) {
+        if (!fs.size || fs.size <= 0) continue
+        if (
+          fs.mount === '/' ||
+          fs.mount.startsWith('/boot') ||
+          fs.mount.startsWith('/sys') ||
+          fs.mount.startsWith('/proc') ||
+          fs.mount.startsWith('/dev') ||
+          fs.mount.startsWith('/app/update') ||
+          fs.mount.startsWith('/etc')
+        ) {
+          continue
+        }
+
+        // Se a partição pertencer ao mesmo disco físico do sistema operacional, ignora como secundário
+        if (rootDevPrefix && fs.fs.startsWith(rootDevPrefix)) {
+          continue
+        }
+
+        const resolvedMount = resolve(fs.mount)
+        const resolvedStorageRoot = resolve(storageRoot)
+        if (
+          resolvedMount === resolvedStorageRoot ||
+          resolvedStorageRoot.startsWith(resolvedMount + '/') ||
+          resolvedStorageRoot.startsWith(resolvedMount + '\\')
+        ) {
+          continue
+        }
+
+        if (mountTargets.some((m) => resolve(m.path) === resolvedMount)) continue
+
+        let diskModel = ''
+        let diskVendor = ''
+        let diskName = ''
+        for (const dev of hostBlockDevices) {
+          if (dev.name && (fs.fs.includes(dev.name) || dev.name === fs.fs)) {
+            diskName = dev.name
+            diskModel = dev.model || ''
+            diskVendor = dev.vendor || ''
+            break
+          }
+          if (dev.children && Array.isArray(dev.children)) {
+            for (const child of dev.children) {
+              if (child.name && (fs.fs.includes(child.name) || child.name === fs.fs)) {
+                diskName = dev.name
+                diskModel = dev.model || ''
+                diskVendor = dev.vendor || ''
+                break
+              }
+            }
+          }
+        }
+
+        const desc = [diskVendor, diskModel, diskName].filter(Boolean).join(' ') || fs.fs || 'Disco Local'
+        mountTargets.push({
+          label: `Disco Secundário (${fs.mount}) • ${desc}`,
+          path: fs.mount,
+          freeBytes: fs.available || Math.max(0, fs.size - fs.used),
+          totalBytes: fs.size,
+          isPrimary: false,
+          diskType: 'HD Secundário',
+        })
+      }
+
+      // Check for unmounted physical disks on the host
+      for (const dev of hostBlockDevices) {
+        if (dev.type === 'disk' && dev.name) {
+          const hasMountedChild = hostFsList.some((fs) => fs.fs.includes(dev.name))
+          if (!hasMountedChild && dev.size) {
+            unmountedDisks.push({
+              name: dev.name,
+              size: String(dev.size),
+              model: dev.model || 'Disco Local',
+              vendor: dev.vendor || '',
+            })
+          }
+        }
+      }
+    }
+
+    // 3. Discover filesystems and physical disks via systeminformation
     try {
       const [fsSizes, diskLayout, blockDevices] = await Promise.all([
         si.fsSize().catch(() => []),
@@ -205,7 +344,18 @@ export class StorageManagerService {
       for (const fs of fsSizes) {
         if (!fs.size || fs.size <= 0) continue
         if (ignoredTypes.has(fs.type?.toLowerCase())) continue
-        if (fs.mount.startsWith('/sys') || fs.mount.startsWith('/proc') || fs.mount.startsWith('/dev')) continue
+        if (
+          fs.mount === '/' ||
+          fs.mount.startsWith('/boot') ||
+          fs.mount.startsWith('/sys') ||
+          fs.mount.startsWith('/proc') ||
+          fs.mount.startsWith('/dev') ||
+          fs.mount.startsWith('/app/update') ||
+          fs.mount.startsWith('/etc')
+        )
+          continue
+        if (fs.mount.startsWith('/app/') && resolve(fs.mount) !== resolve(storageRoot)) continue
+        if (rootDevPrefix && fs.fs.startsWith(rootDevPrefix)) continue
 
         const resolvedMount = resolve(fs.mount)
         const resolvedStorageRoot = resolve(storageRoot)
@@ -261,7 +411,7 @@ export class StorageManagerService {
       logger.warn(`[StorageManager] systeminformation disk scan warning: ${err.message}`)
     }
 
-    // 3. Scan directory candidate mounts (/mnt/*, /media/*, /run/media/*, /data, /disks/*, /volumes/*)
+    // 4. Scan directory candidate mounts (/mnt/*, /media/*, /run/media/*, /data, /disks/*, /volumes/*)
     const candidateDirs = ['/mnt', '/media', '/run/media', '/data', '/disks', '/volumes']
     for (const baseDir of candidateDirs) {
       if (!existsSync(baseDir)) continue
@@ -279,7 +429,7 @@ export class StorageManagerService {
             const freeBytes = Number(fsStats.bavail) * Number(fsStats.bsize)
             if (totalBytes > 0) {
               mountTargets.push({
-                label: `Disco Externo (${fullPath})`,
+                label: `Disco Secundário (${fullPath})`,
                 path: fullPath,
                 freeBytes,
                 totalBytes,
@@ -306,6 +456,7 @@ export class StorageManagerService {
       preferredDownloadDisk,
       folderUsage,
       mountTargets,
+      unmountedDisks,
     }
   }
 
@@ -389,18 +540,45 @@ export class StorageManagerService {
     try {
       const stats = await lstat(src)
       if (stats.isSymbolicLink()) {
-        const target = await readlink(src)
-        if (resolve(dirname(src), target) === resolve(destPath)) {
+        const rawTarget = await readlink(src)
+        const currentTarget = resolve(dirname(src), rawTarget)
+        if (currentTarget === resolve(destPath)) {
           return { success: true, sourcePath: src, destPath, symlinkCreated: true, alreadyMapped: true }
         }
+
+        if (existsSync(currentTarget)) {
+          await mkdir(destPath, { recursive: true })
+          try {
+            await rename(currentTarget, destPath)
+          } catch (err: any) {
+            if (err?.code === 'EXDEV' || err?.code === 'EEXIST' || err?.code === 'ENOTEMPTY') {
+              await cp(currentTarget, destPath, { recursive: true })
+              await rm(currentTarget, { recursive: true, force: true })
+            } else {
+              throw err
+            }
+          }
+        }
+
+        await rm(src, { force: true })
+        if (createSymlink) {
+          try {
+            await symlink(destPath, src)
+          } catch (err) {
+            logger.warn(`[StorageManager] Não foi possível recriar link simbólico ${src} -> ${destPath}:`, err)
+          }
+        }
+        return { success: true, sourcePath: src, destPath, symlinkCreated: createSymlink }
       }
-    } catch {}
+    } catch (e: any) {
+      logger.warn(`[StorageManager] Verificação de link simbólico em ${src}: ${e?.message}`)
+    }
 
     try {
       await rename(src, destPath)
     } catch (err: any) {
-      if (err?.code === 'EXDEV') {
-        // Cross-device move (e.g. NVMe -> HDD)
+      if (err?.code === 'EXDEV' || err?.code === 'EEXIST' || err?.code === 'ENOTEMPTY') {
+        // Cross-device move ou pasta já existente no destino
         await cp(src, destPath, { recursive: true })
         await rm(src, { recursive: true, force: true })
       } else {
