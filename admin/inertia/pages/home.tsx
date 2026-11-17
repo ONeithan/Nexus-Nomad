@@ -289,6 +289,7 @@ export default function Home(props: {
   }
   drugReferenceInstalled: boolean
 }) {
+  const systemServices = props.system?.services || []
   const items: DashboardItem[] = []
   const updateInfo = useUpdateAvailable()
   const rerunBanner = useBenchmarkRerunBanner()
@@ -487,7 +488,7 @@ export default function Home(props: {
   : null
   const activeDownloadPercent = currentActiveJob ? Math.round(currentActiveJob.progress || 0) : 0
   const { data: remoteAiSetting } = useSystemSetting({ key: 'ai.remoteOllamaUrl' })
-  const ollamaInstalled = props.system.services.some(
+  const ollamaInstalled = systemServices.some(
     (s) => s.service_name === SERVICE_NAMES.OLLAMA && s.installed
   )
   const aiConfigured = ollamaInstalled || Boolean(remoteAiSetting?.value)
@@ -535,7 +536,7 @@ export default function Home(props: {
     ? String(easySetupVisited.value) !== 'true'
     : false
 
-  props.system.services
+  systemServices
     .filter(
       (service) =>
         service.installed &&
@@ -591,7 +592,7 @@ export default function Home(props: {
     })
 
   // User-added link tiles: shortcuts to things NOMAD does not manage.
-  props.system.services
+  systemServices
     .filter((service) => service.is_link_tile && service.custom_url)
     .forEach((service) => {
       items.push({
@@ -620,7 +621,7 @@ export default function Home(props: {
   items.push(...SYSTEM_ITEMS)
   items.sort((a, b) => a.displayOrder - b.displayOrder)
 
-  const installedAppCount = props.system.services.filter((s) => s.installed).length
+  const installedAppCount = systemServices.filter((s) => s.installed).length
 
   return (
     <AppLayout>
@@ -2127,7 +2128,7 @@ export default function Home(props: {
         isOpen={catalogModalOpen}
         onClose={() => setCatalogModalOpen(false)}
         initialAppId={catalogAppId}
-        installedServiceNames={new Set(props.system.services.filter((s) => s.installed).map((s) => s.service_name))}
+        installedServiceNames={new Set(systemServices.filter((s) => s.installed).map((s) => s.service_name))}
       />
     </AppLayout>
   )

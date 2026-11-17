@@ -518,15 +518,11 @@ export default function TacticalBootGate({ children }: { children: React.ReactNo
   const displayVersion =
     appVersion && appVersion !== '0.0.0' && appVersion !== 'dev'
       ? `v${appVersion.replace(/^v/i, '').replace(/-nexus$/i, '')}`
-      : 'v1.0.23'
+      : 'v1.0.24'
 
   const [stage, setStage] = useState<BootStage>(() => {
-    if (hasBootedInCurrentDocument) return 'UNLOCKED'
     const initialDb = loadAuthDB(tacticalAuth)
-    if (initialDb.setupCompleted && initialDb.operators.length > 0) {
-      return initialDb.lockedExplicitly ? 'LOGIN_SCREEN' : 'CLEAN_BOOT_OS'
-    }
-    return 'CRT_POWERON'
+    return initialDb.lockedExplicitly ? 'LOGIN_SCREEN' : 'UNLOCKED'
   })
   const [recoveryStep, setRecoveryStep] = useState<RecoverySubStep>('AWAIT_HELP')
   const [bootPct, setBootPct] = useState(0)
@@ -611,21 +607,12 @@ export default function TacticalBootGate({ children }: { children: React.ReactNo
         window.dispatchEvent(new CustomEvent('nomad:operator-updated'))
       }
 
-      if (db.setupCompleted && db.operators.length > 0) {
-        if (db.lockedExplicitly) {
-          hasBootedInCurrentDocument = true
-          setStage('LOGIN_SCREEN')
-        } else if (!hasBootedInCurrentDocument) {
-          // Ao dar F5 ou abrir o site: roda APENAS a tela "INICIALIZANDO NEXUS N.O.M.A.D. OS..."
-          // um pouco mais rápido (480ms por passo) e entra direto no painel sem pedir login ou recovery!
-          hasBootedInCurrentDocument = true
-          runCleanStabilizedOSBoot('UNLOCKED', 480)
-        } else {
-          setStage('UNLOCKED')
-        }
+      if (db.lockedExplicitly) {
+        hasBootedInCurrentDocument = true
+        setStage('LOGIN_SCREEN')
       } else {
         hasBootedInCurrentDocument = true
-        startColdBootSequence()
+        setStage('UNLOCKED')
       }
     }
 
@@ -1309,7 +1296,7 @@ export default function TacticalBootGate({ children }: { children: React.ReactNo
     startColdBootSequence()
   }
 
-  if (stage === 'UNLOCKED') {
+  if (stage !== 'LOGIN_SCREEN') {
     return <>{children}</>
   }
 
