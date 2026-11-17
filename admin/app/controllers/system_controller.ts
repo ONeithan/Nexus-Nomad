@@ -58,6 +58,10 @@ export default class SystemController {
         return await this.systemService.getSystemInfo();
     }
 
+    async getLiveTelemetry({ }: HttpContext) {
+        return await this.systemService.getLiveTelemetry();
+    }
+
     async getServices({ }: HttpContext) {
         return await this.systemService.getServices({ installedOnly: true });
     }

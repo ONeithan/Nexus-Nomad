@@ -6,7 +6,7 @@ import TacticalBootGate, { lockTacticalConsole, rebootNomadSystem } from '~/comp
 import useServiceInstalledStatus from '~/hooks/useServiceInstalledStatus'
 import { SERVICE_NAMES } from '../../constants/service_names'
 import { Link, router, usePage } from '@inertiajs/react'
-import { IconArrowLeft, IconHome, IconLock, IconServer, IconBook, IconRotateClockwise } from '@tabler/icons-react'
+import { IconArrowLeft, IconHome, IconLock, IconServer, IconBook, IconRotateClockwise, IconSettings } from '@tabler/icons-react'
 import { Dialog, DialogBackdrop, DialogPanel } from '@headlessui/react'
 import classNames from 'classnames'
 import AppCatalogModal from '~/components/AppCatalogModal'
@@ -41,8 +41,12 @@ export default function AppLayout({
   return (
     <TacticalBootGate>
       <div className="min-h-screen flex flex-col">
-        {/* Barra superior HUD com navegação inteligente e acesso aos Discos & Armazenamento */}
-        <div className="w-full bg-surface-primary border-b border-border-subtle px-4 py-2 flex flex-wrap items-center justify-between gap-3 sticky top-0 z-40 shadow-sm">
+        {/* Barra superior HUD com navegação inteligente e acesso às Configurações */}
+        <div className="w-full bg-surface-primary border-b border-border-subtle px-4 sm:px-6 py-2.5 sticky top-0 z-40 shadow-sm">
+          <div className={classNames(
+            'flex flex-wrap items-center justify-between gap-3 w-full mx-auto',
+            isHome ? 'max-w-[1360px]' : 'w-full'
+          )}>
           <div className="flex items-center gap-2">
             {!isHome ? (
               <>
@@ -118,7 +122,7 @@ export default function AppLayout({
               <button
                 type="button"
                 onClick={() => setIsCatalogOpen(true)}
-                title="Abrir Catálogo Completo & Guia Operacional das 114 Aplicações"
+                title="Abrir Catálogo Completo & Guia Operacional das Aplicações"
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-desert-orange/40 bg-desert-orange/10 hover:bg-desert-orange hover:text-white text-xs sm:text-sm font-semibold text-desert-orange transition-colors cursor-pointer"
               >
                 <IconBook size={16} />
@@ -135,11 +139,20 @@ export default function AppLayout({
               </Link>
             )}
 
+            <Link
+              href="/settings/system"
+              title="Configurações do Sistema"
+              aria-label="Configurações do Sistema"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-border-default bg-surface-secondary hover:border-desert-tan text-xs sm:text-sm font-semibold text-text-secondary hover:text-text-primary transition-colors"
+            >
+              <IconSettings size={16} />
+              <span className="hidden sm:inline">Configurações</span>
+            </Link>
             <button
               type="button"
               onClick={() => lockTacticalConsole()}
               title="Bloquear terminal e retornar à tela de Login / Boot Tático"
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-border-default bg-surface-secondary hover:border-status-warning text-xs font-semibold text-text-secondary hover:text-status-warning transition-colors cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-border-default bg-surface-secondary hover:border-status-warning text-xs sm:text-sm font-semibold text-text-secondary hover:text-status-warning transition-colors cursor-pointer"
             >
               <IconLock size={15} />
               <span className="hidden sm:inline">Bloquear</span>
@@ -148,11 +161,12 @@ export default function AppLayout({
               type="button"
               onClick={() => setIsRebootModalOpen(true)}
               title="Reiniciar exclusivamente o contêiner do Nexus N.O.M.A.D."
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-desert-orange/40 bg-desert-orange/10 hover:bg-desert-orange hover:text-black text-xs font-semibold text-desert-orange transition-colors cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-desert-orange/40 bg-desert-orange/10 hover:bg-desert-orange hover:text-black text-xs sm:text-sm font-semibold text-desert-orange transition-colors cursor-pointer"
             >
               <IconRotateClockwise size={15} />
               <span className="hidden sm:inline">Reiniciar</span>
             </button>
+          </div>
           </div>
         </div>
 

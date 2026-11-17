@@ -522,7 +522,7 @@ export default function TacticalBootGate({ children }: { children: React.ReactNo
   const displayVersion =
     appVersion && appVersion !== '0.0.0' && appVersion !== 'dev'
       ? `v${appVersion.replace(/^v/i, '').replace(/-nexus$/i, '')}`
-      : 'v1.0.26'
+      : 'v1.0.27'
 
   const [stage, setStage] = useState<BootStage>(() => {
     const initialDb = loadAuthDB(tacticalAuth)

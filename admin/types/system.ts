@@ -173,3 +173,12 @@ export type ContentAutoUpdateStatus = {
   autoDisabledReason: string | null
   resources: ContentAutoUpdateResourceStatus[]
 }
+
+export type LiveTelemetryResponse = {
+  currentLoad: Systeminformation.CurrentLoadData
+  mem: Systeminformation.MemData
+  cpuSpeed: Systeminformation.CpuCurrentSpeedData | null
+  cpuTemp: Systeminformation.CpuTemperatureData | null
+  uptime: Systeminformation.TimeData
+  timestamp: number
+}

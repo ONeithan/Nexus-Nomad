@@ -561,6 +561,7 @@ router
       summary: 'Get system information',
       tags: ['system'],
     })
+    router.get('/telemetry', [SystemController, 'getLiveTelemetry'])
     documented(router.get('/internet-status', [SystemController, 'getInternetStatus']), {
       summary: 'Get internet connectivity status',
       tags: ['system'],

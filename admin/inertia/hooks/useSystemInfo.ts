@@ -12,7 +12,7 @@ export const useSystemInfo = (props: UseSystemInfoProps) => {
     ...props,
     queryKey: ['system-info'],
     queryFn: async () => await api.getSystemInfo(),
-    refetchInterval: 45000, // Refetch every 45 seconds
+    refetchInterval: 10000, // Refetch every 10 seconds
   })
 
   return queryData

@@ -1,6 +1,9 @@
 import {
+  IconActivity,
   IconBolt,
   IconBox,
+  IconCpu,
+  IconDatabase,
   IconHelp,
   IconMapRoute,
   IconPalette,
@@ -153,11 +156,11 @@ function CircularGauge({
         />
       </svg>
       <div className="absolute flex flex-col items-center justify-center text-center px-1">
-        <span className="font-mono-mil font-bold text-sm sm:text-base leading-tight text-text-primary">
+        <span className="font-mono tabular-nums font-bold text-sm sm:text-base leading-tight text-text-primary">
           {label ?? `${Math.round(validPercent)}%`}
         </span>
         {sublabel && (
-          <span className="text-[9px] font-mono-mil text-text-muted uppercase leading-tight mt-0.5">
+          <span className="text-[10px] font-semibold text-text-muted uppercase leading-tight mt-0.5">
             {sublabel}
           </span>
         )}
@@ -396,10 +399,17 @@ export default function Home(props: {
   const { data: sysInfo } = useQuery({
     queryKey: ['home-sys-info'],
     queryFn: () => api.getSystemInfo(),
-    refetchInterval: 15000,
+    refetchInterval: 30000,
   })
 
-  // Storage overview for TrueNAS-style pools
+  const { data: liveTelemetry } = useQuery({
+    queryKey: ['home-live-telemetry'],
+    queryFn: () => api.getLiveTelemetry(),
+    refetchInterval: 2000,
+    staleTime: 1000,
+  })
+
+  // Storage overview for disk pools
   const { data: storageOverview } = useQuery<{
     storageRoot: string
     preferredDownloadDisk: string
@@ -411,26 +421,66 @@ export default function Home(props: {
       const res = await axios.get('/api/system/storage/overview')
       return res.data
     },
-    refetchInterval: 30000,
+    refetchInterval: 15000,
   })
 
-  // Hardware telemetry computation (strictly real host data)
-  const hasSysInfo = Boolean(sysInfo)
-  const cpuPercent = hasSysInfo ? Math.min(Math.max(sysInfo?.currentLoad?.currentLoad ?? 0, 0), 100) : 0
-  const cpuBrand = sysInfo?.cpu?.brand || (hasSysInfo ? 'Processador x86_64' : 'Coletando hardware...')
+  // Hardware telemetry computation (strictly real host data with 2s live updates)
+  const hasTelemetry = Boolean(liveTelemetry || sysInfo)
+  const activeLoad = liveTelemetry?.currentLoad ?? sysInfo?.currentLoad
+  const cpuPercent = hasTelemetry
+    ? Math.min(Math.max(activeLoad?.currentLoad ?? 0, 0), 100)
+    : 0
+  const cpuBrand = sysInfo?.cpu?.brand || (hasTelemetry ? 'Processador x86_64' : 'Coletando hardware...')
   const cpuPhysical = sysInfo?.cpu?.physicalCores ?? 0
   const cpuCores = sysInfo?.cpu?.cores ?? 0
-  const cpuSpeed = sysInfo?.cpu?.speed ?? 0
+  const cpuSpeedGHz = liveTelemetry?.cpuSpeed?.avg || sysInfo?.cpu?.speed || 0
+  const cpuTempC =
+    liveTelemetry?.cpuTemp?.main && liveTelemetry.cpuTemp.main > 0
+      ? Math.round(liveTelemetry.cpuTemp.main)
+      : null
 
-  const memTotalBytes = sysInfo?.mem?.total ?? 0
-  const memUsedBytes = sysInfo?.mem?.used ?? 0
-  const memFreeBytes =
-    sysInfo?.mem?.available ?? sysInfo?.mem?.free ?? Math.max(0, memTotalBytes - memUsedBytes)
+  const [cpuHistory, setCpuHistory] = useState<number[]>([])
+  useEffect(() => {
+    if (!hasTelemetry) return
+    const nextVal = Math.min(Math.max(Math.round(cpuPercent), 0), 100)
+    setCpuHistory((prev) => {
+      const next = [...prev, nextVal]
+      return next.length > 18 ? next.slice(next.length - 18) : next
+    })
+  }, [liveTelemetry?.timestamp, hasTelemetry])
+
+  // Real active RAM = total - available (linux mem.used includes reclaimable page cache)
+  const activeMem = liveTelemetry?.mem ?? sysInfo?.mem
+  const memTotalBytes = activeMem?.total ?? 0
+  const memAvailableBytes =
+    activeMem?.available != null
+      ? activeMem.available
+      : (activeMem?.free ?? 0)
+  const memUsedBytes = memTotalBytes > 0 ? Math.max(0, memTotalBytes - memAvailableBytes) : 0
+  const memCacheBytes = Math.max(0, (activeMem?.used ?? memUsedBytes) - memUsedBytes)
   const memTotalGiB = memTotalBytes / (1024 ** 3)
   const memUsedGiB = memUsedBytes / (1024 ** 3)
-  const memFreeGiB = memFreeBytes / (1024 ** 3)
+  const memFreeGiB = memAvailableBytes / (1024 ** 3)
+  const memCacheGiB = memCacheBytes / (1024 ** 3)
   const memUsedPercent =
     memTotalBytes > 0 ? Math.min(Math.max((memUsedBytes / memTotalBytes) * 100, 0), 100) : 0
+  const memCachePercent =
+    memTotalBytes > 0
+      ? Math.min(Math.max((memCacheBytes / memTotalBytes) * 100, 0), Math.max(0, 100 - memUsedPercent))
+      : 0
+
+  const uptimeSec = Math.floor(liveTelemetry?.uptime?.uptime ?? sysInfo?.uptime?.uptime ?? 0)
+  const uptimeDays = Math.floor(uptimeSec / 86400)
+  const uptimeHours = Math.floor((uptimeSec % 86400) / 3600)
+  const uptimeMins = Math.floor((uptimeSec % 3600) / 60)
+  const uptimeDisplay = !hasTelemetry
+    ? '--'
+    : uptimeDays > 0
+      ? `${uptimeDays}d ${uptimeHours}h ${uptimeMins}m`
+      : uptimeHours > 0
+        ? `${uptimeHours}h ${uptimeMins}m`
+        : `${uptimeMins}m`
+  const hostNameDisplay = sysInfo?.os?.hostname || 'Nexus-NOMAD'
 
   const displayMountTargets: Array<{ label: string; path: string; freeBytes: number; totalBytes: number }> =
     storageOverview?.mountTargets && storageOverview.mountTargets.length > 0
@@ -629,7 +679,7 @@ export default function Home(props: {
     <AppLayout>
       <Head title="Centro de Comando" />
       {updateInfo?.updateAvailable && (
-        <div className="flex justify-center items-center p-4 w-full max-w-[1840px] mx-auto 2xl:px-10">
+        <div className="flex justify-center items-center px-4 sm:px-6 pt-4 w-full max-w-[1360px] mx-auto">
           <Alert
             title="Uma nova atualização está disponível!"
             type="info-inverted"
@@ -646,7 +696,7 @@ export default function Home(props: {
       )}
       <WhatsNewBanner />
       {rerunBanner?.show && (
-        <div className="flex justify-center items-center px-4 pt-4 w-full max-w-[1840px] mx-auto 2xl:px-10">
+        <div className="flex justify-center items-center px-4 sm:px-6 pt-4 w-full max-w-[1360px] mx-auto">
           <Alert
             title="Seu benchmark pode ser recalculado com o Score v2"
             message="O sistema de pontuação de hardware foi atualizado. Execute novamente quando desejar."
@@ -667,55 +717,98 @@ export default function Home(props: {
 
       {effectiveTacticalHome ? (
         /* ====================================================================
-           MODO HUD TÁTICO MILITAR COM PAINEL MODULAR & CENTRAIS NOMAD
+           PAINEL DE CONTROLE N.O.M.A.D. (PROPORÇÃO EQUILIBRADA & TEMPO REAL)
            ==================================================================== */
-        <div className="max-w-[1840px] w-full mx-auto px-4 sm:px-6 2xl:px-10 py-4 space-y-5">
-          {/* 1. BARRA OPERACIONAL DO COMANDO */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-border-default/60">
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-mono-mil text-text-secondary">
-              <span className="inline-flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-desert-green nomad-telemetry-dot" />
-                AUTORIZAÇÃO: <strong className="text-desert-olive">{activeOperator.level}</strong>
+        <div className="max-w-[1360px] w-full mx-auto px-4 sm:px-6 py-5 space-y-5">
+          {/* 1. BARRA OPERACIONAL COMPACTA */}
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 px-4 py-2.5 rounded-xl border border-border-default bg-surface-primary shadow-sm">
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-text-secondary">
+              <span className="inline-flex items-center gap-2 font-medium">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 nomad-telemetry-dot" />
+                <span className="text-text-muted">Autorização:</span>
+                <strong className="text-text-primary">{activeOperator.level}</strong>
               </span>
-              <span>•</span>
+              <span className="text-border-default hidden sm:inline">•</span>
               <span>
-                OPERADOR: <strong className="text-text-primary">{activeOperator.username.toUpperCase()}</strong>
+                Operador: <strong className="text-text-primary">{activeOperator.username.toUpperCase()}</strong>
               </span>
-              <span>•</span>
+              <span className="text-border-default hidden sm:inline">•</span>
               <span>
-                NÓ DE CAMPO: <strong className="text-desert-tan">NEXUS-01</strong>
+                Host: <strong className="text-desert-tan font-mono">{hostNameDisplay}</strong>
               </span>
-              <span>•</span>
+              <span className="text-border-default hidden sm:inline">•</span>
               <span>
-                REDE: <strong className="text-desert-olive">LAN / OFF-GRID PRONTO</strong>
+                Uptime: <strong className="text-text-primary font-mono tabular-nums">{uptimeDisplay}</strong>
               </span>
             </div>
 
-            <div className="flex items-center gap-2 self-start sm:self-auto">
+            <div className="flex flex-wrap items-center gap-2">
+              <Link
+                href="/easy-setup"
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border transition-colors ${
+                  shouldHighlightEasySetup
+                    ? 'bg-desert-orange text-white border-desert-orange hover:bg-desert-orange-light shadow-sm'
+                    : 'bg-surface-secondary border-border-default hover:border-desert-green text-text-primary'
+                }`}
+              >
+                <IconBolt size={14} />
+                <span>Configuração Inicial</span>
+              </Link>
               <button
                 type="button"
                 onClick={() => setDashboardModalOpen(true)}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono-mil uppercase border border-border-default bg-surface-secondary hover:border-desert-tan text-text-primary rounded cursor-pointer transition-colors shadow-sm"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-border-default bg-surface-secondary hover:border-desert-tan text-text-primary cursor-pointer transition-colors"
               >
                 <IconAdjustments size={14} className="text-desert-tan" />
-                <span>Personalizar Dashboard</span>
+                <span>Personalizar Painel</span>
               </button>
             </div>
           </div>
 
-          {/* 2. PAINEL DE TELEMETRIA & HARDWARE MODULAR N.O.M.A.D. */}
-          <section className="space-y-3">
+          {/* CHAMADA NATIVA DE CONFIGURAÇÃO INICIAL (EXIBIDA QUANDO PENDENTE) */}
+          {shouldHighlightEasySetup && (
+            <div className="rounded-xl border border-desert-orange/60 bg-surface-primary p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm">
+              <div className="flex items-start sm:items-center gap-3.5">
+                <div className="p-2.5 rounded-lg bg-desert-orange/15 text-desert-orange shrink-0">
+                  <IconBolt size={24} />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h2 className="text-sm sm:text-base font-bold text-text-primary">
+                      Configuração Inicial Guiada do N.O.M.A.D.
+                    </h2>
+                    <span className="px-2 py-0.5 rounded-full bg-desert-orange/20 text-desert-orange text-xs font-semibold">
+                      Recomendado
+                    </span>
+                  </div>
+                  <p className="text-xs sm:text-sm text-text-secondary mt-0.5">
+                    Configure em minutos seus acervos offline, Wikipédia em português, mapas vetoriais regionais e modelos de IA local.
+                  </p>
+                </div>
+              </div>
+              <Link
+                href="/easy-setup"
+                className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-desert-orange hover:bg-desert-orange-light text-white text-xs sm:text-sm font-semibold transition-colors shrink-0 shadow-sm"
+              >
+                <span>Iniciar Configuração</span>
+                <IconArrowRight size={16} />
+              </Link>
+            </div>
+          )}
+
+          {/* 2. TELEMETRIA EM TEMPO REAL & ARMAZENAMENTO CONSOLIDADO */}
+          <section className="space-y-4">
             {/* Pools & Discos Físicos */}
             {dashboardConfig.pools && (
-              <div className="space-y-2">
-                <div className="flex items-center justify-between px-1">
+              <div className="space-y-2.5">
+                <div className="flex flex-wrap items-center justify-between gap-2 px-0.5">
                   <div className="flex items-center gap-2">
-                    <span className="text-desert-tan font-mono-mil text-xs">►</span>
-                    <h2 className="text-xs sm:text-sm font-bold font-stencil tracking-wider uppercase text-desert-tan">
-                      POOLS &amp; DISCOS FÍSICOS DE ARMAZENAMENTO
+                    <IconDatabase size={16} className="text-desert-tan" />
+                    <h2 className="text-sm font-bold uppercase tracking-wider text-text-primary">
+                      Armazenamento &amp; Discos Físicos
                     </h2>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2.5">
                     <button
                       type="button"
                       onClick={() =>
@@ -726,169 +819,173 @@ export default function Home(props: {
                       }
                       title={
                         dashboardConfig.poolsCombined
-                          ? 'Alternar para visualização em cards separados'
-                          : 'Alternar para visualização unificada (todos em 1 só card)'
+                          ? 'Alternar para cards individuais por disco'
+                          : 'Unificar todos os discos em uma única visualização'
                       }
-                      className="px-2.5 py-1 rounded text-[11px] font-mono-mil border border-border-default bg-surface-secondary hover:border-desert-tan text-text-secondary hover:text-text-primary transition-colors cursor-pointer flex items-center gap-1.5"
+                      className="px-2.5 py-1 rounded-md text-xs font-medium border border-border-default bg-surface-secondary hover:border-desert-tan text-text-secondary hover:text-text-primary transition-colors cursor-pointer inline-flex items-center gap-1.5"
                     >
                       {dashboardConfig.poolsCombined ? (
                         <>
-                          <IconLayoutGrid size={13} className="text-desert-tan" />
-                          <span>VER CARDS SEPARADOS</span>
+                          <IconLayoutGrid size={14} className="text-desert-tan" />
+                          <span>Ver Separados</span>
                         </>
                       ) : (
                         <>
-                          <IconBox size={13} className="text-desert-tan" />
-                          <span>UNIFICAR DISCOS</span>
+                          <IconBox size={14} className="text-desert-tan" />
+                          <span>Unificar Discos</span>
                         </>
                       )}
                     </button>
                     <Link
                       href="/settings/system#discos"
-                      className="text-[11px] font-mono-mil text-desert-olive hover:underline hidden sm:inline"
+                      className="text-xs font-medium text-desert-olive hover:text-desert-tan hover:underline transition-colors"
                     >
-                      GERENCIAR DISCOS &gt;
+                      Gerenciar Discos →
                     </Link>
                   </div>
                 </div>
 
                 {displayMountTargets.length === 0 ? (
-                  <div className="chamfer-box relative p-5 text-xs font-mono-mil text-text-muted">
+                  <div className="rounded-xl border border-border-default bg-surface-primary p-5 text-xs text-text-muted">
                     Coletando telemetria real dos discos físicos conectados...
                   </div>
                 ) : dashboardConfig.poolsCombined ? (
-                  /* CARD ÚNICO CONSOLIDADO */
-                  <div className="chamfer-box relative p-5 border-t-2 border-t-desert-tan hover:border-desert-tan transition-colors">
-                    <div className="rivet absolute top-2.5 left-2.5" />
-                    <div className="rivet absolute top-2.5 right-2.5" />
-                    <div className="rivet absolute bottom-2.5 left-2.5" />
-                    <div className="rivet absolute bottom-2.5 right-2.5" />
-
-                    <div>
-                      {/* Top Bar do Card Único */}
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 mb-3 border-b border-border-default/60">
-                        <div className="flex items-center gap-2.5 flex-wrap">
-                          <span className="text-[10px] font-mono-mil px-2 py-0.5 rounded bg-surface-secondary border border-border-default text-desert-tan font-bold">
-                            TOPOLOGIA // {displayMountTargets.length}{' '}
-                            {displayMountTargets.length === 1 ? 'DISCO REAL' : 'DISCOS REAIS'}
+                  /* NOVA VISUALIZAÇÃO UNIFICADA REAL (1 ÚNICO CARD COESO) */
+                  <div className="rounded-xl border border-border-default border-t-2 border-t-desert-tan bg-surface-primary p-4 sm:p-5 shadow-sm">
+                    <div className="flex flex-col lg:flex-row lg:items-center gap-5">
+                      {/* Bloco Esquerdo: Gauge Consolidado Único */}
+                      <div className="flex items-center gap-4 lg:w-[300px] lg:pr-5 lg:border-r border-border-default/60 shrink-0">
+                        <CircularGauge
+                          percentage={combinedPercent}
+                          size={96}
+                          strokeWidth={9}
+                          color={combinedGaugeColor}
+                          label={`${combinedPercent.toFixed(1)}%`}
+                          sublabel="TOTAL"
+                        />
+                        <div className="space-y-1 min-w-0">
+                          <span className="inline-flex items-center gap-1.5 text-xs font-semibold px-2 py-0.5 rounded bg-surface-secondary border border-border-subtle text-desert-tan">
+                            {displayMountTargets.length}{' '}
+                            {displayMountTargets.length === 1 ? 'Disco Conectado' : 'Discos Unificados'}
                           </span>
-                          <span className="font-stencil font-bold tracking-wide text-base text-text-primary uppercase">
-                            Armazenamento Consolidado do Servidor
-                          </span>
-                        </div>
-                        <div className="text-[11px] font-mono-mil text-text-secondary flex items-center gap-2 self-start sm:self-auto">
-                          <span>
-                            Livre Global:{' '}
-                            <strong className="text-desert-olive">{formatBytes(freeCombinedBytes)}</strong>{' '}
-                            de {formatBytes(totalCombinedBytes)}
-                          </span>
-                          <span className="px-1.5 py-0.5 rounded bg-surface-secondary border border-border-subtle text-text-primary font-bold">
-                            {combinedPercent.toFixed(1)}% EM USO
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Barra Tática Global de Uso */}
-                      <div className="mb-4">
-                        <div className="relative h-2 w-full bg-surface-secondary rounded-full overflow-hidden border border-border-default/50">
-                          <div
-                            className="h-full rounded-full transition-all duration-700 ease-out"
-                            style={{
-                              width: `${Math.max(combinedPercent, 2)}%`,
-                              backgroundColor: combinedGaugeColor,
-                            }}
-                          />
+                          <div className="text-base font-bold text-text-primary">
+                            Pool Global
+                          </div>
+                          <div className="text-xs text-text-secondary font-mono tabular-nums">
+                            Usado: <strong className="text-text-primary">{formatBytes(usedCombinedBytes)}</strong>
+                          </div>
+                          <div className="text-xs text-text-secondary font-mono tabular-nums">
+                            Livre: <strong className="text-emerald-400">{formatBytes(freeCombinedBytes)}</strong> de {formatBytes(totalCombinedBytes)}
+                          </div>
                         </div>
                       </div>
 
-                      {/* As 2 Unidades em Colunas Lado a Lado */}
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 divide-y md:divide-y-0 md:divide-x divide-border-default/40">
-                        {displayMountTargets.map((target, idx) => {
-                          const total = target.totalBytes || 1
-                          const free = target.freeBytes || 0
-                          const used = Math.max(0, total - free)
-                          const usedPercent = Math.min(Math.max((used / total) * 100, 0), 100)
-                          const gaugeColor =
-                            usedPercent >= 85 ? '#ef4444' : usedPercent >= 70 ? '#f59e0b' : '#06b6d4'
-                          const isInternal =
-                            target.path === '/app/storage' ||
-                            target.path === '/storage' ||
-                            target.label.toLowerCase().includes('interno')
-                          const poolTitle = isInternal
-                            ? 'NVMe Sistema (Armazenamento Interno)'
-                            : `Disco Secundário (HD ${idx})`
-                          const roleLabel = isInternal ? 'SISTEMA & DOCKER' : 'DADOS & ACERVO'
+                      {/* Bloco Direito: Barra Segmentada Única + Lista Compacta de Volumes */}
+                      <div className="flex-1 min-w-0 space-y-3">
+                        {/* Barra horizontal multi-disco comparativa */}
+                        <div>
+                          <div className="flex items-center justify-between text-xs text-text-secondary mb-1.5">
+                            <span className="font-medium text-text-primary">
+                              Ocupação Consolidada ({formatBytes(usedCombinedBytes)} / {formatBytes(totalCombinedBytes)})
+                            </span>
+                            <span className="font-mono tabular-nums text-emerald-400 font-semibold">
+                              {formatBytes(freeCombinedBytes)} disponíveis
+                            </span>
+                          </div>
+                          <div className="h-3 w-full rounded-full bg-surface-secondary border border-border-default/60 overflow-hidden flex">
+                            {displayMountTargets.map((target, idx) => {
+                              const free = target.freeBytes || 0
+                              const total = target.totalBytes || 1
+                              const used = Math.max(0, total - free)
+                              const sharePct = totalCombinedBytes > 0 ? (used / totalCombinedBytes) * 100 : 0
+                              const palette = ['#06b6d4', '#c2a677', '#22c55e', '#f59e0b']
+                              if (sharePct <= 0) return null
+                              return (
+                                <div
+                                  key={target.path}
+                                  title={`${target.path}: ${formatBytes(used)} em uso`}
+                                  className="h-full transition-all duration-700"
+                                  style={{
+                                    width: `${Math.max(sharePct, 1)}%`,
+                                    backgroundColor: palette[idx % palette.length],
+                                  }}
+                                />
+                              )
+                            })}
+                          </div>
+                        </div>
 
-                          return (
-                            <div key={target.path} className={idx > 0 ? 'pt-3 md:pt-0 md:pl-4' : 'pr-0 md:pr-4'}>
-                              <div className="flex items-center justify-between pb-1.5 mb-2 border-b border-border-subtle/50">
-                                <div className="flex items-center gap-1.5">
-                                  <span className="w-1.5 h-1.5 rounded-full bg-desert-tan" />
-                                  <span className="text-xs font-bold font-stencil uppercase text-text-primary">
-                                    {poolTitle}
+                        {/* Linhas compactas por volume dentro do mesmo card */}
+                        <div className="divide-y divide-border-subtle/70 rounded-lg border border-border-subtle bg-surface-secondary/60">
+                          {displayMountTargets.map((target, idx) => {
+                            const total = target.totalBytes || 1
+                            const free = target.freeBytes || 0
+                            const used = Math.max(0, total - free)
+                            const usedPercent = Math.min(Math.max((used / total) * 100, 0), 100)
+                            const isInternal =
+                              target.path === '/app/storage' ||
+                              target.path === '/storage' ||
+                              target.label.toLowerCase().includes('interno')
+                            const poolTitle = isInternal
+                              ? 'NVMe Sistema (Interno)'
+                              : `Disco Secundário (HD ${idx})`
+                            const dotPalette = ['bg-cyan-400', 'bg-desert-tan', 'bg-emerald-400', 'bg-amber-400']
+
+                            return (
+                              <div
+                                key={target.path}
+                                className="px-3 py-2 flex flex-wrap items-center justify-between gap-2 text-xs"
+                              >
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${dotPalette[idx % dotPalette.length]}`} />
+                                  <span className="font-semibold text-text-primary">{poolTitle}</span>
+                                  <code className="px-1.5 py-0.5 rounded bg-surface-primary border border-border-subtle font-mono text-text-secondary">
+                                    {target.path}
+                                  </code>
+                                  <span className="hidden sm:inline text-text-muted">
+                                    • {isInternal ? 'Sistema & Docker' : 'Dados & Acervo'}
                                   </span>
                                 </div>
-                                <span className="text-[9px] font-mono-mil px-1.5 py-0.2 rounded bg-surface-secondary border border-border-subtle text-desert-olive font-bold">
-                                  {roleLabel}
-                                </span>
-                              </div>
-
-                              <div className="flex items-center justify-between gap-3">
-                                <div className="space-y-1 min-w-0 text-[11px] font-mono-mil">
-                                  <div className="text-text-secondary truncate">
-                                    Ponto: <strong className="text-text-primary">{target.path}</strong>
-                                  </div>
-                                  <div className="text-text-muted">
-                                    Livre: <strong className="text-desert-olive">{formatBytes(free)}</strong> de{' '}
-                                    {formatBytes(total)}
-                                  </div>
-                                  <div className="text-text-muted">
-                                    Em Uso: <span className="text-text-primary font-bold">{formatBytes(used)}</span>
-                                  </div>
-                                  <div className="flex items-center gap-1.5 text-desert-green font-bold text-[10px] pt-1">
-                                    <span className="w-1.5 h-1.5 rounded-full bg-desert-green animate-pulse" />
-                                    <span>ONLINE // SAUDÁVEL</span>
-                                  </div>
+                                <div className="flex items-center gap-4 font-mono tabular-nums ml-auto">
+                                  <span className="text-text-secondary">
+                                    <strong className="text-text-primary">{formatBytes(used)}</strong> / {formatBytes(total)}
+                                  </span>
+                                  <span className="text-emerald-400 font-semibold hidden sm:inline">
+                                    {formatBytes(free)} livres
+                                  </span>
+                                  <span className="px-2 py-0.5 rounded bg-surface-primary border border-border-default font-bold text-text-primary w-14 text-center">
+                                    {usedPercent.toFixed(1)}%
+                                  </span>
                                 </div>
-
-                                <CircularGauge
-                                  percentage={usedPercent}
-                                  size={82}
-                                  strokeWidth={8}
-                                  color={gaugeColor}
-                                  label={`${usedPercent.toFixed(1)}%`}
-                                  sublabel="USO"
-                                />
                               </div>
-                            </div>
-                          )
-                        })}
+                            )
+                          })}
+                        </div>
                       </div>
                     </div>
 
-                    {/* Rodapé Consolidado */}
-                    <div className="pt-3 mt-3 border-t border-border-default/40 flex flex-wrap items-center justify-between text-[10px] font-mono-mil text-text-muted gap-2">
+                    <div className="pt-3 mt-3 border-t border-border-default/50 flex flex-wrap items-center justify-between gap-2 text-xs text-text-muted">
                       <div className="flex items-center gap-3">
-                        <span>
-                          MAPEAMENTO EM LOTE: <strong className="text-desert-olive">ATIVO</strong>
+                        <span className="inline-flex items-center gap-1.5 text-emerald-400 font-medium">
+                          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                          <span>Unidades Online &amp; Saudáveis</span>
                         </span>
-                        <span>•</span>
-                        <span>
-                          ERROS FS: <strong className="text-text-primary">0</strong>
-                        </span>
+                        <span className="hidden sm:inline">• Mapeamento em lote ativo • Erros FS: 0</span>
                       </div>
-                      <Link
-                        href="/settings/system#discos"
-                        className="text-desert-tan hover:text-desert-orange font-bold flex items-center gap-1 transition-colors"
-                      >
-                        <span>CONFIGURAR DISCOS &amp; SAMBA</span>
-                        <IconArrowRight size={13} />
-                      </Link>
+                      <div className="flex items-center gap-4">
+                        <Link
+                          href="/settings/storage"
+                          className="font-semibold text-desert-tan hover:text-desert-orange inline-flex items-center gap-1 transition-colors"
+                        >
+                          <span>Configurar Discos &amp; Samba</span>
+                          <IconArrowRight size={14} />
+                        </Link>
+                      </div>
                     </div>
                   </div>
                 ) : (
-                  /* MODO CARDS SEPARADOS */
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-2 gap-3">
+                  /* MODO CARDS SEPARADOS (OPCIONAL VIA BOTÃO) */
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {displayMountTargets.map((target, idx) => {
                       const total = target.totalBytes || 1
                       const free = target.freeBytes || 0
@@ -901,73 +998,55 @@ export default function Home(props: {
                         target.path === '/storage' ||
                         target.label.toLowerCase().includes('interno')
                       const poolTitle = isInternal
-                        ? 'NVMe Sistema (Pool Interno)'
-                        : `Pool Secundário (HD ${idx})`
+                        ? 'NVMe Sistema (Interno)'
+                        : `Disco Secundário (HD ${idx})`
 
                       return (
                         <div
                           key={target.path}
-                          className="chamfer-box relative p-4 flex flex-col justify-between border-t-2 border-t-desert-tan hover:border-desert-tan transition-colors"
+                          className="rounded-xl border border-border-default border-t-2 border-t-desert-tan bg-surface-primary p-4 flex flex-col justify-between shadow-sm"
                         >
-                          <div className="rivet absolute top-2 left-2" />
-                          <div className="rivet absolute top-2 right-2" />
-                          <div className="rivet absolute bottom-2 left-2" />
-                          <div className="rivet absolute bottom-2 right-2" />
-
-                          <div>
-                            <div className="flex items-center justify-between pb-2 mb-2 border-b border-border-default/60">
-                              <div className="flex items-center gap-2">
-                                <span className="text-[10px] font-mono-mil px-1.5 py-0.5 rounded bg-surface-secondary border border-border-default text-desert-tan font-bold">
-                                  POOL
-                                </span>
-                                <span className="font-stencil font-bold tracking-wide text-sm text-text-primary uppercase truncate max-w-[220px]">
-                                  {poolTitle}
-                                </span>
-                              </div>
-                              <Link
-                                href="/settings/system#discos"
-                                title="Configurar particionamento e mapeamento"
-                                className="text-text-muted hover:text-desert-tan p-1 transition-colors"
-                              >
-                                <IconAdjustments size={14} />
-                              </Link>
+                          <div className="flex items-center justify-between pb-2.5 mb-3 border-b border-border-default/60">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span className="text-xs font-mono px-2 py-0.5 rounded bg-surface-secondary border border-border-default text-desert-tan font-semibold">
+                                DISCO {idx + 1}
+                              </span>
+                              <span className="font-bold text-sm text-text-primary truncate">
+                                {poolTitle}
+                              </span>
                             </div>
-
-                            <div className="flex items-center justify-between gap-3 my-2">
-                              <div className="space-y-1 min-w-0">
-                                <div className="text-[11px] font-mono-mil text-text-secondary truncate">
-                                  Ponto: <strong className="text-text-primary">{target.path}</strong>
-                                </div>
-                                <div className="text-[11px] font-mono-mil text-text-muted">
-                                  Topologia: <span className="text-text-secondary font-bold">1 x FÍSICO</span>
-                                </div>
-                                <div className="text-[11px] font-mono-mil text-text-muted">
-                                  Livre: <strong className="text-desert-olive">{formatBytes(free)}</strong> de{' '}
-                                  {formatBytes(total)}
-                                </div>
-                                <div className="text-[11px] font-mono-mil text-text-muted">
-                                  Em Uso: <span className="text-text-primary font-bold">{formatBytes(used)}</span>
-                                </div>
-                              </div>
-
-                              <CircularGauge
-                                percentage={usedPercent}
-                                size={88}
-                                strokeWidth={9}
-                                color={gaugeColor}
-                                label={`${usedPercent.toFixed(1)}%`}
-                                sublabel="EM USO"
-                              />
-                            </div>
+                            <Link
+                              href="/settings/system#discos"
+                              title="Detalhes de particionamento"
+                              className="text-text-muted hover:text-desert-tan p-1 transition-colors"
+                            >
+                              <IconAdjustments size={15} />
+                            </Link>
                           </div>
 
-                          <div className="pt-2 mt-2 border-t border-border-default/40 flex items-center justify-between text-[10px] font-mono-mil">
-                            <div className="flex items-center gap-1.5 text-desert-green font-bold">
-                              <span className="w-2 h-2 rounded-full bg-desert-green animate-pulse" />
-                              <span>ONLINE // SAUDÁVEL</span>
-                            </div>
-                            <div className="text-text-muted">
-                              ERROS FS: <span className="text-text-secondary font-bold">0</span>
+                          <div className="flex items-center gap-4">
+                            <CircularGauge
+                              percentage={usedPercent}
+                              size={88}
+                              strokeWidth={8}
+                              color={gaugeColor}
+                              label={`${usedPercent.toFixed(1)}%`}
+                              sublabel="USO"
+                            />
+                            <div className="space-y-1.5 min-w-0 text-xs flex-1">
+                              <div className="text-text-secondary truncate">
+                                Ponto: <code className="font-mono font-semibold text-text-primary">{target.path}</code>
+                              </div>
+                              <div className="text-text-secondary font-mono tabular-nums">
+                                Em Uso: <strong className="text-text-primary">{formatBytes(used)}</strong>
+                              </div>
+                              <div className="text-text-secondary font-mono tabular-nums">
+                                Livre: <strong className="text-emerald-400">{formatBytes(free)}</strong> de {formatBytes(total)}
+                              </div>
+                              <div className="inline-flex items-center gap-1.5 text-emerald-400 font-semibold pt-0.5">
+                                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                                <span>Online // Saudável</span>
+                              </div>
                             </div>
                           </div>
                         </div>
@@ -978,7 +1057,7 @@ export default function Home(props: {
               </div>
             )}
 
-            {/* Linha de Processamento, Memória e Log de Eventos */}
+            {/* Linha de Processamento (Tempo Real 2s), Memória RAM (Matemática Correta) e Log/Fila */}
             {(() => {
               const hwCount =
                 (dashboardConfig.cpuCombined
@@ -996,494 +1075,593 @@ export default function Home(props: {
                       ? 'lg:col-span-4'
                       : 'lg:col-span-3'
 
+              const ramColor =
+                memUsedPercent >= 85 ? '#ef4444' : memUsedPercent >= 65 ? '#f59e0b' : '#22c55e'
+              const cpuColor =
+                cpuPercent >= 85 ? '#ef4444' : cpuPercent >= 60 ? '#f59e0b' : '#06b6d4'
+
               return (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-3">
-              {/* CPU: MODO UNIFICADO (CARGA + MODELO EM 1 CARD SÓ) */}
-              {dashboardConfig.cpuCombined ? (
-                <div className={`${hwColSpan} chamfer-box relative p-4 flex flex-col justify-between hover:border-desert-tan transition-colors`}>
-                  <div className="rivet absolute top-2 left-2" />
-                  <div className="rivet absolute top-2 right-2" />
-                  <div className="flex items-center justify-between pb-2 mb-2 border-b border-border-default/60">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-bold font-stencil tracking-wider uppercase text-desert-tan">
-                        Processador &amp; Carga (CPU)
-                      </span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        saveDashboardConfig({
-                          ...dashboardConfig,
-                          cpuCombined: false,
-                        })
-                      }
-                      title="Separar em 2 cards individuais"
-                      className="text-[10px] font-mono-mil text-text-muted hover:text-desert-tan cursor-pointer"
-                    >
-                      [SEPARAR]
-                    </button>
-                  </div>
-
-                  <div className="flex items-center justify-between gap-3 py-1">
-                    <CircularGauge
-                      percentage={cpuPercent}
-                      size={86}
-                      strokeWidth={8}
-                      color="#06b6d4"
-                      label={hasSysInfo ? `${Math.round(cpuPercent)}%` : '--'}
-                      sublabel="CARGA"
-                    />
-                    <div className="space-y-1 min-w-0 text-[11px] font-mono-mil">
-                      <div className="text-xs font-bold text-text-primary line-clamp-1" title={cpuBrand}>
-                        {cpuBrand}
-                      </div>
-                      <div className="text-text-secondary">
-                        <strong className="text-desert-tan">
-                          {hasSysInfo ? `${cpuPhysical} Cores / ${cpuCores} Threads` : '-- Cores / -- Threads'}
-                        </strong>
-                      </div>
-                      <div className="text-text-muted">
-                        Frequência: <strong className="text-text-primary">{hasSysInfo ? `${cpuSpeed} GHz` : '--'}</strong>
-                      </div>
-                      <div className="text-[10px] text-desert-olive font-bold">
-                        {!hasSysInfo ? 'LENDO SENSORES...' : cpuPercent < 10 ? 'CARGA BAIXA // OCIOSO' : 'EM PROCESSAMENTO'}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="pt-2 border-t border-border-default/40 flex items-center justify-between text-[10px] font-mono-mil text-text-muted">
-                    <span>STATUS TÉRMICO</span>
-                    <span className="text-desert-green font-bold">NOMINAL // ESTÁVEL</span>
-                  </div>
-                </div>
-              ) : (
-                /* CPU: MODO SEPARADO (2 CARDS) */
-                <>
-                  {dashboardConfig.cpuUsage && (
-                    <div className={`${hwColSpan} chamfer-box relative p-4 flex flex-col justify-between hover:border-desert-tan transition-colors`}>
-                      <div className="rivet absolute top-2 left-2" />
-                      <div className="rivet absolute top-2 right-2" />
-                      <div className="flex items-center justify-between pb-2 mb-2 border-b border-border-default/60">
-                        <span className="text-xs font-bold font-stencil tracking-wider uppercase text-desert-tan">
-                          Utilização da CPU
-                        </span>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-4">
+                  {/* CPU: MODO UNIFICADO EM TEMPO REAL */}
+                  {dashboardConfig.cpuCombined ? (
+                    <div className={`${hwColSpan} rounded-xl border border-border-default bg-surface-primary p-4 flex flex-col justify-between shadow-sm hover:border-desert-tan/70 transition-colors`}>
+                      <div className="flex items-center justify-between pb-2.5 mb-3 border-b border-border-default/60">
+                        <div className="flex items-center gap-2">
+                          <IconCpu size={16} className="text-cyan-400" />
+                          <span className="text-xs font-bold uppercase tracking-wider text-text-primary">
+                            Processador (CPU)
+                          </span>
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-400 text-[11px] font-mono font-semibold">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                            AO VIVO
+                          </span>
+                        </div>
                         <button
                           type="button"
                           onClick={() =>
                             saveDashboardConfig({
                               ...dashboardConfig,
-                              cpuCombined: true,
+                              cpuCombined: false,
                             })
                           }
-                          title="Unificar com o card de modelo"
-                          className="text-[10px] font-mono-mil text-text-muted hover:text-desert-tan cursor-pointer"
+                          title="Separar carga e modelo em 2 cards"
+                          className="text-xs text-text-muted hover:text-desert-tan cursor-pointer font-medium"
                         >
-                          [UNIR]
+                          Separar
                         </button>
                       </div>
-                      <div className="flex items-center justify-center py-2">
+
+                      <div className="flex items-center gap-4">
                         <CircularGauge
                           percentage={cpuPercent}
-                          size={96}
-                          strokeWidth={9}
-                          color="#06b6d4"
-                          label={hasSysInfo ? `${Math.round(cpuPercent)}%` : '--'}
-                          sublabel="MÉDIA"
+                          size={88}
+                          strokeWidth={8}
+                          color={cpuColor}
+                          label={hasTelemetry ? `${Math.round(cpuPercent)}%` : '--'}
+                          sublabel="CARGA"
                         />
-                      </div>
-                      <div className="pt-2 border-t border-border-default/40 flex items-center justify-between text-[10px] font-mono-mil text-text-muted">
-                        <span>CARGA ATUAL</span>
-                        <span className="text-desert-olive font-bold">
-                          {!hasSysInfo ? 'LENDO...' : cpuPercent < 10 ? 'BAIXA // OCIOSO' : 'EM PROCESSAMENTO'}
-                        </span>
-                      </div>
-                    </div>
-                  )}
-
-                  {dashboardConfig.cpuModel && (
-                    <div className={`${hwColSpan} chamfer-box relative p-4 flex flex-col justify-between hover:border-desert-tan transition-colors`}>
-                      <div className="rivet absolute top-2 left-2" />
-                      <div className="rivet absolute top-2 right-2" />
-                      <div className="flex items-center justify-between pb-2 mb-2 border-b border-border-default/60">
-                        <span className="text-xs font-bold font-stencil tracking-wider uppercase text-desert-tan">
-                          Processador Host
-                        </span>
-                        <span className="text-[10px] font-mono-mil text-desert-olive font-bold">x86_64</span>
-                      </div>
-                      <div className="py-2 space-y-1.5">
-                        <div
-                          className="text-xs font-mono-mil font-bold text-text-primary line-clamp-2"
-                          title={cpuBrand}
-                        >
-                          {cpuBrand}
-                        </div>
-                        <div className="text-[11px] font-mono-mil text-text-secondary">
-                          Núcleos:{' '}
-                          <strong className="text-desert-tan">
-                            {hasSysInfo ? `${cpuPhysical} Cores / ${cpuCores} Threads` : '-- Cores / -- Threads'}
-                          </strong>
-                        </div>
-                        <div className="text-[11px] font-mono-mil text-text-secondary">
-                          Frequência: <strong className="text-text-primary">{hasSysInfo ? `${cpuSpeed} GHz` : '--'}</strong>
-                        </div>
-                      </div>
-                      <div className="pt-2 border-t border-border-default/40 flex items-center justify-between text-[10px] font-mono-mil text-text-muted">
-                        <span>STATUS TÉRMICO</span>
-                        <span className="text-desert-green font-bold">NOMINAL // ESTÁVEL</span>
-                      </div>
-                    </div>
-                  )}
-                </>
-              )}
-
-              {/* RAM Memory Card */}
-              {dashboardConfig.memory && (
-                <div className={`${hwColSpan} chamfer-box relative p-4 flex flex-col justify-between hover:border-desert-tan transition-colors`}>
-                  <div className="rivet absolute top-2 left-2" />
-                  <div className="rivet absolute top-2 right-2" />
-                  <div className="flex items-center justify-between pb-2 mb-2 border-b border-border-default/60">
-                    <span className="text-xs font-bold font-stencil tracking-wider uppercase text-desert-tan">
-                      Memória RAM
-                    </span>
-                    <span className="text-[10px] font-mono-mil text-text-muted">
-                      {hasSysInfo ? `${memTotalGiB.toFixed(1)} GiB TOTAL` : '-- GiB'}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between gap-3 py-1">
-                    <div className="space-y-1.5 text-[11px] font-mono-mil min-w-0">
-                      <div className="flex items-center gap-1.5">
-                        <span className="w-2 h-2 rounded-full bg-cyan-400 shrink-0" />
-                        <span className="text-text-muted">Livre:</span>
-                        <strong className="text-text-primary">{hasSysInfo ? `${memFreeGiB.toFixed(1)} GiB` : '--'}</strong>
-                      </div>
-                      <div className="flex items-center gap-1.5">
-                        <span className="w-2 h-2 rounded-full bg-desert-orange shrink-0" />
-                        <span className="text-text-muted">Em Uso:</span>
-                        <strong className="text-text-primary">{hasSysInfo ? `${memUsedGiB.toFixed(1)} GiB` : '--'}</strong>
-                      </div>
-                      <div className="text-[10px] text-text-muted">Serviços + Buffer OS</div>
-                    </div>
-                    <CircularGauge
-                      percentage={memUsedPercent}
-                      size={84}
-                      strokeWidth={8}
-                      color={memUsedPercent > 80 ? '#ef4444' : '#f59e0b'}
-                      label={hasSysInfo ? `${Math.round(memUsedPercent)}%` : '--'}
-                      sublabel="ALOCADA"
-                    />
-                  </div>
-                  <div className="pt-2 border-t border-border-default/40 flex items-center justify-between text-[10px] font-mono-mil text-text-muted">
-                    <span>DISPONÍVEL</span>
-                    <span className="text-desert-olive font-bold">
-                      {hasSysInfo ? `${memFreeGiB.toFixed(1)} GiB LIVRES` : '--'}
-                    </span>
-                  </div>
-                </div>
-              )}
-
-              {/* Log de Eventos e Download Ativo */}
-              {dashboardConfig.eventLog && (
-                <div className={`${hwColSpan} chamfer-box relative p-4 flex flex-col justify-between hover:border-desert-tan transition-colors`}>
-                  <div className="rivet absolute top-2 left-2" />
-                  <div className="rivet absolute top-2 right-2" />
-                  <div className="flex items-center justify-between pb-2 mb-2 border-b border-border-default/60">
-                    <span className="text-xs font-bold font-stencil tracking-wider uppercase text-desert-tan">
-                      LOG DE EVENTOS &amp; FILA
-                    </span>
-                    <span className="w-2 h-2 rounded-full bg-desert-olive nomad-telemetry-dot" />
-                  </div>
-
-                  <div className="chamfer-inner p-2.5 font-mono-mil text-[11px] space-y-1.5 text-text-secondary">
-                    <div>
-                      <span className="text-desert-tan">[MÓDULOS]</span> {installedAppCount} ATIVOS •{' '}
-                      {aiConfigured ? 'IA ONLINE' : 'IA NÃO CONFIG.'}
-                    </div>
-                    {runningDownloads.length > 0 && currentActiveJob ? (
-                      <div className="space-y-1">
-                        <div className="flex items-center justify-between gap-1 text-desert-tan font-bold">
-                          <span className="flex items-center gap-1.5 truncate">
-                            <span className="w-1.5 h-1.5 rounded-full bg-desert-green animate-pulse shrink-0" />
-                            <span className="text-desert-green font-bold shrink-0">[BAIXANDO]</span>
-                            <span
-                              className="text-text-primary truncate max-w-[130px]"
-                              title={activeDownloadTitle || ''}
-                            >
-                              {activeDownloadTitle}
-                            </span>
-                          </span>
-                          <span className="text-desert-green font-mono shrink-0">
-                            {activeDownloadPercent}%
-                          </span>
-                        </div>
-
-                        <div className="relative h-1.5 w-full bg-surface-secondary rounded-full overflow-hidden border border-border-default/40">
-                          <div
-                            className="h-full bg-gradient-to-r from-desert-olive via-desert-green to-desert-tan rounded-full transition-all duration-500 ease-out relative overflow-hidden"
-                            style={{ width: `${Math.max(activeDownloadPercent, 3)}%` }}
-                          >
-                            <div className="absolute inset-0 bg-white/20 animate-pulse" />
+                        <div className="space-y-1 min-w-0 flex-1 text-xs">
+                          <div className="text-sm font-bold text-text-primary truncate" title={cpuBrand}>
+                            {cpuBrand}
+                          </div>
+                          <div className="text-text-secondary font-mono tabular-nums">
+                            {hasTelemetry ? `${cpuPhysical} Cores / ${cpuCores} Threads` : '-- Cores / -- Threads'}
+                          </div>
+                          <div className="text-text-secondary font-mono tabular-nums">
+                            Clock: <strong className="text-text-primary">{hasTelemetry ? `${Number(cpuSpeedGHz).toFixed(2)} GHz` : '--'}</strong>
+                            {cpuTempC !== null && (
+                              <span className="ml-2 text-desert-tan">• {cpuTempC}°C</span>
+                            )}
                           </div>
                         </div>
+                      </div>
 
-                        <div className="flex items-center justify-between text-[10px] text-text-muted gap-2">
-                          <span className="truncate">
-                            {currentActiveJob.downloadedBytes && currentActiveJob.totalBytes
-                              ? `${formatBytes(currentActiveJob.downloadedBytes)} / ${formatBytes(currentActiveJob.totalBytes)}`
-                              : `${activeDownloadPercent}% concluído`}
-                            {downloadSpeedBps > 0 && (
-                              <strong className="text-desert-tan ml-1">• {formatBytes(downloadSpeedBps)}/s</strong>
-                            )}
+                      {/* Mini Gráfico de Pulso em Tempo Real (2s) */}
+                      <div className="pt-3 mt-3 border-t border-border-default/50">
+                        <div className="flex items-end gap-1 h-7 mb-1.5" aria-label="Histórico de uso da CPU em tempo real">
+                          {Array.from({ length: 18 }).map((_, idx) => {
+                            const offset = 18 - cpuHistory.length
+                            const val = idx >= offset ? cpuHistory[idx - offset] : 0
+                            const hasVal = idx >= offset
+                            return (
+                              <div
+                                key={idx}
+                                className="flex-1 h-full bg-surface-secondary rounded-xs flex items-end overflow-hidden"
+                              >
+                                <div
+                                  className="w-full rounded-xs transition-all duration-300"
+                                  style={{
+                                    height: hasVal ? `${Math.max(val, 8)}%` : '10%',
+                                    backgroundColor: hasVal
+                                      ? val >= 85
+                                        ? '#ef4444'
+                                        : val >= 60
+                                          ? '#f59e0b'
+                                          : '#06b6d4'
+                                      : 'rgba(255,255,255,0.08)',
+                                  }}
+                                />
+                              </div>
+                            )
+                          })}
+                        </div>
+                        <div className="flex items-center justify-between text-xs text-text-muted">
+                          <span>Atualização a cada 2s</span>
+                          <span className="text-emerald-400 font-semibold">
+                            {!hasTelemetry
+                              ? 'Conectando...'
+                              : cpuPercent < 20
+                                ? 'Operação Estável'
+                                : cpuPercent < 75
+                                  ? 'Em Processamento'
+                                  : 'Carga Elevada'}
                           </span>
-                          {runningDownloads.length > 1 && (
-                            <Link
-                              href="/settings/downloads"
-                              className="text-desert-orange hover:underline font-mono shrink-0"
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    /* CPU: MODO SEPARADO (2 CARDS) */
+                    <>
+                      {dashboardConfig.cpuUsage && (
+                        <div className={`${hwColSpan} rounded-xl border border-border-default bg-surface-primary p-4 flex flex-col justify-between shadow-sm hover:border-desert-tan/70 transition-colors`}>
+                          <div className="flex items-center justify-between pb-2.5 mb-3 border-b border-border-default/60">
+                            <div className="flex items-center gap-2">
+                              <IconCpu size={16} className="text-cyan-400" />
+                              <span className="text-xs font-bold uppercase tracking-wider text-text-primary">
+                                Utilização da CPU
+                              </span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                saveDashboardConfig({
+                                  ...dashboardConfig,
+                                  cpuCombined: true,
+                                })
+                              }
+                              title="Unificar carga e modelo"
+                              className="text-xs text-text-muted hover:text-desert-tan cursor-pointer font-medium"
                             >
-                              +{runningDownloads.length - 1} na fila &gt;
-                            </Link>
+                              Unificar
+                            </button>
+                          </div>
+                          <div className="flex items-center justify-center py-2">
+                            <CircularGauge
+                              percentage={cpuPercent}
+                              size={94}
+                              strokeWidth={9}
+                              color={cpuColor}
+                              label={hasTelemetry ? `${Math.round(cpuPercent)}%` : '--'}
+                              sublabel="AO VIVO"
+                            />
+                          </div>
+                          <div className="pt-2.5 border-t border-border-default/50 flex items-center justify-between text-xs text-text-muted">
+                            <span>Pulso: 2s</span>
+                            <span className="text-emerald-400 font-semibold font-mono tabular-nums">
+                              {hasTelemetry ? `${Number(cpuSpeedGHz).toFixed(2)} GHz` : '--'}
+                            </span>
+                          </div>
+                        </div>
+                      )}
+
+                      {dashboardConfig.cpuModel && (
+                        <div className={`${hwColSpan} rounded-xl border border-border-default bg-surface-primary p-4 flex flex-col justify-between shadow-sm hover:border-desert-tan/70 transition-colors`}>
+                          <div className="flex items-center justify-between pb-2.5 mb-3 border-b border-border-default/60">
+                            <span className="text-xs font-bold uppercase tracking-wider text-text-primary">
+                              Processador Host
+                            </span>
+                            <span className="text-xs font-mono text-desert-olive font-semibold">
+                              {sysInfo?.os?.arch || 'x86_64'}
+                            </span>
+                          </div>
+                          <div className="py-1 space-y-2 text-xs">
+                            <div className="text-sm font-bold text-text-primary line-clamp-2" title={cpuBrand}>
+                              {cpuBrand}
+                            </div>
+                            <div className="text-text-secondary font-mono tabular-nums">
+                              Núcleos:{' '}
+                              <strong className="text-desert-tan">
+                                {hasTelemetry ? `${cpuPhysical} Cores / ${cpuCores} Threads` : '--'}
+                              </strong>
+                            </div>
+                            <div className="text-text-secondary font-mono tabular-nums">
+                              Frequência: <strong className="text-text-primary">{hasTelemetry ? `${Number(cpuSpeedGHz).toFixed(2)} GHz` : '--'}</strong>
+                            </div>
+                          </div>
+                          <div className="pt-2.5 border-t border-border-default/50 flex items-center justify-between text-xs text-text-muted">
+                            <span>Temperatura</span>
+                            <span className="text-emerald-400 font-semibold">
+                              {cpuTempC !== null ? `${cpuTempC}°C` : 'Nominal'}
+                            </span>
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  )}
+
+                  {/* MEMÓRIA RAM REAL (CORRIGIDA: Em Uso Real = Total - Disponível) */}
+                  {dashboardConfig.memory && (
+                    <div className={`${hwColSpan} rounded-xl border border-border-default bg-surface-primary p-4 flex flex-col justify-between shadow-sm hover:border-desert-tan/70 transition-colors`}>
+                      <div className="flex items-center justify-between pb-2.5 mb-3 border-b border-border-default/60">
+                        <div className="flex items-center gap-2">
+                          <IconActivity size={16} className="text-emerald-400" />
+                          <span className="text-xs font-bold uppercase tracking-wider text-text-primary">
+                            Memória RAM
+                          </span>
+                        </div>
+                        <span className="text-xs font-mono tabular-nums text-text-secondary font-semibold">
+                          {hasTelemetry ? `${memTotalGiB.toFixed(1)} GiB Total` : '-- GiB'}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-4">
+                        <CircularGauge
+                          percentage={memUsedPercent}
+                          size={88}
+                          strokeWidth={8}
+                          color={ramColor}
+                          label={hasTelemetry ? `${Math.round(memUsedPercent)}%` : '--'}
+                          sublabel="EM USO"
+                        />
+                        <div className="space-y-1.5 text-xs flex-1 min-w-0 font-mono tabular-nums">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="inline-flex items-center gap-1.5 text-text-secondary font-sans">
+                              <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" />
+                              Em Uso:
+                            </span>
+                            <strong className="text-text-primary">
+                              {hasTelemetry ? `${memUsedGiB.toFixed(1)} GiB` : '--'}
+                            </strong>
+                          </div>
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="inline-flex items-center gap-1.5 text-text-secondary font-sans">
+                              <span className="w-2 h-2 rounded-full bg-cyan-400 shrink-0" />
+                              Disponível:
+                            </span>
+                            <strong className="text-emerald-400">
+                              {hasTelemetry ? `${memFreeGiB.toFixed(1)} GiB` : '--'}
+                            </strong>
+                          </div>
+                          {memCacheGiB >= 0.2 && (
+                            <div className="flex items-center justify-between gap-2 text-text-muted">
+                              <span className="font-sans">Cache Linux:</span>
+                              <span>{memCacheGiB.toFixed(1)} GiB</span>
+                            </div>
                           )}
                         </div>
                       </div>
-                    ) : (
-                      <div>
-                        <span className="text-desert-tan">[FILA]</span> FILA DE DOWNLOADS LIVRE
-                      </div>
-                    )}
-                    <div className="text-desert-olive flex items-center justify-between pt-0.5 border-t border-border-subtle/50">
-                      <span>&gt; TEMA {currentThemeDef.shortName.toUpperCase()}</span>
-                      <TacticalClock />
-                    </div>
-                  </div>
 
-                  <div className="flex items-center justify-between text-[10px] font-mono-mil text-text-muted pt-2 px-1">
-                    <span>HOST: NEXUS-NOMAD</span>
-                    <span className="text-desert-olive font-bold">STATUS: ONLINE</span>
-                  </div>
+                      {/* Barra visual real da RAM (Uso Ativo + Cache Recuperável + Livre) */}
+                      <div className="pt-3 mt-3 border-t border-border-default/50 space-y-1.5">
+                        <div className="h-2 w-full rounded-full bg-surface-secondary border border-border-subtle overflow-hidden flex">
+                          <div
+                            className="h-full transition-all duration-500"
+                            style={{ width: `${Math.max(memUsedPercent, hasTelemetry ? 2 : 0)}%`, backgroundColor: ramColor }}
+                            title={`Em uso ativo: ${memUsedGiB.toFixed(1)} GiB`}
+                          />
+                          {memCachePercent > 0 && (
+                            <div
+                              className="h-full bg-desert-tan/40 transition-all duration-500"
+                              style={{ width: `${memCachePercent}%` }}
+                              title={`Cache recuperável do OS: ${memCacheGiB.toFixed(1)} GiB`}
+                            />
+                          )}
+                        </div>
+                        <div className="flex items-center justify-between text-xs text-text-muted">
+                          <span>Tempo real (2s)</span>
+                          <span className="font-mono tabular-nums text-emerald-400 font-semibold">
+                            {hasTelemetry ? `${memFreeGiB.toFixed(1)} GiB livres` : '--'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* LOG DE EVENTOS & FILA DE DOWNLOADS */}
+                  {dashboardConfig.eventLog && (
+                    <div className={`${hwColSpan} rounded-xl border border-border-default bg-surface-primary p-4 flex flex-col justify-between shadow-sm hover:border-desert-tan/70 transition-colors`}>
+                      <div className="flex items-center justify-between pb-2.5 mb-3 border-b border-border-default/60">
+                        <span className="text-xs font-bold uppercase tracking-wider text-text-primary">
+                          Log de Eventos &amp; Fila
+                        </span>
+                        <TacticalClock />
+                      </div>
+
+                      <div className="rounded-lg border border-border-subtle bg-surface-secondary/70 p-3 text-xs space-y-2 text-text-secondary flex-1 flex flex-col justify-center">
+                        <div className="flex items-center justify-between gap-2">
+                          <span>Serviços Ativos:</span>
+                          <strong className="font-mono text-text-primary">
+                            {installedAppCount} ativos • {aiConfigured ? 'IA Online' : 'IA Pendente'}
+                          </strong>
+                        </div>
+
+                        {runningDownloads.length > 0 && currentActiveJob ? (
+                          <div className="space-y-1.5 pt-1 border-t border-border-subtle">
+                            <div className="flex items-center justify-between gap-2 font-semibold">
+                              <span className="flex items-center gap-1.5 truncate text-emerald-400">
+                                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+                                <span className="truncate text-text-primary" title={activeDownloadTitle || ''}>
+                                  {activeDownloadTitle}
+                                </span>
+                              </span>
+                              <span className="font-mono text-emerald-400 shrink-0">
+                                {activeDownloadPercent}%
+                              </span>
+                            </div>
+
+                            <div className="relative h-2 w-full bg-surface-primary rounded-full overflow-hidden border border-border-default/50">
+                              <div
+                                className="h-full bg-gradient-to-r from-desert-olive via-emerald-500 to-desert-tan rounded-full transition-all duration-500 ease-out"
+                                style={{ width: `${Math.max(activeDownloadPercent, 3)}%` }}
+                              />
+                            </div>
+
+                            <div className="flex items-center justify-between text-xs text-text-muted gap-2 font-mono">
+                              <span className="truncate">
+                                {currentActiveJob.downloadedBytes && currentActiveJob.totalBytes
+                                  ? `${formatBytes(currentActiveJob.downloadedBytes)} / ${formatBytes(currentActiveJob.totalBytes)}`
+                                  : `${activeDownloadPercent}% concluído`}
+                                {downloadSpeedBps > 0 && (
+                                  <strong className="text-desert-tan ml-1">• {formatBytes(downloadSpeedBps)}/s</strong>
+                                )}
+                              </span>
+                              {runningDownloads.length > 1 && (
+                                <Link
+                                  href="/settings/downloads"
+                                  className="text-desert-orange hover:underline shrink-0 font-sans font-medium"
+                                >
+                                  +{runningDownloads.length - 1} na fila →
+                                </Link>
+                              )}
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex items-center justify-between gap-2 pt-1 border-t border-border-subtle">
+                            <span>Fila de Downloads:</span>
+                            <span className="text-emerald-400 font-medium">Livre / Pronta</span>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="pt-3 mt-3 border-t border-border-default/50 flex items-center justify-between text-xs text-text-muted">
+                        <span>Tema: {currentThemeDef.shortName}</span>
+                        <Link
+                          href="/settings/downloads"
+                          className="text-desert-tan hover:underline font-medium"
+                        >
+                          Gerenciar Fila →
+                        </Link>
+                      </div>
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
               )
             })()}
           </section>
 
-          {/* 3. CENTRAIS DE OPERAÇÃO & NAVEGAÇÃO DO SISTEMA (HUB NOMAD) */}
+          {/* 3. CENTRAIS DE OPERAÇÃO & NAVEGAÇÃO (GRID SIMÉTRICO 4x2 INCLUINDO EASY SETUP) */}
           {dashboardConfig.commandHub && (
-            <section className="space-y-3 pt-1">
-              <div className="flex items-center justify-between border-b border-border-default/60 pb-1.5">
+            <section className="space-y-3">
+              <div className="flex items-center justify-between border-b border-border-default/70 pb-2">
                 <div className="flex items-center gap-2">
-                  <span className="text-desert-tan font-mono-mil text-xs">►</span>
-                  <h2 className="text-sm sm:text-base font-bold font-stencil tracking-wider uppercase text-text-primary">
-                    CENTRAIS DE OPERAÇÃO &amp; NAVEGAÇÃO DO SISTEMA
+                  <IconLayoutGrid size={17} className="text-desert-tan" />
+                  <h2 className="text-sm sm:text-base font-bold uppercase tracking-wider text-text-primary">
+                    Centrais de Operação &amp; Navegação
                   </h2>
                 </div>
-                <span className="text-[11px] font-mono-mil text-text-muted hidden sm:inline">
-                  ACESSO DIRETO AOS PRINCIPAIS AMBIENTES
+                <span className="text-xs text-text-muted hidden sm:inline">
+                  Acesso rápido aos ambientes nativos do N.O.M.A.D.
                 </span>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                {/* 1. Supply Depot */}
-                <div className="chamfer-box relative p-4 flex flex-col justify-between hover:border-desert-orange transition-all group">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+                {/* 1. Configuração Inicial (Nativo NOMAD) */}
+                <Link
+                  href="/easy-setup"
+                  className="rounded-xl border border-border-default bg-surface-primary p-4 flex flex-col justify-between hover:border-desert-orange transition-all group shadow-sm"
+                >
                   <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-[10px] font-mono-mil px-2 py-0.5 rounded bg-desert-orange/15 text-desert-orange font-bold border border-desert-orange/30">
-                        {installedAppCount} MÓDULOS ATIVOS // {APP_CATALOG.length} TOTAL
+                    <div className="flex items-center justify-between mb-2.5">
+                      <span className="text-xs px-2 py-0.5 rounded bg-desert-orange/15 text-desert-orange font-semibold border border-desert-orange/30">
+                        {shouldHighlightEasySetup ? 'Comece Aqui' : 'Assistente Nativo'}
                       </span>
-                      <div className="text-desert-orange p-1.5 rounded bg-desert-orange/10 group-hover:scale-110 transition-transform">
-                        <IconBox size={22} />
-                      </div>
+                      <IconBolt size={20} className="text-desert-orange group-hover:scale-110 transition-transform" />
                     </div>
-                    <h3 className="text-base font-stencil font-bold tracking-wide uppercase text-text-primary group-hover:text-desert-orange transition-colors">
-                      Central de Aplicativos (Supply Depot)
+                    <h3 className="text-sm sm:text-base font-bold text-text-primary group-hover:text-desert-orange transition-colors">
+                      Configuração Inicial
                     </h3>
-                    <p className="text-xs text-text-secondary mt-1.5 leading-relaxed">
-                      Catálogo completo de ferramentas off-grid, microsserviços e contêineres Docker instaláveis em 1 clique.
+                    <p className="text-xs text-text-secondary mt-1 leading-relaxed">
+                      Assistente passo a passo para instalar Wikipédia, pacotes offline, mapas e IA.
                     </p>
                   </div>
-                  <div className="pt-3 mt-3 border-t border-border-default/40">
-                    <Link
-                      href="/supply-depot"
-                      className="w-full inline-flex items-center justify-center gap-2 px-3 py-2 rounded bg-desert-orange text-white hover:bg-desert-orange-light text-xs font-mono-mil font-bold transition-colors cursor-pointer shadow-sm"
-                    >
-                      <span>Abrir Central de Apps</span>
-                      <IconArrowRight size={14} />
-                    </Link>
+                  <div className="mt-3 pt-2.5 border-t border-border-subtle flex items-center justify-between text-xs font-semibold text-desert-orange">
+                    <span>Abrir Assistente</span>
+                    <IconArrowRight size={15} />
                   </div>
-                </div>
+                </Link>
 
-                {/* 2. Catálogo & Guias */}
-                <div className="chamfer-box relative p-4 flex flex-col justify-between hover:border-desert-tan transition-all group">
+                {/* 2. Central de Aplicativos */}
+                <Link
+                  href="/supply-depot"
+                  className="rounded-xl border border-border-default bg-surface-primary p-4 flex flex-col justify-between hover:border-desert-orange transition-all group shadow-sm"
+                >
                   <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-[10px] font-mono-mil px-2 py-0.5 rounded bg-desert-tan/15 text-desert-tan font-bold border border-desert-tan/30">
-                        {APP_CATALOG.length} GUIAS OPERACIONAIS
+                    <div className="flex items-center justify-between mb-2.5">
+                      <span className="text-xs px-2 py-0.5 rounded bg-desert-orange/15 text-desert-orange font-semibold border border-desert-orange/30">
+                        {installedAppCount} ativos / {APP_CATALOG.length} apps
                       </span>
-                      <div className="text-desert-tan p-1.5 rounded bg-desert-tan/10 group-hover:scale-110 transition-transform">
-                        <IconBook size={22} />
-                      </div>
+                      <IconBox size={20} className="text-desert-orange group-hover:scale-110 transition-transform" />
                     </div>
-                    <h3 className="text-base font-stencil font-bold tracking-wide uppercase text-text-primary group-hover:text-desert-tan transition-colors">
-                      Catálogo &amp; Guias Operacionais
+                    <h3 className="text-sm sm:text-base font-bold text-text-primary group-hover:text-desert-orange transition-colors">
+                      Central de Aplicativos
                     </h3>
-                    <p className="text-xs text-text-secondary mt-1.5 leading-relaxed">
-                      Manuais de sobrevivência, primeiros socorros, acervo técnico PT-BR e documentação de todas as aplicações.
+                    <p className="text-xs text-text-secondary mt-1 leading-relaxed">
+                      Instale e gerencie ferramentas off-grid e contêineres Docker em 1 clique.
                     </p>
                   </div>
-                  <div className="pt-3 mt-3 border-t border-border-default/40">
-                    <button
-                      type="button"
-                      onClick={() => openAppCatalog()}
-                      className="w-full inline-flex items-center justify-center gap-2 px-3 py-2 rounded bg-surface-secondary border border-desert-tan/40 text-desert-tan hover:bg-desert-tan hover:text-black text-xs font-mono-mil font-bold transition-colors cursor-pointer shadow-sm"
-                    >
-                      <span>Explorar Catálogo &amp; Guias</span>
-                      <IconBook size={14} />
-                    </button>
+                  <div className="mt-3 pt-2.5 border-t border-border-subtle flex items-center justify-between text-xs font-semibold text-desert-orange">
+                    <span>Abrir Supply Depot</span>
+                    <IconArrowRight size={15} />
                   </div>
-                </div>
+                </Link>
 
-                {/* 3. Discos & Armazenamento */}
-                <div className="chamfer-box relative p-4 flex flex-col justify-between hover:border-desert-green transition-all group">
+                {/* 3. Catálogo & Guias */}
+                <button
+                  type="button"
+                  onClick={() => openAppCatalog()}
+                  className="text-left rounded-xl border border-border-default bg-surface-primary p-4 flex flex-col justify-between hover:border-desert-tan transition-all group shadow-sm cursor-pointer"
+                >
                   <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-[10px] font-mono-mil px-2 py-0.5 rounded bg-desert-green/15 text-desert-green font-bold border border-desert-green/30">
-                        MULTI-HD &amp; SAMBA
+                    <div className="flex items-center justify-between mb-2.5">
+                      <span className="text-xs px-2 py-0.5 rounded bg-desert-tan/15 text-desert-tan font-semibold border border-desert-tan/30">
+                        {APP_CATALOG.length} guias PT-BR
                       </span>
-                      <div className="text-desert-green p-1.5 rounded bg-desert-green/10 group-hover:scale-110 transition-transform">
-                        <IconServer size={22} />
-                      </div>
+                      <IconBook size={20} className="text-desert-tan group-hover:scale-110 transition-transform" />
                     </div>
-                    <h3 className="text-base font-stencil font-bold tracking-wide uppercase text-text-primary group-hover:text-desert-green transition-colors">
-                      Discos &amp; Armazenamento
+                    <h3 className="text-sm sm:text-base font-bold text-text-primary group-hover:text-desert-tan transition-colors">
+                      Catálogo &amp; Guias
                     </h3>
-                    <p className="text-xs text-text-secondary mt-1.5 leading-relaxed">
-                      Topologia dos HDs conectados, mapeamento de downloads em lote entre discos e compartilhamento de rede.
+                    <p className="text-xs text-text-secondary mt-1 leading-relaxed">
+                      Manuais de sobrevivência, documentação das aplicações e guias técnicos offline.
                     </p>
                   </div>
-                  <div className="pt-3 mt-3 border-t border-border-default/40">
-                    <Link
-                      href="/settings/system#discos"
-                      className="w-full inline-flex items-center justify-center gap-2 px-3 py-2 rounded bg-surface-secondary border border-desert-green/40 text-desert-green hover:bg-desert-green hover:text-white text-xs font-mono-mil font-bold transition-colors cursor-pointer shadow-sm"
-                    >
-                      <span>Gerenciar Discos &amp; Pools</span>
-                      <IconArrowRight size={14} />
-                    </Link>
+                  <div className="mt-3 pt-2.5 border-t border-border-subtle flex items-center justify-between text-xs font-semibold text-desert-tan w-full">
+                    <span>Explorar Guias</span>
+                    <IconArrowRight size={15} />
                   </div>
-                </div>
+                </button>
 
-                {/* 4. Cartografia Offline */}
-                <div className="chamfer-box relative p-4 flex flex-col justify-between hover:border-desert-tan transition-all group">
+                {/* 4. Discos & Armazenamento */}
+                <Link
+                  href="/settings/storage"
+                  className="rounded-xl border border-border-default bg-surface-primary p-4 flex flex-col justify-between hover:border-desert-green transition-all group shadow-sm"
+                >
                   <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-[10px] font-mono-mil px-2 py-0.5 rounded bg-desert-tan/15 text-desert-tan font-bold border border-desert-tan/30">
-                        MAPAS PMTILES &amp; ROTAS
+                    <div className="flex items-center justify-between mb-2.5">
+                      <span className="text-xs px-2 py-0.5 rounded bg-desert-green/15 text-desert-green font-semibold border border-desert-green/30">
+                        Multi-HD &amp; Samba
                       </span>
-                      <div className="text-desert-tan p-1.5 rounded bg-desert-tan/10 group-hover:scale-110 transition-transform">
-                        <IconCompass size={22} />
-                      </div>
+                      <IconServer size={20} className="text-desert-green group-hover:scale-110 transition-transform" />
                     </div>
-                    <h3 className="text-base font-stencil font-bold tracking-wide uppercase text-text-primary group-hover:text-desert-tan transition-colors">
-                      Cartografia Tática Offline
+                    <h3 className="text-sm sm:text-base font-bold text-text-primary group-hover:text-desert-green transition-colors">
+                      Discos &amp; Samba SMB
                     </h3>
-                    <p className="text-xs text-text-secondary mt-1.5 leading-relaxed">
-                      Navegação cartográfica e satélite vetorial global sem internet, com marcadores táticos e mapas de campo.
+                    <p className="text-xs text-text-secondary mt-1 leading-relaxed">
+                      Navegue pastas, defina disco padrão para downloads e configure rede SMB.
                     </p>
                   </div>
-                  <div className="pt-3 mt-3 border-t border-border-default/40">
-                    <Link
-                      href="/maps"
-                      className="w-full inline-flex items-center justify-center gap-2 px-3 py-2 rounded bg-surface-secondary border border-desert-tan/40 text-desert-tan hover:bg-desert-tan hover:text-black text-xs font-mono-mil font-bold transition-colors cursor-pointer shadow-sm"
-                    >
-                      <span>Abrir Cartografia</span>
-                      <IconArrowRight size={14} />
-                    </Link>
+                  <div className="mt-3 pt-2.5 border-t border-border-subtle flex items-center justify-between text-xs font-semibold text-desert-green">
+                    <span>Gerenciar Storage</span>
+                    <IconArrowRight size={15} />
                   </div>
-                </div>
+                </Link>
 
-                {/* 5. Assistente de IA Local */}
-                <div className="chamfer-box relative p-4 flex flex-col justify-between hover:border-desert-olive transition-all group">
+                {/* 5. Mapas Offline */}
+                <Link
+                  href="/maps"
+                  className="rounded-xl border border-border-default bg-surface-primary p-4 flex flex-col justify-between hover:border-desert-tan transition-all group shadow-sm"
+                >
                   <div>
-                    <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center justify-between mb-2.5">
+                      <span className="text-xs px-2 py-0.5 rounded bg-surface-secondary text-desert-tan font-semibold border border-border-default">
+                        PMTiles Vetorial
+                      </span>
+                      <IconCompass size={20} className="text-desert-tan group-hover:scale-110 transition-transform" />
+                    </div>
+                    <h3 className="text-sm sm:text-base font-bold text-text-primary group-hover:text-desert-tan transition-colors">
+                      Mapas Offline
+                    </h3>
+                    <p className="text-xs text-text-secondary mt-1 leading-relaxed">
+                      Navegação cartográfica regional sem internet com marcadores personalizados.
+                    </p>
+                  </div>
+                  <div className="mt-3 pt-2.5 border-t border-border-subtle flex items-center justify-between text-xs font-semibold text-desert-tan">
+                    <span>Abrir Cartografia</span>
+                    <IconArrowRight size={15} />
+                  </div>
+                </Link>
+
+                {/* 6. Assistente de IA Local */}
+                <Link
+                  href={aiConfigured ? '/chat' : '/settings/models'}
+                  className="rounded-xl border border-border-default bg-surface-primary p-4 flex flex-col justify-between hover:border-desert-olive transition-all group shadow-sm"
+                >
+                  <div>
+                    <div className="flex items-center justify-between mb-2.5">
                       <span
-                        className={`text-[10px] font-mono-mil px-2 py-0.5 rounded font-bold border ${
+                        className={`text-xs px-2 py-0.5 rounded font-semibold border ${
                           aiConfigured
-                            ? 'bg-desert-green/15 text-desert-green border-desert-green/30'
+                            ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
                             : 'bg-desert-orange/15 text-desert-orange border-desert-orange/30'
                         }`}
                       >
-                        {aiConfigured ? 'OLLAMA GGUF & RAG ONLINE' : 'CONFIGURAÇÃO PENDENTE'}
+                        {aiConfigured ? 'Ollama & RAG Online' : 'Configuração Pendente'}
                       </span>
-                      <div className="text-desert-olive p-1.5 rounded bg-desert-olive/10 group-hover:scale-110 transition-transform">
-                        <IconBrain size={22} />
-                      </div>
+                      <IconBrain size={20} className="text-desert-olive group-hover:scale-110 transition-transform" />
                     </div>
-                    <h3 className="text-base font-stencil font-bold tracking-wide uppercase text-text-primary group-hover:text-desert-olive transition-colors">
-                      Assistente de IA Local (RAG)
+                    <h3 className="text-sm sm:text-base font-bold text-text-primary group-hover:text-desert-olive transition-colors">
+                      Assistente de IA Local
                     </h3>
-                    <p className="text-xs text-text-secondary mt-1.5 leading-relaxed">
-                      Modelos neurais locais para diagnóstico tático, indexação de documentos, buscas em livros e raciocínio off-grid.
+                    <p className="text-xs text-text-secondary mt-1 leading-relaxed">
+                      Modelos locais e consulta em documentos indexados totalmente off-grid.
                     </p>
                   </div>
-                  <div className="pt-3 mt-3 border-t border-border-default/40">
-                    <Link
-                      href={aiConfigured ? '/chat' : '/settings/models'}
-                      className="w-full inline-flex items-center justify-center gap-2 px-3 py-2 rounded bg-surface-secondary border border-desert-olive/40 text-desert-olive hover:bg-desert-olive hover:text-white text-xs font-mono-mil font-bold transition-colors cursor-pointer shadow-sm"
-                    >
-                      <span>{aiConfigured ? 'Iniciar Conversa Tática' : 'Instalar / Configurar IA'}</span>
-                      <IconArrowRight size={14} />
-                    </Link>
+                  <div className="mt-3 pt-2.5 border-t border-border-subtle flex items-center justify-between text-xs font-semibold text-desert-olive">
+                    <span>{aiConfigured ? 'Abrir Chat IA' : 'Configurar IA'}</span>
+                    <IconArrowRight size={15} />
                   </div>
-                </div>
+                </Link>
 
-                {/* 6. Gerenciador de Downloads */}
-                <div className="chamfer-box relative p-4 flex flex-col justify-between hover:border-desert-tan transition-all group">
+                {/* 7. Gerenciador de Downloads */}
+                <Link
+                  href="/settings/downloads"
+                  className="rounded-xl border border-border-default bg-surface-primary p-4 flex flex-col justify-between hover:border-desert-tan transition-all group shadow-sm"
+                >
                   <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-[10px] font-mono-mil px-2 py-0.5 rounded bg-surface-secondary text-desert-tan font-bold border border-border-default">
+                    <div className="flex items-center justify-between mb-2.5">
+                      <span className="text-xs px-2 py-0.5 rounded bg-surface-secondary text-desert-tan font-semibold border border-border-default">
                         {runningDownloads.length > 0
-                          ? `${runningDownloads.length} BAIXANDO AGORA`
-                          : 'FILA RESILIENTE // AUTO-RESUME'}
+                          ? `${runningDownloads.length} baixando`
+                          : 'Auto-Resume Ativo'}
                       </span>
-                      <div className="text-desert-tan p-1.5 rounded bg-surface-secondary group-hover:scale-110 transition-transform">
-                        <IconDownload size={22} />
-                      </div>
+                      <IconDownload size={20} className="text-desert-tan group-hover:scale-110 transition-transform" />
                     </div>
-                    <h3 className="text-base font-stencil font-bold tracking-wide uppercase text-text-primary group-hover:text-desert-tan transition-colors">
-                      Gerenciador de Downloads
+                    <h3 className="text-sm sm:text-base font-bold text-text-primary group-hover:text-desert-tan transition-colors">
+                      Downloads &amp; Fila
                     </h3>
-                    <p className="text-xs text-text-secondary mt-1.5 leading-relaxed">
-                      Controle de pacotes ZIM, mapas e modelos com recuperação automática após quedas e limpeza de arquivos .tmp.
+                    <p className="text-xs text-text-secondary mt-1 leading-relaxed">
+                      Monitore acervos ZIM, mapas, modelos e limpe arquivos temporários órfãos.
                     </p>
                   </div>
-                  <div className="pt-3 mt-3 border-t border-border-default/40">
-                    <Link
-                      href="/settings/downloads"
-                      className="w-full inline-flex items-center justify-center gap-2 px-3 py-2 rounded bg-surface-secondary border border-border-default text-text-primary hover:border-desert-tan text-xs font-mono-mil font-bold transition-colors cursor-pointer shadow-sm"
-                    >
-                      <span>Ver Fila &amp; Arquivos .tmp</span>
-                      <IconArrowRight size={14} />
-                    </Link>
+                  <div className="mt-3 pt-2.5 border-t border-border-subtle flex items-center justify-between text-xs font-semibold text-desert-tan">
+                    <span>Gerenciar Fila</span>
+                    <IconArrowRight size={15} />
                   </div>
-                </div>
+                </Link>
+
+                {/* 8. Configurações do Sistema */}
+                <Link
+                  href="/settings/system"
+                  className="rounded-xl border border-border-default bg-surface-primary p-4 flex flex-col justify-between hover:border-desert-tan transition-all group shadow-sm"
+                >
+                  <div>
+                    <div className="flex items-center justify-between mb-2.5">
+                      <span className="text-xs px-2 py-0.5 rounded bg-surface-secondary text-text-secondary font-semibold border border-border-default">
+                        Sistema &amp; Atualizações
+                      </span>
+                      <IconSettings size={20} className="text-desert-tan group-hover:scale-110 transition-transform" />
+                    </div>
+                    <h3 className="text-sm sm:text-base font-bold text-text-primary group-hover:text-desert-tan transition-colors">
+                      Configurações Gerais
+                    </h3>
+                    <p className="text-xs text-text-secondary mt-1 leading-relaxed">
+                      Hardware, atualizações Docker, temas visuais, Portainer e benchmark.
+                    </p>
+                  </div>
+                  <div className="mt-3 pt-2.5 border-t border-border-subtle flex items-center justify-between text-xs font-semibold text-desert-tan">
+                    <span>Abrir Configurações</span>
+                    <IconArrowRight size={15} />
+                  </div>
+                </Link>
               </div>
             </section>
           )}
 
           {/* 4. MÓDULOS OPERACIONAIS FIXADOS */}
           {dashboardConfig.pinnedModules && (
-            <section className="space-y-3 pt-2">
-              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border-default pb-2">
+            <section className="space-y-3 pt-1">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border-default/70 pb-2">
                 <div className="flex items-center gap-2">
-                  <span className="text-desert-tan font-mono-mil text-sm">★</span>
-                  <h2 className="text-base sm:text-lg font-bold font-stencil tracking-widest uppercase text-text-primary">
-                    MÓDULOS OPERACIONAIS FIXADOS
+                  <IconStarFilled size={16} className="text-desert-tan" />
+                  <h2 className="text-sm sm:text-base font-bold uppercase tracking-wider text-text-primary">
+                    Módulos Fixados &amp; Atalhos de Rede
                   </h2>
                 </div>
-                <span className="text-xs font-mono-mil text-text-muted hidden sm:inline">
-                  ACESSO RÁPIDO AOS SEUS MÓDULOS FAVORITOS
+                <span className="text-xs text-text-muted hidden sm:inline">
+                  Clique na estrela em qualquer módulo para fixar aqui
                 </span>
               </div>
 
-              {/* Cards Fixados */}
               {(() => {
                 const pinnedItems = items.filter((it) =>
                   pinnedServices.includes(it.serviceName || it.label)
@@ -1508,7 +1686,7 @@ export default function Home(props: {
                 const displayedItems = pinnedItems.length > 0 ? pinnedItems : defaultPicks
 
                 return (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
                     {displayedItems.map((item) => {
                       const isPinned = pinnedServices.includes(item.serviceName || item.label)
                       const isLinkTile = Boolean(item.linkTile)
@@ -1517,15 +1695,9 @@ export default function Home(props: {
                         item.label.toLowerCase().includes('kiwix')
 
                       const cardContent = (
-                        <div className="chamfer-box nomad-interactive-card relative p-4 flex flex-col justify-between transition-all hover:border-desert-tan group h-full">
-                          <div className="rivet absolute top-2 left-2" />
-                          <div className="rivet absolute top-2 right-2" />
-                          <div className="rivet absolute bottom-2 left-2" />
-                          <div className="rivet absolute bottom-2 right-2" />
-
+                        <div className="rounded-xl border border-border-default bg-surface-primary nomad-interactive-card relative p-4 flex flex-col justify-between transition-all hover:border-desert-tan group h-full shadow-sm">
                           <div>
-                            {/* Card Top Row: Pin + Category + Port */}
-                            <div className="flex items-center justify-between gap-2 mb-2 pb-1.5 border-b border-border-default/40">
+                            <div className="flex items-center justify-between gap-2 mb-2.5 pb-2 border-b border-border-subtle">
                               <div className="flex items-center gap-1.5 min-w-0">
                                 <button
                                   type="button"
@@ -1539,27 +1711,23 @@ export default function Home(props: {
                                     <IconStar size={15} />
                                   )}
                                 </button>
-                                <span className="text-[10px] font-mono-mil font-bold uppercase tracking-wider text-desert-olive truncate">
-                                  {item.categoryTag || 'MÓDULO NOMAD'}
+                                <span className="text-xs font-semibold text-desert-olive truncate">
+                                  {item.categoryTag || 'Módulo NOMAD'}
                                 </span>
                               </div>
-                              <span className="text-[10px] font-mono-mil text-text-muted shrink-0">
-                                {item.portLabel || item.to.toUpperCase()}
-                              </span>
                             </div>
 
-                            {/* Icon + Title + Description */}
-                            <div className="flex items-start gap-3 my-2">
-                              <div className="chamfer-inner p-2 text-desert-tan group-hover:text-text-primary transition-colors shrink-0">
+                            <div className="flex items-start gap-3 my-1.5">
+                              <div className="p-2 rounded-lg bg-surface-secondary border border-border-subtle text-desert-tan group-hover:text-text-primary transition-colors shrink-0">
                                 {item.icon}
                               </div>
                               <div className="min-w-0">
-                                <h3 className="text-base font-bold font-stencil uppercase tracking-wide text-text-primary group-hover:text-desert-tan transition-colors truncate">
+                                <h3 className="text-sm sm:text-base font-bold text-text-primary group-hover:text-desert-tan transition-colors truncate">
                                   {item.label}
                                 </h3>
                                 {item.poweredBy && (
-                                  <div className="text-[10px] font-mono-mil text-desert-olive mt-0.5 truncate">
-                                    MOTOR: {item.poweredBy}
+                                  <div className="text-xs text-desert-olive mt-0.5 truncate">
+                                    {item.poweredBy}
                                   </div>
                                 )}
                                 <p className="text-xs text-text-secondary mt-1 line-clamp-2 leading-relaxed">
@@ -1568,7 +1736,7 @@ export default function Home(props: {
                               </div>
                             </div>
 
-                            {/* Direct Kiwix Search Box */}
+                            {/* Busca rápida direta no Kiwix */}
                             {isKiwix && (() => {
                               const openKiwixTarget = () => {
                                 const baseUrl = item.to.replace(/\/+$/, '')
@@ -1580,7 +1748,7 @@ export default function Home(props: {
                               }
                               return (
                                 <div
-                                  className="chamfer-inner p-2 my-2 flex items-center gap-2"
+                                  className="rounded-lg border border-border-default bg-surface-secondary p-1.5 my-2.5 flex items-center gap-2"
                                   onClick={(e) => {
                                     e.preventDefault()
                                     e.stopPropagation()
@@ -1598,8 +1766,8 @@ export default function Home(props: {
                                         openKiwixTarget()
                                       }
                                     }}
-                                    placeholder="Buscar no acervo Kiwix..."
-                                    className="bg-transparent text-xs font-mono-mil text-text-primary focus:outline-none w-full placeholder:text-text-muted"
+                                    placeholder="Buscar no Kiwix..."
+                                    className="bg-transparent text-xs text-text-primary focus:outline-none w-full placeholder:text-text-muted"
                                   />
                                   <button
                                     type="button"
@@ -1608,25 +1776,24 @@ export default function Home(props: {
                                       e.stopPropagation()
                                       openKiwixTarget()
                                     }}
-                                    className="mil-tactical-btn px-2.5 py-1 text-[10px] font-mono-mil shrink-0 cursor-pointer"
+                                    className="px-2.5 py-1 rounded bg-desert-tan text-black text-xs font-bold hover:brightness-110 shrink-0 cursor-pointer"
                                   >
-                                    ABRIR
+                                    Abrir
                                   </button>
                                 </div>
                               )
                             })()}
                           </div>
 
-                          {/* Footer Action Row */}
-                          <div className="pt-2 mt-2 border-t border-border-default/40 flex items-center justify-between">
-                            <span className="text-[10px] font-mono-mil text-desert-green font-bold flex items-center gap-1">
-                              <span className="w-1.5 h-1.5 rounded-full bg-desert-green animate-pulse" />
-                              PRONTO
+                          <div className="pt-2.5 mt-2 border-t border-border-subtle flex items-center justify-between">
+                            <span className="text-xs text-emerald-400 font-semibold inline-flex items-center gap-1.5">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                              Pronto
                             </span>
 
-                            <div className="flex items-center gap-1 text-xs font-mono-mil font-bold text-desert-tan group-hover:translate-x-0.5 transition-transform">
-                              <span>ACESSAR MÓDULO</span>
-                              <IconArrowUpRight size={14} />
+                            <div className="flex items-center gap-1 text-xs font-semibold text-desert-tan group-hover:translate-x-0.5 transition-transform">
+                              <span>Acessar</span>
+                              <IconArrowUpRight size={15} />
                             </div>
                           </div>
                         </div>
@@ -1717,57 +1884,21 @@ export default function Home(props: {
                         setEditingTile(null)
                         setLinkModalOpen(true)
                       }}
-                      className="chamfer-box relative p-4 min-h-[160px] flex flex-col items-center justify-center text-center cursor-pointer border-dashed hover:border-desert-tan transition-colors group"
+                      className="rounded-xl border-2 border-dashed border-border-default bg-surface-primary/60 p-4 min-h-[160px] flex flex-col items-center justify-center text-center cursor-pointer hover:border-desert-tan transition-colors group"
                     >
-                      <div className="rivet absolute top-2 left-2" />
-                      <div className="rivet absolute top-2 right-2" />
-                      <div className="rivet absolute bottom-2 left-2" />
-                      <div className="rivet absolute bottom-2 right-2" />
-
-                      <div className="chamfer-inner p-2.5 text-desert-tan group-hover:scale-105 transition-transform">
-                        <IconPlus size={26} />
+                      <div className="p-2.5 rounded-lg bg-surface-secondary text-desert-tan group-hover:scale-105 transition-transform">
+                        <IconPlus size={24} />
                       </div>
-                      <h3 className="font-bold text-sm uppercase tracking-wider text-text-primary mt-2 group-hover:text-desert-tan">
-                        + Adicionar Atalho de Rede
+                      <h3 className="font-bold text-sm text-text-primary mt-2.5 group-hover:text-desert-tan">
+                        Adicionar Atalho de Rede
                       </h3>
-                      <p className="text-[11px] font-mono text-text-secondary mt-1 max-w-[200px]">
-                        Vincular endereço local da sua LAN
+                      <p className="text-xs text-text-secondary mt-1 max-w-[200px]">
+                        Vincular endereço local da sua rede LAN
                       </p>
                     </button>
                   </div>
                 );
               })()}
-
-              {/* CTA GIGANTE PARA O ARSENAL COMPLETO (SUPPLY DEPOT) */}
-              <div className="pt-2">
-                <Link
-                  href="/supply-depot"
-                  className="chamfer-box w-full p-4 flex flex-col sm:flex-row items-center justify-between gap-4 border border-desert-orange/40 bg-desert-orange/5 hover:bg-desert-orange/15 hover:border-desert-orange transition-all group rounded cursor-pointer"
-                >
-                  <div className="flex items-center gap-3.5">
-                    <div className="chamfer-inner p-2.5 text-desert-orange group-hover:scale-105 transition-transform shrink-0">
-                      <IconBox size={28} />
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-stencil text-base sm:text-lg font-bold uppercase text-text-primary group-hover:text-desert-orange transition-colors">
-                          Acessar Arsenal Completo com Todos os Aplicativos (Supply Depot)
-                        </span>
-                        <span className="px-2 py-0.5 rounded bg-desert-orange/20 text-desert-orange text-xs font-mono-mil font-bold">
-                          {APP_CATALOG.length} APLICAÇÕES
-                        </span>
-                      </div>
-                      <p className="text-xs text-text-secondary mt-0.5">
-                        Navegue pelo catálogo completo de contêineres Docker, instale novos programas em 1 clique e gerencie seus serviços no Portainer.
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 text-xs font-mono-mil font-bold text-desert-orange shrink-0 group-hover:translate-x-1 transition-transform">
-                    <span>ABRIR SUPPLY DEPOT</span>
-                    <IconArrowRight size={16} />
-                  </div>
-                </Link>
-              </div>
             </section>
           )}
         </div>
@@ -1905,7 +2036,7 @@ export default function Home(props: {
       )}
 
       {linkError && (
-        <div className="px-4 2xl:px-10 pb-4 max-w-[1840px] w-full mx-auto">
+        <div className="px-4 sm:px-6 pb-4 max-w-[1360px] w-full mx-auto">
           <Alert title={linkError} type="error" variant="solid" className="w-full" />
         </div>
       )}
@@ -2059,7 +2190,7 @@ export default function Home(props: {
             <div className="px-5 py-3.5 border-b border-border-subtle bg-surface-secondary flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <IconAdjustments size={18} className="text-desert-tan" />
-                <h3 className="text-sm font-bold uppercase tracking-wider text-text-primary font-mono-mil">
+                <h3 className="text-sm font-bold uppercase tracking-wider text-text-primary">
                   Personalizar Painel &amp; Centrais N.O.M.A.D.
                 </h3>
               </div>
@@ -2072,55 +2203,55 @@ export default function Home(props: {
               </button>
             </div>
 
-            <div className="p-4 max-h-[60vh] overflow-y-auto themed-scrollbar space-y-2.5 font-mono-mil">
+            <div className="p-4 max-h-[60vh] overflow-y-auto themed-scrollbar space-y-2.5">
               <p className="text-xs text-text-secondary mb-3">
-                Ative, oculte ou agrupe os widgets de monitoramento de hardware, pools de armazenamento e centrais de navegação da Home:
+                Ative, oculte ou agrupe os widgets de monitoramento de hardware em tempo real, discos físicos e centrais de navegação da Home:
               </p>
 
               {[
                 {
                   key: 'pools',
-                  label: 'Exibir Pools & Discos de Armazenamento',
-                  desc: 'Painel com informações dos HDs e NVMe físicos do servidor',
+                  label: 'Exibir Armazenamento & Discos Físicos',
+                  desc: 'Painel com capacidade consolidada dos HDs e NVMe reais conectados',
                 },
                 {
                   key: 'poolsCombined',
-                  label: 'Discos em Card Único (Consolidado)',
-                  desc: 'Agrupa os discos em um só card unificado (desative para cards individuais por pool)',
+                  label: 'Visualização Unificada de Discos (Pool Global)',
+                  desc: 'Exibe todos os discos em um só gráfico e barra comparativa (desative para cards individuais)',
                 },
                 {
                   key: 'cpuCombined',
-                  label: 'CPU em Card Unificado (Carga + Modelo)',
-                  desc: 'Exibe carga e processador em 1 só card (desative para cards separados abaixo)',
+                  label: 'CPU em Card Unificado (Carga em Tempo Real + Modelo)',
+                  desc: 'Exibe carga a cada 2s, pulso histórico e modelo em 1 card (desative para cards separados)',
                 },
                 ...(!dashboardConfig.cpuCombined
                   ? [
                       {
                         key: 'cpuUsage',
                         label: 'Card: Utilização da CPU',
-                        desc: 'Gauge circular com carga média do processador (modo separado)',
+                        desc: 'Gauge circular com carga média ao vivo a cada 2 segundos',
                       },
                       {
                         key: 'cpuModel',
                         label: 'Card: Modelo do Processador Host',
-                        desc: 'Especificações de modelo, núcleos, threads e frequência (modo separado)',
+                        desc: 'Especificações de modelo, núcleos, threads e clock em GHz',
                       },
                     ]
                   : []),
                 {
                   key: 'memory',
-                  label: 'Memória RAM',
-                  desc: 'Gauge circular de memória total, livre e alocada',
+                  label: 'Memória RAM em Tempo Real',
+                  desc: 'Uso real de aplicativos, cache recuperável Linux e disponibilidade livre',
                 },
                 {
                   key: 'eventLog',
                   label: 'Log de Eventos & Fila de Downloads',
-                  desc: 'Download em tempo real com barra animada e relógio',
+                  desc: 'Serviços ativos, velocidade de download ao vivo e relógio',
                 },
                 {
                   key: 'commandHub',
-                  label: 'Centrais de Operação (Hub NOMAD)',
-                  desc: 'Cards de acesso rápido (Supply Depot, Guias, Discos, Cartografia, IA, Downloads)',
+                  label: 'Centrais de Operação (Navegação)',
+                  desc: 'Atalhos para Configuração Inicial, Supply Depot, Guias, Storage, Mapas, IA e Configurações',
                 },
                 {
                   key: 'pinnedModules',

@@ -7,6 +7,7 @@ import logger from '@adonisjs/core/services/logger'
 import si from 'systeminformation'
 import {
   GpuHealthStatus,
+  LiveTelemetryResponse,
   NomadDiskInfo,
   NomadDiskInfoRaw,
   SystemInformationResponse,
@@ -684,6 +685,30 @@ export class SystemService {
       }
     } catch (error) {
       logger.error('Error getting system info:', error)
+      return undefined
+    }
+  }
+
+  async getLiveTelemetry(): Promise<LiveTelemetryResponse | undefined> {
+    try {
+      const [currentLoad, mem, cpuSpeed, cpuTemp, uptime] = await Promise.all([
+        si.currentLoad(),
+        si.mem(),
+        si.cpuCurrentSpeed().catch(() => null),
+        si.cpuTemperature().catch(() => null),
+        Promise.resolve(si.time()),
+      ])
+
+      return {
+        currentLoad,
+        mem,
+        cpuSpeed,
+        cpuTemp,
+        uptime,
+        timestamp: Date.now(),
+      }
+    } catch (error) {
+      logger.error('Error getting live telemetry:', error)
       return undefined
     }
   }

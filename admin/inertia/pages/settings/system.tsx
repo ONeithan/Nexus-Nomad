@@ -110,7 +110,7 @@ export default function SettingsPage(props: {
               Sistema &amp; Armazenamento
             </h1>
             <p className="text-desert-stone-dark">
-              Monitoramento de discos conectados e telemetria em tempo real • Atualizado a cada 30
+              Monitoramento de discos conectados e telemetria em tempo real • Atualizado a cada 10
               segundos
             </p>
           </div>

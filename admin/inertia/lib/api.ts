@@ -6,7 +6,7 @@ import {
 } from '../../types/zim'
 import { ServiceSlim } from '../../types/services'
 import { FileEntry } from '../../types/files'
-import { AppAutoUpdateStatus, AutoUpdateStatus, CheckLatestVersionResult, ContentAutoUpdateStatus, SystemInformationResponse, SystemUpdateStatus } from '../../types/system'
+import { AppAutoUpdateStatus, AutoUpdateStatus, CheckLatestVersionResult, ContentAutoUpdateStatus, LiveTelemetryResponse, SystemInformationResponse, SystemUpdateStatus } from '../../types/system'
 import { DownloadJobWithProgress, IncompleteDownloadItem, WikipediaState } from '../../types/downloads'
 import type { Country, CountryCode, CountryGroup, MapExtractPreflight } from '../../types/maps'
 import { EmbedJobWithProgress, FileWarningsResult, StoredFileInfo } from '../../types/rag'
@@ -608,6 +608,13 @@ class API {
   async getSystemInfo() {
     return catchInternal(async () => {
       const response = await this.client.get<SystemInformationResponse>('/system/info')
+      return response.data
+    })()
+  }
+
+  async getLiveTelemetry() {
+    return catchInternal(async () => {
+      const response = await this.client.get<LiveTelemetryResponse>('/system/telemetry')
       return response.data
     })()
   }
