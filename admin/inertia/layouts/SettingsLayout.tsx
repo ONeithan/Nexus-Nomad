@@ -22,6 +22,7 @@ import { usePage } from '@inertiajs/react'
 import StyledSidebar from '~/components/StyledSidebar'
 import { getServiceLink } from '~/lib/navigation'
 import useCreatorPacks from '~/hooks/useCreatorPacks'
+import TacticalBootGate from '~/components/TacticalBootGate'
 
 export default function SettingsLayout({ children }: { children: React.ReactNode }) {
   const { aiAssistantName } = usePage<{ aiAssistantName: string }>().props
@@ -65,9 +66,11 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
   ]
 
   return (
-    <div className="min-h-screen flex flex-row bg-surface-secondary/90">
-      <StyledSidebar title="Configurações" items={navigation} />
-      {children}
-    </div>
+    <TacticalBootGate>
+      <div className="min-h-screen flex flex-row bg-surface-secondary/90">
+        <StyledSidebar title="Configurações" items={navigation} />
+        {children}
+      </div>
+    </TacticalBootGate>
   )
 }

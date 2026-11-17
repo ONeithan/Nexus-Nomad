@@ -518,7 +518,7 @@ export default function TacticalBootGate({ children }: { children: React.ReactNo
   const displayVersion =
     appVersion && appVersion !== '0.0.0' && appVersion !== 'dev'
       ? `v${appVersion.replace(/^v/i, '').replace(/-nexus$/i, '')}`
-      : 'v1.0.24'
+      : 'v1.0.25'
 
   const [stage, setStage] = useState<BootStage>(() => {
     const initialDb = loadAuthDB(tacticalAuth)
@@ -641,7 +641,7 @@ export default function TacticalBootGate({ children }: { children: React.ReactNo
       } catch {}
 
       hasBootedInCurrentDocument = true
-      runCleanStabilizedOSBoot('LOGIN_SCREEN', 550)
+      runCleanStabilizedOSBoot('UNLOCKED', 480)
     }
 
     window.addEventListener('nomad:lock-console', handleLock)
@@ -1161,15 +1161,52 @@ export default function TacticalBootGate({ children }: { children: React.ReactNo
         idx++
         setTimeout(nextStep, stepIntervalMs)
       } else {
-        setTimeout(() => {
-          if (targetAfterBoot === 'UNLOCKED') {
-            setStage('UNLOCKED')
-          } else {
+        if (targetAfterBoot === 'UNLOCKED') {
+          // Mantém a tela com a animação do Nexus ativa enquanto o contêiner reinicia
+          setBootPct(92)
+          setBootStatus('AGUARDANDO CONTÊINER DOCKER ESTABILIZAR...')
+          setBootLogs((prev) => [
+            ...prev,
+            { msg: '[ AGUARDANDO ] TESTANDO COMUNICAÇÃO COM O SERVIDOR NOMAD...', color: '#f59e0b' },
+          ])
+
+          let attempts = 0
+          const pollTimer = setInterval(async () => {
+            attempts++
+            try {
+              const res = await fetch('/api/settings?key=auth.operators', { cache: 'no-store' })
+              if (res.ok || res.status === 200 || res.status === 404) {
+                clearInterval(pollTimer)
+                setBootPct(100)
+                setBootStatus('SERVIDOR ONLINE // ABRINDO CENTRO DE COMANDO...')
+                setBootLogs((prev) => [
+                  ...prev,
+                  { msg: '[ 100% ] SUBSISTEMA RECONECTADO // REDIRECIONANDO...', color: '#4ade80' },
+                ])
+                setTimeout(() => {
+                  window.location.href = '/home'
+                }, 600)
+              }
+            } catch {
+              if (attempts % 3 === 0) {
+                setBootLogs((prev) => [
+                  ...prev,
+                  { msg: `[ TENTATIVA ${attempts} ] CONTÊINER INICIALIZANDO PROCESSOS...`, color: '#a1b8a6' },
+                ])
+              }
+              if (attempts >= 40) {
+                clearInterval(pollTimer)
+                window.location.href = '/home'
+              }
+            }
+          }, 1200)
+        } else {
+          setTimeout(() => {
             setLoginUser('')
             setLoginPass('')
             setStage('LOGIN_SCREEN')
-          }
-        }, 450)
+          }, 450)
+        }
       }
     }
     setTimeout(nextStep, 220)
@@ -1296,7 +1333,7 @@ export default function TacticalBootGate({ children }: { children: React.ReactNo
     startColdBootSequence()
   }
 
-  if (stage !== 'LOGIN_SCREEN') {
+  if (stage === 'UNLOCKED') {
     return <>{children}</>
   }
 
