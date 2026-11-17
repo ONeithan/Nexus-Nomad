@@ -27,9 +27,7 @@ import {
   IconFolder,
   IconFileDownload,
   IconChevronRight,
-  IconPlus,
   IconTrash,
-  IconLibrary,
   IconArrowUp,
   IconArrowDown,
   IconArrowsSort,
@@ -53,7 +51,6 @@ const CUSTOM_LIBRARIES_KEY = 'custom-libraries'
 const CATALOG_LANGUAGES_KEY = 'catalog-languages'
 const ZIM_FILES_KEY = 'zim-files'
 
-type CustomLibrary = { id: number; name: string; base_url: string; is_default: boolean }
 type BrowseResult = {
   directories: { name: string; url: string }[]
   files: { name: string; url: string; size_bytes: number | null }[]
@@ -74,8 +71,9 @@ export default function ZimRemoteExplorer() {
     queryFn: () => api.getSystemServices(),
     staleTime: 15000,
   })
-  const kolibriServiceMatch = systemServicesData?.services?.find(
-    (s: any) =>
+  const systemServicesList = Array.isArray(systemServicesData) ? systemServicesData : []
+  const kolibriServiceMatch = systemServicesList.find(
+    (s) =>
       s.service_name === SERVICE_NAMES.KOLIBRI_GEN2 ||
       s.service_name === SERVICE_NAMES.KOLIBRI ||
       s.service_name?.toLowerCase().includes('kolibri') ||
@@ -166,7 +164,7 @@ export default function ZimRemoteExplorer() {
     queryKey: [ZIM_FILES_KEY],
     queryFn: async () => {
       const res = await api.listZimFiles()
-      return res.data.files
+      return res?.data?.files || []
     },
     refetchOnWindowFocus: false,
   })
@@ -392,7 +390,7 @@ export default function ZimRemoteExplorer() {
 
   const pendingBatchItems = useMemo(() => {
     const activeUrls = new Set(
-      zimDownloads.filter((d) => d.status !== 'completed').map((d) => d.url)
+      zimDownloads.filter((d) => d.status !== 'failed').map((d) => d.url)
     )
     return flatData.filter((item) => !activeUrls.has(item.download_url))
   }, [flatData, zimDownloads])
@@ -890,7 +888,7 @@ export default function ZimRemoteExplorer() {
                     title: 'Ações',
                     render(record) {
                       const activeJob = zimDownloads.find(
-                        (d) => d.status !== 'completed' && d.url === record.download_url
+                        (d) => d.status !== 'failed' && d.url === record.download_url
                       )
                       if (activeJob) {
                         const pct = Math.min(100, Math.max(0, Math.round(activeJob.progress || 0)))

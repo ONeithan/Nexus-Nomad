@@ -20,8 +20,6 @@ import {
   IconArrowsSort,
   IconChevronDown,
   IconChevronRight,
-  IconDownload,
-  IconEye,
   IconSortAscending,
   IconSortDescending,
   IconX,

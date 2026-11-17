@@ -22,18 +22,12 @@ import {
   IconStar,
   IconStarFilled,
   IconLayoutGrid,
-  IconLayoutList,
   IconBook,
-  IconCpu,
   IconServer,
-  IconDatabase,
   IconCompass,
   IconBrain,
   IconDownload,
-  IconCheck,
   IconArrowRight,
-  IconActivity,
-  IconGauge,
 } from '@tabler/icons-react'
 import axios from 'axios'
 import { Head, Link, router, usePage } from '@inertiajs/react'
@@ -56,7 +50,8 @@ import Alert from '~/components/Alert'
 import WhatsNewBanner from '~/components/WhatsNewBanner'
 import { SERVICE_NAMES } from '../../constants/service_names'
 import LinkTileModal from '~/components/LinkTileModal'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, memo } from 'react'
+import { APP_CATALOG } from '../../constants/app_catalog_data'
 import { linkTileColor } from '../../constants/link_tile_colors'
 import { useThemeContext } from '~/providers/ThemeProvider'
 import { getActiveOperator } from '~/components/TacticalBootGate'
@@ -84,6 +79,32 @@ export const DEFAULT_DASHBOARD_CONFIG: DashboardConfig = {
   commandHub: true,
   pinnedModules: true,
 }
+
+const TacticalClock = memo(function TacticalClock() {
+  const [now, setNow] = useState(() => new Date())
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout>
+    const scheduleTick = () => {
+      const msToNextSecond = 1000 - (Date.now() % 1000) + 15
+      timer = setTimeout(() => {
+        setNow(new Date())
+        scheduleTick()
+      }, msToNextSecond)
+    }
+    scheduleTick()
+    return () => clearTimeout(timer)
+  }, [])
+
+  return (
+    <span className="opacity-85 font-mono tabular-nums">
+      {now.toLocaleTimeString('pt-BR', {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+      })}
+    </span>
+  )
+})
 
 function CircularGauge({
   percentage,
@@ -256,20 +277,6 @@ interface DashboardItem {
   linkTile?: ServiceSlim
 }
 
-const HOME_CATEGORIES = [
-  { id: 'all', label: 'Todos' },
-  { id: 'favorites', label: '⭐ Fixados' },
-  { id: 'ai', label: 'IA & Cérebro' },
-  { id: 'home-family', label: 'Casa & Família' },
-  { id: 'finance', label: 'Finanças' },
-  { id: 'security', label: 'Segurança' },
-  { id: 'networking', label: 'Rede & Rádio' },
-  { id: 'media', label: 'Mídia & Som' },
-  { id: 'workshop', label: 'Oficina' },
-  { id: 'productivity', label: 'Produtividade' },
-  { id: 'utility', label: 'Utilitários' },
-]
-
 const CATEGORY_TAG_MAP: Record<string, string> = {
   ai: 'INTELIGÊNCIA ARTIFICIAL',
   'home-family': 'CASA & FAMÍLIA',
@@ -297,16 +304,6 @@ export default function Home(props: {
   const { aiAssistantName } = usePage<{ aiAssistantName: string }>().props
   const { effectiveTacticalHome, currentThemeDef } = useThemeContext()
 
-  const [searchQuery, setSearchQuery] = useState('')
-  const [activeCategory, setActiveCategory] = useState('all')
-  const [densityMode, setDensityMode] = useState<'cards' | 'compact'>(() => {
-    if (typeof window === 'undefined') return 'cards'
-    try {
-      return (localStorage.getItem('nomad:home_density_mode') as any) || 'cards'
-    } catch {
-      return 'cards'
-    }
-  })
   const [pinnedServices, setPinnedServices] = useState<string[]>(() => {
     if (typeof window === 'undefined') return []
     try {
@@ -316,17 +313,6 @@ export default function Home(props: {
       return []
     }
   })
-
-  const saveDensityMode = (mode: 'cards' | 'compact') => {
-    setDensityMode(mode)
-    if (typeof window !== 'undefined') {
-      try {
-        localStorage.setItem('nomad:home_density_mode', mode)
-      } catch {
-        // ignore
-      }
-    }
-  }
 
   const togglePin = (key: string, e: React.MouseEvent) => {
     e.preventDefault()
@@ -428,37 +414,35 @@ export default function Home(props: {
     refetchInterval: 30000,
   })
 
-  // Telemetry computation
-  const cpuPercent = Math.min(Math.max(sysInfo?.currentLoad?.currentLoad ?? 2.5, 0), 100)
-  const cpuBrand = sysInfo?.cpu?.brand || 'Processador Intel / AMD x86_64'
-  const cpuPhysical = sysInfo?.cpu?.physicalCores || 14
-  const cpuCores = sysInfo?.cpu?.cores || 20
-  const cpuSpeed = sysInfo?.cpu?.speed || 2.5
+  // Hardware telemetry computation (strictly real host data)
+  const hasSysInfo = Boolean(sysInfo)
+  const cpuPercent = hasSysInfo ? Math.min(Math.max(sysInfo?.currentLoad?.currentLoad ?? 0, 0), 100) : 0
+  const cpuBrand = sysInfo?.cpu?.brand || (hasSysInfo ? 'Processador x86_64' : 'Coletando hardware...')
+  const cpuPhysical = sysInfo?.cpu?.physicalCores ?? 0
+  const cpuCores = sysInfo?.cpu?.cores ?? 0
+  const cpuSpeed = sysInfo?.cpu?.speed ?? 0
 
-  const memTotalBytes = sysInfo?.mem?.total || 33285996544
-  const memUsedBytes = sysInfo?.mem?.used || 4509715660
-  const memFreeBytes = sysInfo?.mem?.available || sysInfo?.mem?.free || (memTotalBytes - memUsedBytes)
+  const memTotalBytes = sysInfo?.mem?.total ?? 0
+  const memUsedBytes = sysInfo?.mem?.used ?? 0
+  const memFreeBytes =
+    sysInfo?.mem?.available ?? sysInfo?.mem?.free ?? Math.max(0, memTotalBytes - memUsedBytes)
   const memTotalGiB = memTotalBytes / (1024 ** 3)
   const memUsedGiB = memUsedBytes / (1024 ** 3)
   const memFreeGiB = memFreeBytes / (1024 ** 3)
-  const memUsedPercent = Math.min(Math.max((memUsedBytes / memTotalBytes) * 100, 0), 100)
+  const memUsedPercent =
+    memTotalBytes > 0 ? Math.min(Math.max((memUsedBytes / memTotalBytes) * 100, 0), 100) : 0
 
-  const displayMountTargets = storageOverview?.mountTargets && storageOverview.mountTargets.length > 0
-    ? storageOverview.mountTargets
-    : [
-        {
-          label: 'Armazenamento Interno NOMAD (storage)',
-          path: '/app/storage',
-          freeBytes: (sysInfo?.disk?.[0]?.available ?? 857.9 * 1024 * 1024 * 1024),
-          totalBytes: (sysInfo?.disk?.[0]?.total ?? 1000 * 1024 * 1024 * 1024),
-        },
-        {
-          label: 'Disco Secundário (/mnt/nomad_storage)',
-          path: '/mnt/nomad_storage',
-          freeBytes: 915.8 * 1024 * 1024 * 1024,
-          totalBytes: 1000 * 1024 * 1024 * 1024,
-        },
-      ]
+  const displayMountTargets: Array<{ label: string; path: string; freeBytes: number; totalBytes: number }> =
+    storageOverview?.mountTargets && storageOverview.mountTargets.length > 0
+      ? storageOverview.mountTargets
+      : (sysInfo?.disk || [])
+          .filter((d) => d.totalSize > 0)
+          .map((d, i) => ({
+            label: d.model || d.name || `Disco ${i + 1}`,
+            path: d.filesystems?.[0]?.mount || d.name || `/disk-${i}`,
+            freeBytes: Math.max(0, d.totalSize - d.totalUsed),
+            totalBytes: d.totalSize,
+          }))
 
   const totalCombinedBytes = displayMountTargets.reduce((acc, t) => acc + (t.totalBytes || 0), 0)
   const freeCombinedBytes = displayMountTargets.reduce((acc, t) => acc + (t.freeBytes || 0), 0)
@@ -467,18 +451,36 @@ export default function Home(props: {
   const combinedGaugeColor =
     combinedPercent >= 85 ? '#ef4444' : combinedPercent >= 70 ? '#f59e0b' : '#06b6d4'
 
-  const [clockTime, setClockTime] = useState(() => new Date())
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setClockTime(new Date())
-    }, 1000)
-    return () => clearInterval(timer)
-  }, [])
-
   const { data: activeDownloads = [] } = useDownloads({})
-  const runningDownloads = activeDownloads.filter((d) => d.status !== 'completed' && d.status !== 'failed')
+  const runningDownloads = activeDownloads.filter((d) => d.status !== 'failed')
   const currentActiveJob =
     runningDownloads.find((d) => d.status === 'active') || runningDownloads[0]
+
+  const downloadRateRef = useRef<{ jobId: string; bytes: number; time: number; bps: number } | null>(null)
+  const [downloadSpeedBps, setDownloadSpeedBps] = useState<number>(0)
+
+  useEffect(() => {
+    if (!currentActiveJob || currentActiveJob.status !== 'active' || !currentActiveJob.downloadedBytes) {
+      downloadRateRef.current = null
+      setDownloadSpeedBps(0)
+      return
+    }
+    const now = Date.now()
+    const bytes = currentActiveJob.downloadedBytes
+    const prev = downloadRateRef.current
+    if (prev && prev.jobId === currentActiveJob.jobId && bytes >= prev.bytes) {
+      const dtSec = (now - prev.time) / 1000
+      if (dtSec >= 0.8) {
+        const instantBps = (bytes - prev.bytes) / dtSec
+        const smoothed = prev.bps > 0 ? prev.bps * 0.4 + instantBps * 0.6 : instantBps
+        downloadRateRef.current = { jobId: currentActiveJob.jobId, bytes, time: now, bps: smoothed }
+        setDownloadSpeedBps(smoothed)
+      }
+    } else {
+      downloadRateRef.current = { jobId: currentActiveJob.jobId, bytes, time: now, bps: 0 }
+      setDownloadSpeedBps(0)
+    }
+  }, [currentActiveJob?.jobId, currentActiveJob?.status, currentActiveJob?.downloadedBytes])
 
   const activeDownloadTitle = currentActiveJob
     ? currentActiveJob.title ||
@@ -665,7 +667,7 @@ export default function Home(props: {
 
       {effectiveTacticalHome ? (
         /* ====================================================================
-           MODO HUD TÁTICO MILITAR COM DASHBOARD TRUENAS & CENTRAIS NOMAD
+           MODO HUD TÁTICO MILITAR COM PAINEL MODULAR & CENTRAIS NOMAD
            ==================================================================== */
         <div className="max-w-[1840px] w-full mx-auto px-4 sm:px-6 2xl:px-10 py-4 space-y-5">
           {/* 1. BARRA OPERACIONAL DO COMANDO */}
@@ -701,7 +703,7 @@ export default function Home(props: {
             </div>
           </div>
 
-          {/* 2. DASHBOARD DE TELEMETRIA & HARDWARE (ESTILO TRUENAS) */}
+          {/* 2. PAINEL DE TELEMETRIA & HARDWARE MODULAR N.O.M.A.D. */}
           <section className="space-y-3">
             {/* Pools & Discos Físicos */}
             {dashboardConfig.pools && (
@@ -725,7 +727,7 @@ export default function Home(props: {
                       title={
                         dashboardConfig.poolsCombined
                           ? 'Alternar para visualização em cards separados'
-                          : 'Alternar para visualização unificada (2 em 1 só card)'
+                          : 'Alternar para visualização unificada (todos em 1 só card)'
                       }
                       className="px-2.5 py-1 rounded text-[11px] font-mono-mil border border-border-default bg-surface-secondary hover:border-desert-tan text-text-secondary hover:text-text-primary transition-colors cursor-pointer flex items-center gap-1.5"
                     >
@@ -737,7 +739,7 @@ export default function Home(props: {
                       ) : (
                         <>
                           <IconBox size={13} className="text-desert-tan" />
-                          <span>UNIFICAR (2 EM 1)</span>
+                          <span>UNIFICAR DISCOS</span>
                         </>
                       )}
                     </button>
@@ -750,8 +752,12 @@ export default function Home(props: {
                   </div>
                 </div>
 
-                {dashboardConfig.poolsCombined ? (
-                  /* CARD ÚNICO CONSOLIDADO (2 DISCOS EM 1 SÓ CARD) */
+                {displayMountTargets.length === 0 ? (
+                  <div className="chamfer-box relative p-5 text-xs font-mono-mil text-text-muted">
+                    Coletando telemetria real dos discos físicos conectados...
+                  </div>
+                ) : dashboardConfig.poolsCombined ? (
+                  /* CARD ÚNICO CONSOLIDADO */
                   <div className="chamfer-box relative p-5 border-t-2 border-t-desert-tan hover:border-desert-tan transition-colors">
                     <div className="rivet absolute top-2.5 left-2.5" />
                     <div className="rivet absolute top-2.5 right-2.5" />
@@ -763,7 +769,8 @@ export default function Home(props: {
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 mb-3 border-b border-border-default/60">
                         <div className="flex items-center gap-2.5 flex-wrap">
                           <span className="text-[10px] font-mono-mil px-2 py-0.5 rounded bg-surface-secondary border border-border-default text-desert-tan font-bold">
-                            TOPOLOGIA DUAL // 2 DISCOS REAIS
+                            TOPOLOGIA // {displayMountTargets.length}{' '}
+                            {displayMountTargets.length === 1 ? 'DISCO REAL' : 'DISCOS REAIS'}
                           </span>
                           <span className="font-stencil font-bold tracking-wide text-base text-text-primary uppercase">
                             Armazenamento Consolidado do Servidor
@@ -972,10 +979,28 @@ export default function Home(props: {
             )}
 
             {/* Linha de Processamento, Memória e Log de Eventos */}
+            {(() => {
+              const hwCount =
+                (dashboardConfig.cpuCombined
+                  ? 1
+                  : (dashboardConfig.cpuUsage ? 1 : 0) + (dashboardConfig.cpuModel ? 1 : 0)) +
+                (dashboardConfig.memory ? 1 : 0) +
+                (dashboardConfig.eventLog ? 1 : 0)
+              if (hwCount === 0) return null
+              const hwColSpan =
+                hwCount === 1
+                  ? 'lg:col-span-12'
+                  : hwCount === 2
+                    ? 'lg:col-span-6'
+                    : hwCount === 3
+                      ? 'lg:col-span-4'
+                      : 'lg:col-span-3'
+
+              return (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-3">
               {/* CPU: MODO UNIFICADO (CARGA + MODELO EM 1 CARD SÓ) */}
               {dashboardConfig.cpuCombined ? (
-                <div className="lg:col-span-4 chamfer-box relative p-4 flex flex-col justify-between hover:border-desert-tan transition-colors">
+                <div className={`${hwColSpan} chamfer-box relative p-4 flex flex-col justify-between hover:border-desert-tan transition-colors`}>
                   <div className="rivet absolute top-2 left-2" />
                   <div className="rivet absolute top-2 right-2" />
                   <div className="flex items-center justify-between pb-2 mb-2 border-b border-border-default/60">
@@ -1005,7 +1030,7 @@ export default function Home(props: {
                       size={86}
                       strokeWidth={8}
                       color="#06b6d4"
-                      label={`${Math.round(cpuPercent)}%`}
+                      label={hasSysInfo ? `${Math.round(cpuPercent)}%` : '--'}
                       sublabel="CARGA"
                     />
                     <div className="space-y-1 min-w-0 text-[11px] font-mono-mil">
@@ -1013,13 +1038,15 @@ export default function Home(props: {
                         {cpuBrand}
                       </div>
                       <div className="text-text-secondary">
-                        <strong className="text-desert-tan">{cpuPhysical} Cores / {cpuCores} Threads</strong>
+                        <strong className="text-desert-tan">
+                          {hasSysInfo ? `${cpuPhysical} Cores / ${cpuCores} Threads` : '-- Cores / -- Threads'}
+                        </strong>
                       </div>
                       <div className="text-text-muted">
-                        Frequência: <strong className="text-text-primary">{cpuSpeed} GHz</strong>
+                        Frequência: <strong className="text-text-primary">{hasSysInfo ? `${cpuSpeed} GHz` : '--'}</strong>
                       </div>
                       <div className="text-[10px] text-desert-olive font-bold">
-                        {cpuPercent < 10 ? 'CARGA BAIXA // OCIOSO' : 'EM PROCESSAMENTO'}
+                        {!hasSysInfo ? 'LENDO SENSORES...' : cpuPercent < 10 ? 'CARGA BAIXA // OCIOSO' : 'EM PROCESSAMENTO'}
                       </div>
                     </div>
                   </div>
@@ -1033,7 +1060,7 @@ export default function Home(props: {
                 /* CPU: MODO SEPARADO (2 CARDS) */
                 <>
                   {dashboardConfig.cpuUsage && (
-                    <div className="lg:col-span-3 chamfer-box relative p-4 flex flex-col justify-between hover:border-desert-tan transition-colors">
+                    <div className={`${hwColSpan} chamfer-box relative p-4 flex flex-col justify-between hover:border-desert-tan transition-colors`}>
                       <div className="rivet absolute top-2 left-2" />
                       <div className="rivet absolute top-2 right-2" />
                       <div className="flex items-center justify-between pb-2 mb-2 border-b border-border-default/60">
@@ -1060,21 +1087,21 @@ export default function Home(props: {
                           size={96}
                           strokeWidth={9}
                           color="#06b6d4"
-                          label={`${Math.round(cpuPercent)}%`}
+                          label={hasSysInfo ? `${Math.round(cpuPercent)}%` : '--'}
                           sublabel="MÉDIA"
                         />
                       </div>
                       <div className="pt-2 border-t border-border-default/40 flex items-center justify-between text-[10px] font-mono-mil text-text-muted">
                         <span>CARGA ATUAL</span>
                         <span className="text-desert-olive font-bold">
-                          {cpuPercent < 10 ? 'BAIXA // OCIOSO' : 'EM PROCESSAMENTO'}
+                          {!hasSysInfo ? 'LENDO...' : cpuPercent < 10 ? 'BAIXA // OCIOSO' : 'EM PROCESSAMENTO'}
                         </span>
                       </div>
                     </div>
                   )}
 
                   {dashboardConfig.cpuModel && (
-                    <div className="lg:col-span-3 chamfer-box relative p-4 flex flex-col justify-between hover:border-desert-tan transition-colors">
+                    <div className={`${hwColSpan} chamfer-box relative p-4 flex flex-col justify-between hover:border-desert-tan transition-colors`}>
                       <div className="rivet absolute top-2 left-2" />
                       <div className="rivet absolute top-2 right-2" />
                       <div className="flex items-center justify-between pb-2 mb-2 border-b border-border-default/60">
@@ -1093,11 +1120,11 @@ export default function Home(props: {
                         <div className="text-[11px] font-mono-mil text-text-secondary">
                           Núcleos:{' '}
                           <strong className="text-desert-tan">
-                            {cpuPhysical} Cores / {cpuCores} Threads
+                            {hasSysInfo ? `${cpuPhysical} Cores / ${cpuCores} Threads` : '-- Cores / -- Threads'}
                           </strong>
                         </div>
                         <div className="text-[11px] font-mono-mil text-text-secondary">
-                          Frequência: <strong className="text-text-primary">{cpuSpeed} GHz</strong>
+                          Frequência: <strong className="text-text-primary">{hasSysInfo ? `${cpuSpeed} GHz` : '--'}</strong>
                         </div>
                       </div>
                       <div className="pt-2 border-t border-border-default/40 flex items-center justify-between text-[10px] font-mono-mil text-text-muted">
@@ -1111,7 +1138,7 @@ export default function Home(props: {
 
               {/* RAM Memory Card */}
               {dashboardConfig.memory && (
-                <div className={`${dashboardConfig.cpuCombined ? 'lg:col-span-4' : 'lg:col-span-3'} chamfer-box relative p-4 flex flex-col justify-between hover:border-desert-tan transition-colors`}>
+                <div className={`${hwColSpan} chamfer-box relative p-4 flex flex-col justify-between hover:border-desert-tan transition-colors`}>
                   <div className="rivet absolute top-2 left-2" />
                   <div className="rivet absolute top-2 right-2" />
                   <div className="flex items-center justify-between pb-2 mb-2 border-b border-border-default/60">
@@ -1119,7 +1146,7 @@ export default function Home(props: {
                       Memória RAM
                     </span>
                     <span className="text-[10px] font-mono-mil text-text-muted">
-                      {memTotalGiB.toFixed(1)} GiB TOTAL
+                      {hasSysInfo ? `${memTotalGiB.toFixed(1)} GiB TOTAL` : '-- GiB'}
                     </span>
                   </div>
                   <div className="flex items-center justify-between gap-3 py-1">
@@ -1127,12 +1154,12 @@ export default function Home(props: {
                       <div className="flex items-center gap-1.5">
                         <span className="w-2 h-2 rounded-full bg-cyan-400 shrink-0" />
                         <span className="text-text-muted">Livre:</span>
-                        <strong className="text-text-primary">{memFreeGiB.toFixed(1)} GiB</strong>
+                        <strong className="text-text-primary">{hasSysInfo ? `${memFreeGiB.toFixed(1)} GiB` : '--'}</strong>
                       </div>
                       <div className="flex items-center gap-1.5">
                         <span className="w-2 h-2 rounded-full bg-desert-orange shrink-0" />
                         <span className="text-text-muted">Em Uso:</span>
-                        <strong className="text-text-primary">{memUsedGiB.toFixed(1)} GiB</strong>
+                        <strong className="text-text-primary">{hasSysInfo ? `${memUsedGiB.toFixed(1)} GiB` : '--'}</strong>
                       </div>
                       <div className="text-[10px] text-text-muted">Serviços + Buffer OS</div>
                     </div>
@@ -1141,20 +1168,22 @@ export default function Home(props: {
                       size={84}
                       strokeWidth={8}
                       color={memUsedPercent > 80 ? '#ef4444' : '#f59e0b'}
-                      label={`${Math.round(memUsedPercent)}%`}
+                      label={hasSysInfo ? `${Math.round(memUsedPercent)}%` : '--'}
                       sublabel="ALOCADA"
                     />
                   </div>
                   <div className="pt-2 border-t border-border-default/40 flex items-center justify-between text-[10px] font-mono-mil text-text-muted">
                     <span>DISPONÍVEL</span>
-                    <span className="text-desert-olive font-bold">{memFreeGiB.toFixed(1)} GiB LIVRES</span>
+                    <span className="text-desert-olive font-bold">
+                      {hasSysInfo ? `${memFreeGiB.toFixed(1)} GiB LIVRES` : '--'}
+                    </span>
                   </div>
                 </div>
               )}
 
               {/* Log de Eventos e Download Ativo */}
               {dashboardConfig.eventLog && (
-                <div className={`${dashboardConfig.cpuCombined ? 'lg:col-span-4' : 'lg:col-span-3'} chamfer-box relative p-4 flex flex-col justify-between hover:border-desert-tan transition-colors`}>
+                <div className={`${hwColSpan} chamfer-box relative p-4 flex flex-col justify-between hover:border-desert-tan transition-colors`}>
                   <div className="rivet absolute top-2 left-2" />
                   <div className="rivet absolute top-2 right-2" />
                   <div className="flex items-center justify-between pb-2 mb-2 border-b border-border-default/60">
@@ -1196,16 +1225,19 @@ export default function Home(props: {
                           </div>
                         </div>
 
-                        <div className="flex items-center justify-between text-[10px] text-text-muted">
-                          <span>
+                        <div className="flex items-center justify-between text-[10px] text-text-muted gap-2">
+                          <span className="truncate">
                             {currentActiveJob.downloadedBytes && currentActiveJob.totalBytes
-                              ? `${(currentActiveJob.downloadedBytes / (1024 * 1024 * 1024)).toFixed(1)} / ${(currentActiveJob.totalBytes / (1024 * 1024 * 1024)).toFixed(1)} GB`
+                              ? `${formatBytes(currentActiveJob.downloadedBytes)} / ${formatBytes(currentActiveJob.totalBytes)}`
                               : `${activeDownloadPercent}% concluído`}
+                            {downloadSpeedBps > 0 && (
+                              <strong className="text-desert-tan ml-1">• {formatBytes(downloadSpeedBps)}/s</strong>
+                            )}
                           </span>
                           {runningDownloads.length > 1 && (
                             <Link
                               href="/settings/downloads"
-                              className="text-desert-orange hover:underline font-mono"
+                              className="text-desert-orange hover:underline font-mono shrink-0"
                             >
                               +{runningDownloads.length - 1} na fila &gt;
                             </Link>
@@ -1219,13 +1251,7 @@ export default function Home(props: {
                     )}
                     <div className="text-desert-olive flex items-center justify-between pt-0.5 border-t border-border-subtle/50">
                       <span>&gt; TEMA {currentThemeDef.shortName.toUpperCase()}</span>
-                      <span className="opacity-80 font-mono">
-                        {clockTime.toLocaleTimeString('pt-BR', {
-                          hour: '2-digit',
-                          minute: '2-digit',
-                          second: '2-digit',
-                        })}
-                      </span>
+                      <TacticalClock />
                     </div>
                   </div>
 
@@ -1236,6 +1262,8 @@ export default function Home(props: {
                 </div>
               )}
             </div>
+              )
+            })()}
           </section>
 
           {/* 3. CENTRAIS DE OPERAÇÃO & NAVEGAÇÃO DO SISTEMA (HUB NOMAD) */}
@@ -1259,7 +1287,7 @@ export default function Home(props: {
                   <div>
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-[10px] font-mono-mil px-2 py-0.5 rounded bg-desert-orange/15 text-desert-orange font-bold border border-desert-orange/30">
-                        {installedAppCount} MÓDULOS ATIVOS // 114 TOTAL
+                        {installedAppCount} MÓDULOS ATIVOS // {APP_CATALOG.length} TOTAL
                       </span>
                       <div className="text-desert-orange p-1.5 rounded bg-desert-orange/10 group-hover:scale-110 transition-transform">
                         <IconBox size={22} />
@@ -1288,7 +1316,7 @@ export default function Home(props: {
                   <div>
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-[10px] font-mono-mil px-2 py-0.5 rounded bg-desert-tan/15 text-desert-tan font-bold border border-desert-tan/30">
-                        114 GUIAS OPERACIONAIS
+                        {APP_CATALOG.length} GUIAS OPERACIONAIS
                       </span>
                       <div className="text-desert-tan p-1.5 rounded bg-desert-tan/10 group-hover:scale-110 transition-transform">
                         <IconBook size={22} />
@@ -1541,39 +1569,52 @@ export default function Home(props: {
                             </div>
 
                             {/* Direct Kiwix Search Box */}
-                            {isKiwix && (
-                              <div
-                                className="chamfer-inner p-2 my-2 flex items-center gap-2"
-                                onClick={(e) => {
-                                  e.preventDefault()
-                                  e.stopPropagation()
-                                }}
-                              >
-                                <IconSearch size={14} className="text-desert-tan ml-1 shrink-0" />
-                                <input
-                                  type="text"
-                                  value={kiwixQuery}
-                                  onChange={(e) => setKiwixQuery(e.target.value)}
-                                  onKeyDown={(e) => {
-                                    if (e.key === 'Enter') {
-                                      e.preventDefault()
-                                      window.open(item.to, '_blank', 'noopener,noreferrer')
-                                    }
+                            {isKiwix && (() => {
+                              const openKiwixTarget = () => {
+                                const baseUrl = item.to.replace(/\/+$/, '')
+                                const q = kiwixQuery.trim()
+                                const url = q
+                                  ? `${baseUrl}/search?pattern=${encodeURIComponent(q)}`
+                                  : item.to
+                                window.open(url, '_blank', 'noopener,noreferrer')
+                              }
+                              return (
+                                <div
+                                  className="chamfer-inner p-2 my-2 flex items-center gap-2"
+                                  onClick={(e) => {
+                                    e.preventDefault()
+                                    e.stopPropagation()
                                   }}
-                                  placeholder="Buscar no acervo Kiwix..."
-                                  className="bg-transparent text-xs font-mono-mil text-text-primary focus:outline-none w-full placeholder:text-text-muted"
-                                />
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    window.open(item.to, '_blank', 'noopener,noreferrer')
-                                  }
-                                  className="mil-tactical-btn px-2.5 py-1 text-[10px] font-mono-mil shrink-0 cursor-pointer"
                                 >
-                                  ABRIR
-                                </button>
-                              </div>
-                            )}
+                                  <IconSearch size={14} className="text-desert-tan ml-1 shrink-0" />
+                                  <input
+                                    type="text"
+                                    value={kiwixQuery}
+                                    onChange={(e) => setKiwixQuery(e.target.value)}
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter') {
+                                        e.preventDefault()
+                                        e.stopPropagation()
+                                        openKiwixTarget()
+                                      }
+                                    }}
+                                    placeholder="Buscar no acervo Kiwix..."
+                                    className="bg-transparent text-xs font-mono-mil text-text-primary focus:outline-none w-full placeholder:text-text-muted"
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.preventDefault()
+                                      e.stopPropagation()
+                                      openKiwixTarget()
+                                    }}
+                                    className="mil-tactical-btn px-2.5 py-1 text-[10px] font-mono-mil shrink-0 cursor-pointer"
+                                  >
+                                    ABRIR
+                                  </button>
+                                </div>
+                              )
+                            })()}
                           </div>
 
                           {/* Footer Action Row */}
@@ -1591,9 +1632,9 @@ export default function Home(props: {
                         </div>
                       );
 
-                      if (isLinkTile) {
-                        const tile = item.linkTile;
-                        const confirming = pendingDelete === tile.service_name;
+                      if (isLinkTile && item.linkTile) {
+                        const tile = item.linkTile
+                        const confirming = pendingDelete === tile.service_name
 
                         return (
                           <div key={item.label} className="relative group">
@@ -1713,7 +1754,7 @@ export default function Home(props: {
                           Acessar Arsenal Completo com Todos os Aplicativos (Supply Depot)
                         </span>
                         <span className="px-2 py-0.5 rounded bg-desert-orange/20 text-desert-orange text-xs font-mono-mil font-bold">
-                          114 APLICAÇÕES
+                          {APP_CATALOG.length} APLICAÇÕES
                         </span>
                       </div>
                       <p className="text-xs text-text-secondary mt-0.5">
@@ -2019,7 +2060,7 @@ export default function Home(props: {
               <div className="flex items-center gap-2">
                 <IconAdjustments size={18} className="text-desert-tan" />
                 <h3 className="text-sm font-bold uppercase tracking-wider text-text-primary font-mono-mil">
-                  Personalizar Dashboard TrueNAS &amp; Centrais
+                  Personalizar Painel &amp; Centrais N.O.M.A.D.
                 </h3>
               </div>
               <button
@@ -2033,7 +2074,7 @@ export default function Home(props: {
 
             <div className="p-4 max-h-[60vh] overflow-y-auto themed-scrollbar space-y-2.5 font-mono-mil">
               <p className="text-xs text-text-secondary mb-3">
-                Ative ou oculte widgets de monitoramento de hardware, pools de armazenamento e centrais de navegação da Home:
+                Ative, oculte ou agrupe os widgets de monitoramento de hardware, pools de armazenamento e centrais de navegação da Home:
               </p>
 
               {[
@@ -2044,14 +2085,28 @@ export default function Home(props: {
                 },
                 {
                   key: 'poolsCombined',
-                  label: 'Discos em Card Único (2 em 1 Consolidado)',
-                  desc: 'Exibe ambos os HDs em um só card unificado (desative para cards separados)',
+                  label: 'Discos em Card Único (Consolidado)',
+                  desc: 'Agrupa os discos em um só card unificado (desative para cards individuais por pool)',
                 },
                 {
                   key: 'cpuCombined',
                   label: 'CPU em Card Unificado (Carga + Modelo)',
-                  desc: 'Exibe carga e processador em 1 só card alinhado com RAM e Logs',
+                  desc: 'Exibe carga e processador em 1 só card (desative para cards separados abaixo)',
                 },
+                ...(!dashboardConfig.cpuCombined
+                  ? [
+                      {
+                        key: 'cpuUsage',
+                        label: 'Card: Utilização da CPU',
+                        desc: 'Gauge circular com carga média do processador (modo separado)',
+                      },
+                      {
+                        key: 'cpuModel',
+                        label: 'Card: Modelo do Processador Host',
+                        desc: 'Especificações de modelo, núcleos, threads e frequência (modo separado)',
+                      },
+                    ]
+                  : []),
                 {
                   key: 'memory',
                   label: 'Memória RAM',

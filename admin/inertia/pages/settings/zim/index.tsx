@@ -35,7 +35,7 @@ export default function ZimPage() {
 
   async function getFiles() {
     const res = await api.listZimFiles()
-    return res.data.files
+    return res?.data?.files || []
   }
 
   const sortedData = useMemo(() => {

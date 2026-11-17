@@ -1,10 +1,3 @@
-import { Head, Link } from '@inertiajs/react'
-import { IconDownload, IconFolder, IconMapRoute, IconRobot, IconZoom } from '@tabler/icons-react'
-import SettingsLayout from '~/layouts/SettingsLayout'
-import ActiveDownloads from '~/components/ActiveDownloads'
-import StyledSectionHeader from '~/components/StyledSectionHeader'
-import useDownloads from '~/hooks/useDownloads'
-
 import { useState } from 'react'
 import { Head, Link } from '@inertiajs/react'
 import {
@@ -27,13 +20,13 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import api from '~/lib/api'
 import { formatBytes } from '~/lib/util'
 import { useNotifications } from '~/context/NotificationContext'
-import type { IncompleteDownloadItem } from '../../../../types/downloads'
+import type { IncompleteDownloadItem } from '../../../types/downloads'
 
 export default function SettingsDownloads() {
   const queryClient = useQueryClient()
   const { addNotification } = useNotifications()
   const { data: downloads = [] } = useDownloads({})
-  const activeCount = downloads.filter((d) => d.status !== 'completed' && d.status !== 'failed').length
+  const activeCount = downloads.filter((d) => d.status !== 'failed').length
   const failedCount = downloads.filter((d) => d.status === 'failed').length
 
   const [deletingPath, setDeletingPath] = useState<string | null>(null)

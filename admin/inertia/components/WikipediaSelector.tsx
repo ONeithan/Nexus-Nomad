@@ -85,9 +85,10 @@ const WikipediaSelector: React.FC<WikipediaSelectorProps> = ({
 
           const matchingJob = zimDownloads.find(
             (d) =>
-              d.status !== 'completed' &&
+              d.status !== 'failed' &&
               ((option.url && d.url === option.url) ||
-                (isCurrentDownloading && (d.filename || d.url).toLowerCase().includes('wikipedia')))
+                (isCurrentDownloading &&
+                  (d.filepath || d.title || d.url).toLowerCase().includes('wikipedia')))
           )
           const dlPct = matchingJob ? Math.min(100, Math.max(0, Math.round(matchingJob.progress || 0))) : 0
 

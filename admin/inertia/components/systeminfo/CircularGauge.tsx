@@ -18,7 +18,6 @@ export default function CircularGauge({
   label,
   icon,
   size = 'md',
-  variant = 'default',
   subtext,
   animated = true,
   muted = false,

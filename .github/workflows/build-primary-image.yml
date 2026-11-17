@@ -1,5 +1,5 @@
 name: Build Primary Docker Image
-# Build release trigger: v1.0.25
+# Build release trigger: v1.0.26
 
 on:
   push:
@@ -8,9 +8,9 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Versão para marcar a imagem Docker (sem prefixo "v", ex: "1.0.25-nexus")'
+        description: 'Versão para marcar a imagem Docker (sem prefixo "v", ex: "1.0.26-nexus")'
         required: false
-        default: '1.0.25-nexus'
+        default: '1.0.26-nexus'
         type: string
 
 jobs:
@@ -29,7 +29,7 @@ jobs:
         run: |
           REPO_LC=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
           SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
-          VERSION="${{ inputs.version || '1.0.25-nexus' }}"
+          VERSION="${{ inputs.version || '1.0.26-nexus' }}"
           BUILD_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
           CLEAN_VER=$(echo "${VERSION}" | sed -E 's/-nexus$//')
           echo "repo_lc=${REPO_LC}" >> "$GITHUB_OUTPUT"

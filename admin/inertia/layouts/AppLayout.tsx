@@ -4,9 +4,8 @@ import ChatButton from '~/components/chat/ChatButton'
 import ChatModal from '~/components/chat/ChatModal'
 import TacticalBootGate, { lockTacticalConsole, rebootNomadSystem } from '~/components/TacticalBootGate'
 import useServiceInstalledStatus from '~/hooks/useServiceInstalledStatus'
-import { useThemeContext } from '~/providers/ThemeProvider'
 import { SERVICE_NAMES } from '../../constants/service_names'
-import { Link, router } from '@inertiajs/react'
+import { Link, router, usePage } from '@inertiajs/react'
 import { IconArrowLeft, IconHome, IconLock, IconServer, IconBook, IconRotateClockwise } from '@tabler/icons-react'
 import { Dialog, DialogBackdrop, DialogPanel } from '@headlessui/react'
 import classNames from 'classnames'
@@ -28,7 +27,6 @@ export default function AppLayout({
   const [isCatalogOpen, setIsCatalogOpen] = useState(false)
   const [isRebootModalOpen, setIsRebootModalOpen] = useState(false)
   const aiAssistantInstalled = useServiceInstalledStatus(SERVICE_NAMES.OLLAMA)
-  const { effectiveTacticalHome } = useThemeContext()
   const page = usePage()
   const currentPath = page.url || ''
   const isHome =
@@ -221,8 +219,8 @@ export default function AppLayout({
                   Esta ação reinicia <strong>apenas o contêiner do Nexus N.O.M.A.D.</strong>. Suas aplicações ativas no Portainer/Docker (Kiwix, Ollama, Jellyfin, etc.) <strong>NÃO</strong> serão interrompidas.
                 </p>
                 <div className="p-3 rounded-lg bg-surface-secondary border border-border-subtle text-[11px] text-text-muted mb-5 space-y-1">
-                  <div>• O sistema executará a animação tática inicial de boot estabilizado.</div>
-                  <div>• Ao finalizar, solicitará novamente a autenticação do operador (login).</div>
+                  <div>• O sistema exibirá a tela de inicialização do N.O.M.A.D. enquanto o contêiner reinicia.</div>
+                  <div>• Ao finalizar, retornará automaticamente ao Centro de Comando.</div>
                 </div>
                 <div className="flex justify-end gap-2.5">
                   <button

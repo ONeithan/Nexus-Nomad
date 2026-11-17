@@ -18,7 +18,7 @@ export default function LeftDownloadsDrawer() {
   const { data: downloads = [] } = useDownloads({})
   const [expanded, setExpanded] = useState(false)
 
-  const activeList = downloads.filter((d) => d.status !== 'completed')
+  const activeList = downloads.filter((d) => d.status !== 'failed')
   const hasActive = activeList.length > 0
   const maxProgress = hasActive
     ? Math.max(...activeList.map((d) => Math.round(d.progress || 0)))
@@ -83,7 +83,7 @@ export default function LeftDownloadsDrawer() {
               ) : (
                 activeList.map((dl) => {
                   const pct = Math.min(100, Math.max(0, Math.round(dl.progress || 0)))
-                  const name = extractFileName(dl.filename || dl.url)
+                  const name = extractFileName(dl.filepath || dl.url)
                   const isFailed = dl.status === 'failed'
                   return (
                     <div

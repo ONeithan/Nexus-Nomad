@@ -503,21 +503,71 @@ export class DownloadService {
   }
 
   async listIncompleteDownloads(): Promise<{ files: IncompleteDownloadItem[]; totalBytes: number }> {
-    const candidateDirs: Array<{ path: string; category: string }> = [
-      { path: resolve(process.cwd(), 'storage', 'zim'), category: 'zim' },
-      { path: resolve(process.cwd(), 'storage', 'maps'), category: 'maps' },
-      { path: resolve(process.cwd(), 'storage', 'kb_uploads'), category: 'kb_uploads' },
-      { path: resolve(process.cwd(), 'storage', 'books'), category: 'books' },
-      { path: resolve(process.cwd(), 'storage', 'media'), category: 'media' },
-      { path: '/storage/zim', category: 'zim' },
-      { path: '/storage/maps', category: 'maps' },
-      { path: '/storage/kb_uploads', category: 'kb_uploads' },
-      { path: '/app/storage/zim', category: 'zim' },
-      { path: '/app/storage/maps', category: 'maps' },
-      { path: '/mnt/nomad_storage/zim', category: 'zim' },
-      { path: '/mnt/nomad_storage/maps', category: 'maps' },
-      { path: '/mnt/nomad_storage/kb_uploads', category: 'kb_uploads' },
-    ]
+    const currentJobs = await this.listDownloadJobs()
+    const baseRoots = new Set<string>([
+      resolve(process.cwd(), 'storage'),
+      '/storage',
+      '/app/storage',
+    ])
+    if (process.env.STORAGE_PATH) {
+      baseRoots.add(resolve(process.env.STORAGE_PATH))
+    }
+    try {
+      const KVStore = (await import('#models/kv_store')).default
+      const preferred = await KVStore.getValue('storage.preferredDownloadDisk')
+      if (preferred && typeof preferred === 'string') {
+        baseRoots.add(resolve(preferred))
+      }
+    } catch {}
+
+    // Dynamically discover secondary disks mounted under /mnt, /media, /run/media
+    for (const parent of ['/mnt', '/media', '/run/media']) {
+      if (!existsSync(parent)) continue
+      try {
+        const subEntries = await readdir(parent, { withFileTypes: true })
+        for (const sub of subEntries) {
+          if (sub.isDirectory() || sub.isSymbolicLink()) {
+            baseRoots.add(join(parent, sub.name))
+          }
+        }
+      } catch {}
+    }
+
+    const categories = ['zim', 'maps', 'kb_uploads', 'books', 'media'] as const
+    const candidateDirs: Array<{ path: string; category: string }> = []
+    const seenCandidatePaths = new Set<string>()
+    const { dirname } = await import('node:path')
+    const { realpath } = await import('node:fs/promises')
+
+    const addCandidate = async (dirPath: string, category: string) => {
+      const resolvedDir = resolve(dirPath)
+      if (!seenCandidatePaths.has(resolvedDir)) {
+        seenCandidatePaths.add(resolvedDir)
+        candidateDirs.push({ path: resolvedDir, category })
+      }
+      try {
+        const real = await realpath(resolvedDir)
+        if (real && !seenCandidatePaths.has(real)) {
+          seenCandidatePaths.add(real)
+          candidateDirs.push({ path: real, category })
+        }
+      } catch {}
+    }
+
+    for (const root of baseRoots) {
+      for (const category of categories) {
+        await addCandidate(join(root, category), category)
+      }
+    }
+
+    // Include directories of any queued, active or failed download jobs
+    for (const job of currentJobs) {
+      if (job.filepath) {
+        const jobDir = dirname(resolve(job.filepath))
+        const cat = categories.find((c) => jobDir.toLowerCase().includes(c)) || 'downloads'
+        await addCandidate(jobDir, cat)
+      }
+    }
 
     const scannedFilesMap = new Map<string, { name: string; tempPath: string; sizeBytes: number; modifiedAt: string; category: string }>()
 
@@ -530,8 +580,6 @@ export class DownloadService {
         }
       }
     }
-
-    const currentJobs = await this.listDownloadJobs()
 
     const files: IncompleteDownloadItem[] = []
     let totalBytes = 0
@@ -585,17 +633,36 @@ export class DownloadService {
       return { success: false, message: 'Caminho do arquivo não fornecido.' }
     }
 
-    const norm = normalize(tempPath)
+    const norm = resolve(tempPath)
     const lower = norm.toLowerCase()
     if (!lower.endsWith('.tmp') && !lower.endsWith('.part') && !lower.endsWith('.crdownload')) {
       return { success: false, message: 'Operação recusada: apenas arquivos temporários (.tmp, .part) podem ser excluídos.' }
+    }
+
+    const allowedRoots = [
+      resolve(process.cwd(), 'storage'),
+      resolve('/storage'),
+      resolve('/app/storage'),
+      resolve('/mnt'),
+      resolve('/media'),
+      resolve('/run/media'),
+      ...(process.env.STORAGE_PATH ? [resolve(process.env.STORAGE_PATH)] : []),
+    ]
+    const inAllowedRoot = allowedRoots.some(
+      (root) => norm.startsWith(root + '/') || norm.startsWith(root + '\\')
+    )
+    if (!inAllowedRoot) {
+      return {
+        success: false,
+        message: 'Operação recusada: caminho fora dos diretórios de armazenamento permitidos.',
+      }
     }
 
     // Check if an active job is writing to this file
     const currentJobs = await this.listDownloadJobs()
     const activeMatch = currentJobs.find((j) => {
       if (!j.filepath || j.status !== 'active') return false
-      const expected = normalize(j.filepath + '.tmp')
+      const expected = resolve(j.filepath + '.tmp')
       return norm === expected || basename(norm) === basename(expected)
     })
 

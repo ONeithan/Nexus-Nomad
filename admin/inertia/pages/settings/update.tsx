@@ -97,7 +97,6 @@ export default function SystemUpdatePage(props: { system: Props }) {
   const [logs, setLogs] = useState<string>('')
   const [email, setEmail] = useState('')
   const [versionInfo, setVersionInfo] = useState<Omit<Props, 'earlyAccess'>>(props.system)
-  const [showConnectionLostNotice, setShowConnectionLostNotice] = useState(false)
   const [updatingApps, setUpdatingApps] = useState<Set<string>>(new Set())
   const [checkingApps, setCheckingApps] = useState(false)
 
@@ -106,8 +105,8 @@ export default function SystemUpdatePage(props: { system: Props }) {
     queryFn: () => api.getSystemServices(),
   })
 
-  const installedApps = (appsData?.services || []).filter(
-    (s: any) => s.installed && !s.is_unmanaged
+  const installedApps = (Array.isArray(appsData) ? appsData : []).filter(
+    (s) => s.installed && !s.is_unmanaged
   )
   const appsWithUpdates = installedApps.filter((s: any) => Boolean(s.available_update_version))
 

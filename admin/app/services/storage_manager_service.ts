@@ -412,10 +412,12 @@ export class StorageManagerService {
     }
 
     // 4. Scan directory candidate mounts (/mnt/*, /media/*, /run/media/*, /data, /disks/*, /volumes/*)
+    const { stat: fsStat } = await import('node:fs/promises')
     const candidateDirs = ['/mnt', '/media', '/run/media', '/data', '/disks', '/volumes']
     for (const baseDir of candidateDirs) {
       if (!existsSync(baseDir)) continue
       try {
+        const baseStat = await fsStat(baseDir).catch(() => null)
         const entries = await readdir(baseDir, { withFileTypes: true }).catch(() => [])
         for (const entry of entries) {
           if (!entry.isDirectory()) continue
@@ -424,10 +426,15 @@ export class StorageManagerService {
           if (mountTargets.some((m) => resolve(m.path) === resolvedPath)) continue
 
           try {
+            // Skip plain subdirectories that share the same filesystem device as baseDir (not separate mounts)
+            const entryStat = await fsStat(fullPath).catch(() => null)
+            if (baseStat && entryStat && entryStat.dev === baseStat.dev) continue
+
             const fsStats = await statfs(fullPath)
             const totalBytes = Number(fsStats.blocks) * Number(fsStats.bsize)
             const freeBytes = Number(fsStats.bavail) * Number(fsStats.bsize)
-            if (totalBytes > 0) {
+            // Ignore tiny virtual/boot partitions smaller than 1 GiB
+            if (totalBytes >= 1024 * 1024 * 1024) {
               mountTargets.push({
                 label: `Disco Secundário (${fullPath})`,
                 path: fullPath,

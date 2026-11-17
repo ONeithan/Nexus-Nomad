@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Dialog, DialogBackdrop, DialogPanel } from '@headlessui/react'
 import {
   IconBolt,
@@ -7,9 +7,6 @@ import {
   IconX,
   IconServer,
   IconDeviceDesktop,
-  IconPlayerPlay,
-  IconPlayerStop,
-  IconRefresh,
 } from '@tabler/icons-react'
 import StyledButton from '~/components/StyledButton'
 import DynamicIcon, { DynamicIconName } from '~/components/DynamicIcon'
@@ -478,11 +475,10 @@ export default function BulkInstallModal({
 
             {isRunning && (
               <StyledButton
-                variant="outline"
+                variant="danger"
                 size="sm"
                 icon="IconPlayerStop"
                 onClick={handleCancel}
-                danger
               >
                 Interromper Fila
               </StyledButton>

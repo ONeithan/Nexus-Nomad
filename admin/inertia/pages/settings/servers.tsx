@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import { useState } from 'react'
 import { Head } from '@inertiajs/react'
 import SettingsLayout from '~/layouts/SettingsLayout'
 import StyledButton from '~/components/StyledButton'
@@ -7,22 +7,13 @@ import api from '~/lib/api'
 import { useNotifications } from '~/context/NotificationContext'
 import {
   IconBrandDocker,
-  IconCheck,
   IconCopy,
   IconDatabase,
-  IconDeviceDesktop,
-  IconEdit,
-  IconExternalLink,
   IconEye,
   IconEyeOff,
   IconInfoCircle,
   IconKey,
-  IconPlugConnected,
-  IconRefresh,
   IconServer,
-  IconTrash,
-  IconWorld,
-  IconAlertTriangle,
 } from '@tabler/icons-react'
 
 export interface PortainerContainerInfo {

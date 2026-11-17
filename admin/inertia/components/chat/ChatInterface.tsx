@@ -9,6 +9,7 @@ import BouncingDots from '../BouncingDots'
 import { usePage } from '@inertiajs/react'
 import InfoTooltip from '../InfoTooltip'
 import { visionAttachmentGuidance } from '../../lib/vision_guidance'
+import { useNotifications } from '~/context/NotificationContext'
 
 interface ChatInterfaceProps {
   messages: ChatMessage[]
@@ -38,6 +39,7 @@ export default function ChatInterface({
   chatSuggestionsEnabled = false,
   chatSuggestionsLoading = false,
 }: ChatInterfaceProps) {
+  const { addNotification } = useNotifications()
   const { aiAssistantName } = usePage<{ aiAssistantName: string }>().props
   const [input, setInput] = useState('')
   const [images, setImages] = useState<ChatImageAttachment[]>([])

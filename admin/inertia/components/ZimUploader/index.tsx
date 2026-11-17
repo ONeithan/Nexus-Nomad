@@ -36,12 +36,15 @@ export default function ZimUploader({ onUploadComplete, existingFilenames }: Zim
     }).use(XHRUpload, {
       endpoint: '/api/zim/upload',
       fieldName: 'file',
-      getResponseError: (responseText) => {
-        try {
-          const body = JSON.parse(responseText)
-          if (body?.message) return new Error(body.message)
-        } catch {}
-        return new Error('Upload failed')
+      onAfterResponse: (xhr) => {
+        if (xhr.status >= 400) {
+          let message = 'Falha no envio'
+          try {
+            const body = JSON.parse(xhr.responseText)
+            if (body?.message) message = body.message
+          } catch {}
+          throw new Error(message)
+        }
       },
     })
   )
@@ -50,7 +53,7 @@ export default function ZimUploader({ onUploadComplete, existingFilenames }: Zim
     const handleFileAdded = (file: { id: string; name: string }) => {
       if (existingFilenamesRef.current.includes(file.name)) {
         uppy.removeFile(file.id)
-        uppy.info('A ZIM file with that name already exists', 'error', 6000)
+        uppy.info('Já existe um arquivo ZIM com esse nome', 'error', 6000)
         return
       }
 
@@ -59,20 +62,23 @@ export default function ZimUploader({ onUploadComplete, existingFilenames }: Zim
         const alreadyQueued = uppy.getFiles().some((f) => f.id !== file.id && isWikipedia(f.name))
         if (alreadyQueued) {
           uppy.removeFile(file.id)
-          uppy.info('Only one Wikipedia file can be uploaded at a time', 'error', 6000)
+          uppy.info('Apenas um arquivo da Wikipédia pode ser enviado por vez', 'error', 6000)
         }
       }
     }
     const handleComplete = (result: {
-      successful: Array<{ response?: { body?: { added?: number } } }>
-      failed: Array<unknown>
+      successful?: Array<{ response?: { body?: unknown } }>
+      failed?: Array<unknown>
     }) => {
       // Uppy emits `complete` even when uploads fail or are aborted. Only treat
       // the run as a success when nothing failed — otherwise leave the uploader
       // open so the Dashboard can surface the error instead of closing it with a
       // false "Upload complete" toast.
-      if (result.failed.length > 0) return
-      const added = result.successful.reduce((sum, f) => sum + (f.response?.body?.added ?? 0), 0)
+      if ((result.failed?.length ?? 0) > 0) return
+      const added = (result.successful ?? []).reduce((sum, f) => {
+        const body = f.response?.body as { added?: number } | undefined
+        return sum + (body?.added ?? 0)
+      }, 0)
       onUploadCompleteRef.current(added)
     }
     uppy.on('file-added', handleFileAdded)
@@ -89,7 +95,7 @@ export default function ZimUploader({ onUploadComplete, existingFilenames }: Zim
       uppy={uppy}
       width="100%"
       height={300}
-      note="ZIM files only. Large files (up to 20 GB) are supported. For best results, upload from the same machine or over a stable LAN connection. Larger files should be copied directly to the storage volume"
+      note="Apenas arquivos ZIM. Arquivos grandes (até 20 GB) são suportados. Para melhores resultados, envie da mesma máquina ou em rede local (LAN) estável. Arquivos maiores podem ser copiados diretamente para o volume de armazenamento."
     />
   )
 }

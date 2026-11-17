@@ -6,7 +6,7 @@ import api from '~/lib/api'
 export default function DocsLayout({ children }: { children: React.ReactNode }) {
   const { data, isLoading } = useQuery<Array<{ title: string; slug: string }>>({
     queryKey: ['docs'],
-    queryFn: () => api.listDocs(),
+    queryFn: async () => (await api.listDocs()) ?? [],
     refetchOnWindowFocus: false,
     staleTime: Infinity,
   })

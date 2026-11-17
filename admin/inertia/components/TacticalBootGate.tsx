@@ -202,6 +202,11 @@ export function getActiveOperator(): { username: string; level: string } {
 export function lockTacticalConsole() {
   if (typeof window === 'undefined') return
   const db = loadAuthDB()
+  if (db.operators.length === 0) {
+    // Sem operador cadastrado: não trava em tela de login sem usuário; abre registro rápido no terminal
+    window.dispatchEvent(new CustomEvent('nomad:lock-no-operator'))
+    return
+  }
   db.activeSession = null
   db.lockedExplicitly = true
   saveAuthDB(db)
@@ -213,11 +218,10 @@ export function lockTacticalConsole() {
 export function rebootNomadSystem() {
   if (typeof window === 'undefined') return
   const db = loadAuthDB()
-  db.activeSession = null
-  db.lockedExplicitly = true
+  db.lockedExplicitly = false
   saveAuthDB(db)
   syncAuthDBToServer(db)
-  sessionStorage.removeItem(SESSION_UNLOCKED_KEY)
+  hasBootedInCurrentDocument = false
   window.dispatchEvent(new CustomEvent('nomad:system-reboot'))
 }
 
@@ -518,11 +522,17 @@ export default function TacticalBootGate({ children }: { children: React.ReactNo
   const displayVersion =
     appVersion && appVersion !== '0.0.0' && appVersion !== 'dev'
       ? `v${appVersion.replace(/^v/i, '').replace(/-nexus$/i, '')}`
-      : 'v1.0.25'
+      : 'v1.0.26'
 
   const [stage, setStage] = useState<BootStage>(() => {
     const initialDb = loadAuthDB(tacticalAuth)
-    return initialDb.lockedExplicitly ? 'LOGIN_SCREEN' : 'UNLOCKED'
+    if (initialDb.lockedExplicitly && initialDb.operators.length > 0) {
+      return 'LOGIN_SCREEN'
+    }
+    if (!hasBootedInCurrentDocument && initialDb.setupCompleted && initialDb.operators.length > 0) {
+      return 'CLEAN_BOOT_OS'
+    }
+    return 'UNLOCKED'
   })
   const [recoveryStep, setRecoveryStep] = useState<RecoverySubStep>('AWAIT_HELP')
   const [bootPct, setBootPct] = useState(0)
@@ -557,8 +567,8 @@ export default function TacticalBootGate({ children }: { children: React.ReactNo
   const [loginError, setLoginError] = useState('')
 
   // Finalizing stage states
-  const [finPct, setFinPct] = useState(0)
-  const [finStatus, setFinStatus] = useState('Sincronizando subsistemas táticos e módulos offline...')
+  const [finPct] = useState(0)
+  const [finStatus] = useState('Sincronizando subsistemas táticos e módulos offline...')
 
   // Subordinate operator modal states
   const [showAddOpModal, setShowAddOpModal] = useState(false)
@@ -570,14 +580,38 @@ export default function TacticalBootGate({ children }: { children: React.ReactNo
   const terminalBodyRef = useRef<HTMLDivElement>(null)
   const bootLogRef = useRef<HTMLDivElement>(null)
   const recoveryInputRef = useRef<HTMLInputElement>(null)
+  const initialBootStartedRef = useRef(false)
+  const timersRef = useRef<Array<ReturnType<typeof setTimeout> | ReturnType<typeof setInterval>>>([])
+
+  const registerTimeout = (fn: () => void, ms: number) => {
+    const id = setTimeout(fn, ms)
+    timersRef.current.push(id)
+    return id
+  }
+
+  const registerInterval = (fn: () => void, ms: number) => {
+    const id = setInterval(fn, ms)
+    timersRef.current.push(id)
+    return id
+  }
+
+  const clearAllTimers = () => {
+    for (const id of timersRef.current) {
+      clearTimeout(id)
+      clearInterval(id)
+    }
+    timersRef.current = []
+  }
 
   const triggerGlitch = (duration = 180) => {
     setGlitching(true)
-    setTimeout(() => setGlitching(false), duration)
+    registerTimeout(() => setGlitching(false), duration)
   }
 
   useEffect(() => {
     let mounted = true
+    const bootStartedThisMount = hasBootedInCurrentDocument
+
     async function initGate() {
       let db = loadAuthDB(tacticalAuth)
 
@@ -607,9 +641,13 @@ export default function TacticalBootGate({ children }: { children: React.ReactNo
         window.dispatchEvent(new CustomEvent('nomad:operator-updated'))
       }
 
-      if (db.lockedExplicitly) {
+      if (db.lockedExplicitly && db.operators.length > 0) {
         hasBootedInCurrentDocument = true
         setStage('LOGIN_SCREEN')
+      } else if (!bootStartedThisMount && !initialBootStartedRef.current && db.setupCompleted && db.operators.length > 0) {
+        initialBootStartedRef.current = true
+        hasBootedInCurrentDocument = true
+        runCleanStabilizedOSBoot('UNLOCKED', 280, false)
       } else {
         hasBootedInCurrentDocument = true
         setStage('UNLOCKED')
@@ -620,7 +658,8 @@ export default function TacticalBootGate({ children }: { children: React.ReactNo
 
     const handleLock = () => {
       const db = loadAuthDB(tacticalAuth)
-      if (db.operators.length > 0 && !loginUser) {
+      if (db.operators.length === 0) return
+      if (!loginUser) {
         setLoginUser(db.operators[0].username)
       }
       setLoginPass('')
@@ -628,7 +667,14 @@ export default function TacticalBootGate({ children }: { children: React.ReactNo
       setStage('LOGIN_SCREEN')
     }
 
-    const handleReboot = async () => {
+    const handleLockNoOp = () => {
+      startFirstBootRecovery()
+      setRecoveryStep('CREATING_USER')
+      setRecoveryHint('FORM')
+    }
+
+    const handleReboot = () => {
+      clearAllTimers()
       const db = loadAuthDB(tacticalAuth)
       if (db.operators.length > 0) {
         setLoginUser(db.operators[0].username)
@@ -636,19 +682,21 @@ export default function TacticalBootGate({ children }: { children: React.ReactNo
       setLoginPass('')
       setLoginError('')
 
-      try {
-        await fetch('/api/system/restart-nomad', { method: 'POST' }).catch(() => null)
-      } catch {}
+      // Dispara o restart do contêiner em paralelo e já exibe a animação imediatamente
+      fetch('/api/system/restart-nomad', { method: 'POST' }).catch(() => null)
 
       hasBootedInCurrentDocument = true
-      runCleanStabilizedOSBoot('UNLOCKED', 480)
+      runCleanStabilizedOSBoot('UNLOCKED', 420, true)
     }
 
     window.addEventListener('nomad:lock-console', handleLock)
+    window.addEventListener('nomad:lock-no-operator', handleLockNoOp)
     window.addEventListener('nomad:system-reboot', handleReboot)
     return () => {
       mounted = false
+      clearAllTimers()
       window.removeEventListener('nomad:lock-console', handleLock)
+      window.removeEventListener('nomad:lock-no-operator', handleLockNoOp)
       window.removeEventListener('nomad:system-reboot', handleReboot)
     }
   }, [])
@@ -1018,8 +1066,10 @@ export default function TacticalBootGate({ children }: { children: React.ReactNo
 
   function runCleanStabilizedOSBoot(
     targetAfterBoot: 'LOGIN_SCREEN' | 'UNLOCKED' = 'UNLOCKED',
-    stepIntervalMs = 480
+    stepIntervalMs = 480,
+    isContainerRestart = false
   ) {
+    clearAllTimers()
     const pendingApp = consumePendingAppAction()
     setStage('CLEAN_BOOT_OS')
     setBootPct(0)
@@ -1152,6 +1202,7 @@ export default function TacticalBootGate({ children }: { children: React.ReactNo
         ]
 
     let idx = 0
+    const restartTriggeredAt = Date.now()
     const nextStep = () => {
       if (idx < cleanSteps.length) {
         const s = cleanSteps[idx]
@@ -1159,23 +1210,32 @@ export default function TacticalBootGate({ children }: { children: React.ReactNo
         setBootStatus(s.status)
         setBootLogs((prev) => [...prev, { msg: s.msg, color: '#4ade80' }])
         idx++
-        setTimeout(nextStep, stepIntervalMs)
-      } else {
-        if (targetAfterBoot === 'UNLOCKED') {
-          // Mantém a tela com a animação do Nexus ativa enquanto o contêiner reinicia
-          setBootPct(92)
-          setBootStatus('AGUARDANDO CONTÊINER DOCKER ESTABILIZAR...')
-          setBootLogs((prev) => [
-            ...prev,
-            { msg: '[ AGUARDANDO ] TESTANDO COMUNICAÇÃO COM O SERVIDOR NOMAD...', color: '#f59e0b' },
-          ])
+        registerTimeout(nextStep, stepIntervalMs)
+      } else if (isContainerRestart && targetAfterBoot === 'UNLOCKED') {
+        // Reinicialização real do contêiner Docker: mantém a tela do Nexus e faz polling até o novo contêiner responder em /api/health
+        setBootPct(92)
+        setBootStatus('AGUARDANDO CONTÊINER DOCKER ESTABILIZAR...')
+        setBootLogs((prev) => [
+          ...prev,
+          { msg: '[ AGUARDANDO ] TESTANDO COMUNICAÇÃO COM O SERVIDOR NOMAD...', color: '#f59e0b' },
+        ])
 
-          let attempts = 0
-          const pollTimer = setInterval(async () => {
-            attempts++
-            try {
-              const res = await fetch('/api/settings?key=auth.operators', { cache: 'no-store' })
-              if (res.ok || res.status === 200 || res.status === 404) {
+        let attempts = 0
+        const pollTimer = registerInterval(async () => {
+          attempts++
+          // Aguarda pelo menos 2.5s desde o sinal de restart para não acertar o contêiner antigo antes do process.exit(0)
+          if (Date.now() - restartTriggeredAt < 2500) {
+            return
+          }
+          try {
+            const controller = new AbortController()
+            const abortId = registerTimeout(() => controller.abort(), 1500)
+            const res = await fetch('/api/health', { cache: 'no-store', signal: controller.signal })
+            clearTimeout(abortId)
+            const contentType = res.headers.get('content-type') || ''
+            if (res.ok && contentType.includes('application/json')) {
+              const data = await res.json().catch(() => null)
+              if (data && typeof data === 'object') {
                 clearInterval(pollTimer)
                 setBootPct(100)
                 setBootStatus('SERVIDOR ONLINE // ABRINDO CENTRO DE COMANDO...')
@@ -1183,33 +1243,38 @@ export default function TacticalBootGate({ children }: { children: React.ReactNo
                   ...prev,
                   { msg: '[ 100% ] SUBSISTEMA RECONECTADO // REDIRECIONANDO...', color: '#4ade80' },
                 ])
-                setTimeout(() => {
+                registerTimeout(() => {
                   window.location.href = '/home'
-                }, 600)
-              }
-            } catch {
-              if (attempts % 3 === 0) {
-                setBootLogs((prev) => [
-                  ...prev,
-                  { msg: `[ TENTATIVA ${attempts} ] CONTÊINER INICIALIZANDO PROCESSOS...`, color: '#a1b8a6' },
-                ])
-              }
-              if (attempts >= 40) {
-                clearInterval(pollTimer)
-                window.location.href = '/home'
+                }, 500)
               }
             }
-          }, 1200)
-        } else {
-          setTimeout(() => {
+          } catch {
+            if (attempts % 3 === 0) {
+              setBootLogs((prev) => [
+                ...prev,
+                { msg: `[ TENTATIVA ${attempts} ] CONTÊINER INICIALIZANDO PROCESSOS...`, color: '#a1b8a6' },
+              ])
+            }
+            if (attempts >= 35) {
+              clearInterval(pollTimer)
+              window.location.href = '/home'
+            }
+          }
+        }, 1200)
+      } else {
+        // Boot visual normal na abertura/F5: libera a interface atual diretamente sem reload em loop
+        registerTimeout(() => {
+          if (targetAfterBoot === 'UNLOCKED') {
+            setStage('UNLOCKED')
+          } else {
             setLoginUser('')
             setLoginPass('')
             setStage('LOGIN_SCREEN')
-          }, 450)
-        }
+          }
+        }, 350)
       }
     }
-    setTimeout(nextStep, 220)
+    registerTimeout(nextStep, 180)
   }
 
   function handleMainLogin(e: React.FormEvent) {
@@ -1251,39 +1316,6 @@ export default function TacticalBootGate({ children }: { children: React.ReactNo
     window.dispatchEvent(new CustomEvent('nomad:operator-updated'))
 
     setStage('UNLOCKED')
-  }
-
-  function runFinalizingStage() {
-    setStage('FINALIZING')
-    setFinPct(0)
-    setFinStatus('Carregando Acervo de Sobrevivência (Kiwix)...')
-
-    const msgs = [
-      'Carregando Acervo de Sobrevivência (Kiwix)...',
-      'Validando volumes locais (/dev/nvme0n1)...',
-      'Inicializando Núcleo de Análise Tática & Cofre AES-256...',
-      'Carregando topografia e telemetria offline...',
-      'SISTEMA NEXUS N.O.M.A.D. 100% OPERACIONAL!',
-    ]
-
-    let p = 0
-    const inv = setInterval(() => {
-      p += 25
-      setFinPct(Math.min(p, 100))
-      setFinStatus(msgs[Math.min(Math.floor(p / 25), msgs.length - 1)])
-
-      if (p >= 100) {
-        clearInterval(inv)
-        const db = loadAuthDB(tacticalAuth)
-        db.setupCompleted = true
-        db.lockedExplicitly = false
-        saveAuthDB(db)
-        syncAuthDBToServer(db)
-        setTimeout(() => {
-          setStage('UNLOCKED')
-        }, 850)
-      }
-    }, 650)
   }
 
   function handleAddSubordinateOperator(e: React.FormEvent) {
@@ -2451,7 +2483,7 @@ export default function TacticalBootGate({ children }: { children: React.ReactNo
             <p style={{ fontSize: '11px', color: '#8fa692', marginBottom: '16px' }}>
               Cadastre um operador adicional para acessar a base local. Esta conta não precisará
               passar pelo processo de recuperação do sistema:{' '}
-              <strong style={{ color: '#ffffff' }}>ela só loga e gg!</strong>
+              <strong style={{ color: '#ffffff' }}>ela acessa diretamente o console após o login.</strong>
             </p>
 
             <form

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react'
+import { useState, useMemo } from 'react'
 import { Head, Link } from '@inertiajs/react'
 import {
   IconSearch,
@@ -11,7 +11,6 @@ import {
   IconApps,
   IconCheck,
   IconArrowLeft,
-  IconDeviceDesktop,
 } from '@tabler/icons-react'
 import AppLayout from '~/layouts/AppLayout'
 import DynamicIcon, { DynamicIconName } from '~/components/DynamicIcon'

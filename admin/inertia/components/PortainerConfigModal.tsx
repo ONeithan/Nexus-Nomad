@@ -1,11 +1,8 @@
-import React, { useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link } from '@inertiajs/react'
 import {
   IconBrandDocker,
-  IconCheck,
-  IconInfoCircle,
   IconKey,
-  IconPlugConnected,
   IconServer,
   IconSettings,
 } from '@tabler/icons-react'

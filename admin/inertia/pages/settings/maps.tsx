@@ -388,19 +388,19 @@ export default function MapsManager(props: {
             }}
           />
 
-          {activeMapDownloads.filter((d) => d.status !== 'completed').length > 0 && (
+          {activeMapDownloads.filter((d) => d.status !== 'failed').length > 0 && (
             <div className="mt-6 p-4 rounded-xl border border-desert-orange/40 bg-desert-orange/5 space-y-3">
               <div className="flex items-center justify-between">
                 <span className="text-sm font-bold text-desert-orange uppercase tracking-wider">
                   Downloads de Mapas em Andamento
                 </span>
                 <span className="text-xs font-mono text-text-secondary">
-                  {activeMapDownloads.filter((d) => d.status !== 'completed').length} ativo(s)
+                  {activeMapDownloads.filter((d) => d.status !== 'failed').length} ativo(s)
                 </span>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 {activeMapDownloads
-                  .filter((d) => d.status !== 'completed')
+                  .filter((d) => d.status !== 'failed')
                   .map((dl) => {
                     const pct = Math.min(100, Math.max(0, Math.round(dl.progress || 0)))
                     return (
@@ -410,7 +410,7 @@ export default function MapsManager(props: {
                       >
                         <div className="flex items-center justify-between gap-2 text-xs">
                           <span className="font-semibold text-text-primary truncate">
-                            {dl.filename || dl.url}
+                            {dl.title || dl.filepath?.split(/[/\\]/).pop() || dl.url}
                           </span>
                           <span className="font-mono font-bold text-desert-orange shrink-0">
                             {pct}%

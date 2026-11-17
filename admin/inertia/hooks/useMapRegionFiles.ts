@@ -5,7 +5,7 @@ import api from '~/lib/api'
 const useMapRegionFiles = () => {
   return useQuery<FileEntry[]>({
     queryKey: ['map-region-files'],
-    queryFn: () => api.listMapRegionFiles(),
+    queryFn: async () => (await api.listMapRegionFiles()) ?? [],
     staleTime: 5 * 60 * 1000, // 5 minutes
   })
 }

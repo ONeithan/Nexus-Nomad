@@ -2,11 +2,9 @@ import { Head, router } from '@inertiajs/react'
 import { useEffect, useRef, useState } from 'react'
 import {
   IconAlertTriangle,
-  IconArrowRight,
   IconArrowUp,
   IconBook,
   IconBolt,
-  IconCheck,
   IconBox,
   IconBrandDocker,
   IconChartBar,
