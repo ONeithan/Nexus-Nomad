@@ -18,6 +18,7 @@ export interface AiEngineOption {
   description: string
   locationLabel: string
   online: boolean
+  statusLabel?: string
   isInternal: boolean
   href: string
   backendNote?: string
@@ -65,6 +66,13 @@ export function useAiStatus(initialServices?: ServiceSlim[]) {
     staleTime: 2000,
   })
 
+  const modelsQuery = useQuery({
+    queryKey: ['installedModels'],
+    queryFn: () => api.getInstalledModels(),
+    refetchInterval: 10000,
+    staleTime: 5000,
+  })
+
   const liveServices = servicesQuery.data ?? initialServices ?? []
 
   return useMemo(() => {
@@ -76,6 +84,9 @@ export function useAiStatus(initialServices?: ServiceSlim[]) {
     const hasRemoteUrl = Boolean(remoteQuery.data?.configured && remoteUrl)
     const isRemoteConnected = Boolean(remoteQuery.data?.connected)
 
+    const installedModelsList = modelsQuery.data ?? []
+    const hasModels = installedModelsList.length > 0
+
     const resolvedNativeName =
       aiAssistantName && aiAssistantName !== 'AI Assistant' && aiAssistantName !== 'Assistente de IA'
         ? aiAssistantName
@@ -84,7 +95,14 @@ export function useAiStatus(initialServices?: ServiceSlim[]) {
     const engines: AiEngineOption[] = []
 
     if (ollamaSvc?.installed || hasRemoteUrl) {
-      const online = hasRemoteUrl ? isRemoteConnected : ollamaSvc?.status === 'running'
+      const isOnline = hasRemoteUrl
+        ? isRemoteConnected && hasModels
+        : Boolean(ollamaSvc?.status === 'running' && hasModels)
+
+      const statusLabel = hasRemoteUrl
+        ? (!isRemoteConnected ? 'OFFLINE' : !hasModels ? 'SEM MODELOS' : 'ONLINE')
+        : (ollamaSvc?.status !== 'running' ? 'OFFLINE' : !hasModels ? 'OFFLINE (SEM MODELOS)' : 'ONLINE')
+
       const locationLabel = hasRemoteUrl
         ? `Remoto (${remoteUrl})`
         : ollamaSvc?.node === 'portainer'
@@ -99,12 +117,17 @@ export function useAiStatus(initialServices?: ServiceSlim[]) {
         description:
           'Chat integrado em /chat com consulta direta nos seus documentos e bibliotecas ZIM offline (RAG).',
         locationLabel,
-        online,
+        online: isOnline,
+        statusLabel,
         isInternal: true,
         href: '/chat',
         backendNote: hasRemoteUrl
-          ? `Conectado ao servidor remoto em ${remoteUrl}`
-          : 'Motor local integrado com Qdrant RAG',
+          ? (isRemoteConnected
+              ? (hasModels ? `Conectado ao servidor remoto em ${remoteUrl}` : `Conectado a ${remoteUrl} (aguardando download de modelos)`)
+              : `Servidor remoto desconectado (${remoteUrl})`)
+          : (!hasModels
+              ? 'Motor local sem modelos de IA baixados (aguardando configuração)'
+              : 'Motor local integrado com Qdrant RAG'),
       })
     }
 
@@ -223,6 +246,7 @@ export function useAiStatus(initialServices?: ServiceSlim[]) {
     return {
       liveServices,
       engines,
+      onlineEngines,
       primaryEngine,
       hasAnyAi,
       hasMultiple,
@@ -236,5 +260,5 @@ export function useAiStatus(initialServices?: ServiceSlim[]) {
       cardDescription,
       cardActionLabel,
     }
-  }, [liveServices, remoteQuery.data, aiAssistantName])
+  }, [liveServices, remoteQuery.data, modelsQuery.data, aiAssistantName])
 }

@@ -25,8 +25,14 @@ export default class ChatsController {
     })
   }
 
-  async index({}: HttpContext) {
-    return await this.chatService.getAllSessions()
+  async index({ response }: HttpContext) {
+    try {
+      const sessions = await this.chatService.getAllSessions()
+      return response.status(200).json(sessions || [])
+    } catch (err: any) {
+      logger.warn(`[ChatsController] Error getting chat sessions: ${err?.message || err}`)
+      return response.status(200).json([])
+    }
   }
 
   async show({ params, response }: HttpContext) {

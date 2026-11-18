@@ -329,13 +329,15 @@ class API {
   }
 
   async getChatSuggestions(signal?: AbortSignal) {
-    return catchInternal(async () => {
+    try {
       const response = await this.client.get<{ suggestions: string[] }>(
         '/chat/suggestions',
         { signal }
       )
-      return response.data.suggestions
-    })()
+      return response.data?.suggestions || []
+    } catch {
+      return []
+    }
   }
 
   async getDebugInfo() {
@@ -353,10 +355,12 @@ class API {
   }
 
   async getInstalledModels() {
-    return catchInternal(async () => {
+    try {
       const response = await this.client.get<NomadInstalledModel[]>('/ollama/installed-models')
-      return response.data
-    })()
+      return response.data || []
+    } catch {
+      return []
+    }
   }
 
   /**
@@ -501,7 +505,7 @@ class API {
   }
 
   async getChatSessions() {
-    return catchInternal(async () => {
+    try {
       const response = await this.client.get<Array<{
         id: string
         title: string
@@ -509,8 +513,10 @@ class API {
         timestamp: string
         lastMessage: string | null
       }>>('/chat/sessions')
-      return response.data
-    })()
+      return response.data || []
+    } catch {
+      return []
+    }
   }
 
   async getChatSession(sessionId: string) {
@@ -1320,10 +1326,12 @@ class API {
   }
 
   async getKnowledgeCollections() {
-    return catchInternal(async () => {
+    try {
       const response = await this.client.get<{ collections: string[] }>('/rag/collections')
-      return response.data
-    })()
+      return response.data || { collections: [] }
+    } catch {
+      return { collections: [] }
+    }
   }
 
   async updateFileCollection(source: string, collection: string | null) {

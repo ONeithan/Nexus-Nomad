@@ -271,6 +271,15 @@ export default function AppLayout({
           <>
             <ChatButton
               onClick={() => {
+                if (aiStatus.onlineEngines.length === 1) {
+                  const active = aiStatus.onlineEngines[0]
+                  if (active.isInternal) {
+                    setIsChatOpen(true)
+                  } else if (active.href) {
+                    window.open(active.href, '_blank', 'noopener,noreferrer')
+                  }
+                  return
+                }
                 if (aiStatus.hasMultiple) {
                   setIsAiChooserOpen(true)
                 } else if (aiStatus.primaryEngine?.isInternal) {

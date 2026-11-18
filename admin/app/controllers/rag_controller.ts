@@ -68,13 +68,23 @@ export default class RagController {
   }
 
   public async getStoredFiles({ response }: HttpContext) {
-    const files = await this.ragService.getStoredFiles()
-    return response.status(200).json({ files })
+    try {
+      const files = await this.ragService.getStoredFiles()
+      return response.status(200).json({ files: files || [] })
+    } catch (err: any) {
+      logger.warn(`[RagController] Could not get stored files: ${err?.message || err}`)
+      return response.status(200).json({ files: [] })
+    }
   }
 
   public async getKnowledgeCollections({ response }: HttpContext) {
-    const collections = await this.ragService.getKnowledgeCollections()
-    return response.status(200).json({ collections })
+    try {
+      const collections = await this.ragService.getKnowledgeCollections()
+      return response.status(200).json({ collections: collections || [] })
+    } catch (err: any) {
+      logger.warn(`[RagController] Could not get knowledge collections: ${err?.message || err}`)
+      return response.status(200).json({ collections: [] })
+    }
   }
 
   public async updateFileCollection({ request, response }: HttpContext) {
@@ -175,8 +185,13 @@ export default class RagController {
   }
 
   public async getFileWarnings({ response }: HttpContext) {
-    const result = await this.ragService.computeFileWarnings()
-    return response.status(200).json(result)
+    try {
+      const result = await this.ragService.computeFileWarnings()
+      return response.status(200).json(result || { warnings: [] })
+    } catch (err: any) {
+      logger.warn(`[RagController] Could not compute file warnings: ${err?.message || err}`)
+      return response.status(200).json({ warnings: [] })
+    }
   }
 
   public async deleteFile({ request, response }: HttpContext) {
@@ -225,8 +240,13 @@ export default class RagController {
   }
 
   public async policyPromptState({ response }: HttpContext) {
-    const result = await this.ragService.getPolicyPromptState()
-    return response.status(200).json(result)
+    try {
+      const result = await this.ragService.getPolicyPromptState()
+      return response.status(200).json(result || { enabled: false })
+    } catch (err: any) {
+      logger.warn(`[RagController] Could not get policy prompt state: ${err?.message || err}`)
+      return response.status(200).json({ enabled: false })
+    }
   }
 
   public async scanAndSync({ response }: HttpContext) {

@@ -103,7 +103,7 @@ export default function AiChooserModal({
                               engine.online ? 'bg-emerald-400 animate-pulse' : 'bg-desert-orange'
                             }`}
                           />
-                          {engine.online ? 'ONLINE' : 'PAUSADO'}
+                          {engine.online ? 'ONLINE' : engine.statusLabel || 'OFFLINE'}
                         </span>
                         <span className="text-[0.625rem] font-mono px-2 py-0.5 rounded bg-surface-primary border border-border-subtle text-text-muted">
                           {engine.locationLabel}

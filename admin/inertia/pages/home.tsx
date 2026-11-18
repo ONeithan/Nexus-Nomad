@@ -558,6 +558,15 @@ export default function Home(props: {
       router.visit('/settings/models')
       return
     }
+    if (aiStatus.onlineEngines.length === 1) {
+      const active = aiStatus.onlineEngines[0]
+      if (active.isInternal) {
+        router.visit(active.href)
+      } else if (active.href) {
+        window.open(active.href, '_blank', 'noopener,noreferrer')
+      }
+      return
+    }
     if (aiStatus.hasMultiple) {
       setAiChooserOpen(true)
       return

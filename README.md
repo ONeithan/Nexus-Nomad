@@ -1,116 +1,156 @@
 <div align="center">
-<img src="admin/public/nomad-primary.svg" width="210" alt="Nexus Project NOMAD"/>
+<img src="admin/public/nomad-primary.svg" width="220" alt="Nexus Project NOMAD"/>
 
-# Nexus Project NOMAD
-### Conhecimento Que Nunca Fica Offline
+# Nexus Project N.O.M.A.D.
+### Sistema Operacional Tático de Campo, Sobrevivência & Arca do Conhecimento 100% Offline
 
+[![Versão](https://img.shields.io/badge/Versão-1.0.31--Nexus-olive)](https://github.com/ONeithan/Nexus-Nomad)
 [![Idioma](https://img.shields.io/badge/Idioma-Português%20(PT--BR)-green)](https://github.com/ONeithan/Nexus-Nomad)
+[![Doutrina](https://img.shields.io/badge/Doutrina-MIL--STD--810H%20(Off--Grid)-blue)](https://github.com/ONeithan/Nexus-Nomad)
+[![Docker](https://img.shields.io/badge/Docker-GHCR%20Oficial-2496ED)](https://github.com/ONeithan/Nexus-Nomad/pkgs/container/nexus-nomad)
+[![Wiki](https://img.shields.io/badge/Documentação-Wiki%20Oficial-orange)](https://github.com/ONeithan/Nexus-Nomad/wiki)
 [![Licença](https://img.shields.io/badge/Licença-Uso%20Não%20Comercial-red)](LICENSE)
-[![Projeto](https://img.shields.io/badge/Projeto-Pessoal%20%2F%20Open%20Source-blue)](https://github.com/ONeithan/Nexus-Nomad)
 
 </div>
 
 ---
 
-O **Nexus Project NOMAD** é um servidor autônomo e *offline-first* de conhecimento, educação e ferramentas práticas em **Português Brasileiro (PT-BR)** — reunindo enciclopédias, cursos, mapas, utilitários e Inteligência Artificial para manter você informado e preparado em qualquer lugar, com ou sem internet.
+> [!IMPORTANT]
+> ### 📖 Documentação Completa na Wiki Oficial
+> **Para guias passo a passo, manuais de 113 aplicações, tutoriais de mapeamento de HDs, configuração de GPU (RTX) para IA e controle de operadores, acesse a [Wiki Oficial do Nexus N.O.M.A.D.](https://github.com/ONeithan/Nexus-Nomad/wiki):**
+> * 🛰️ [Centro de Comando & Telemetria ao Vivo](https://github.com/ONeithan/Nexus-Nomad/wiki/Home)
+> * 🚀 [Instalação, Boot Militar & Primeiro Acesso](https://github.com/ONeithan/Nexus-Nomad/wiki/Instalacao-e-Primeiros-Passos)
+> * 🛡️ [Segurança, Perfis & Níveis de Operador (01 a 05)](https://github.com/ONeithan/Nexus-Nomad/wiki/Seguranca-e-Autenticacao)
+> * 📦 [Central de Aplicativos, Catálogo & Guias (113 Apps)](https://github.com/ONeithan/Nexus-Nomad/wiki/Central-de-Aplicativos)
+> * 📚 [Conteúdo Offline: ZIM, Wikipédia, Kolibri & Mapas](https://github.com/ONeithan/Nexus-Nomad/wiki/Conteudo-Offline-ZIM-Mapas-e-Educacao)
+> * 💾 [Discos, Armazenamento, Mapeamento em Lote & Downloads](https://github.com/ONeithan/Nexus-Nomad/wiki/Discos-Armazenamento-e-Samba)
+> * 🤖 [Inteligência Artificial, Open WebUI & Assistente Nativo](https://github.com/ONeithan/Nexus-Nomad/wiki/Inteligencia-Artificial-e-Chat)
+> * ⚙️ [Configurações do Sistema, Atualizações & Temas Táticos](https://github.com/ONeithan/Nexus-Nomad/wiki/Configuracoes-do-Sistema-e-Temas)
 
-## Instalação Rápida
+---
 
-O Nexus Project NOMAD pode ser instalado em qualquer sistema operacional baseado em **Debian** (`x86_64` — recomendamos **Debian 12/13** ou **Ubuntu 24.04/26.04 LTS**). A instalação é feita inteiramente pelo terminal e todas as ferramentas são acessadas pelo navegador web — não é necessário instalar interface gráfica no servidor.
+## 🎯 O Que é o Nexus Project N.O.M.A.D.?
 
-**Antes de começar:** o núcleo do NOMAD precisa de cerca de **5 GB de disco e menos de 1 GB de RAM**. O espaço adicional dependerá dos pacotes offline que você decidir baixar depois (Wikipédia, mapas, cursos, livros) e, caso opte por rodar modelos de IA localmente, da memória exigida pelos modelos escolhidos.
+O **Nexus Project N.O.M.A.D.** (*Network Operations, Mapping & Autonomous Defense*) é uma suíte operacional completa projetada para transformar qualquer computador portátil, servidor doméstico ou homelab em uma **Arca de Sobrevivência e Conhecimento Civilizatório**.
 
-*Nota: privilégios `sudo`/`root` são necessários para executar o instalador.*
+Construído sob a doutrina **100% Off-Grid**, o sistema opera de forma autônoma sem requisições para a nuvem, mantendo todas as ferramentas de comunicação, saúde, educação, cartografia, engenharia, criptografia e inteligência artificial disponíveis mesmo em cenários de desastre natural, apagão cibernético ou colapso de infraestrutura.
 
-### Instalação em 1 Comando (Sistemas Baseados em Debian / Ubuntu)
+---
+
+## 📸 Conheça o Sistema por Dentro
+
+### 1. Centro de Comando Tático & Telemetria em Tempo Real
+Painel unificado com monitoramento de ciclos curtos de CPU (carga, frequência e temperatura), cálculo exato de memória RAM e consolidação de unidades de armazenamento em um **Pool Global**.
+
+![Centro de Comando Nexus NOMAD](docs/images/centro-de-comando.png)
+
+### 2. Central de Aplicativos com Mais de 100 Ferramentas Integradas
+Instalação e controle de contêineres Docker em apenas 1 clique, com suporte a seleção e instalação em massa, e detecção de destino (`Local` ou `Portainer`).
+
+![Central de Aplicativos](docs/images/central-de-aplicativos.png)
+
+### 3. Catálogo & Guia Operacional Completo (113 Aplicações em PT-BR)
+Cada um dos 113 módulos inclui uma ficha técnica com propósito operacional, arquitetura interna de funcionamento e exemplos práticos da vida real.
+
+![Catálogo e Guias Técnicos](docs/images/catalogo-guias.png)
+
+### 4. Acervo ZIM Civilizatório, Wikipédia e Educação Offline
+Pacotes completos da Wikipédia em português com ou sem imagens, manuais médicos de emergência, guias de sobrevivência e canais educacionais do **Kolibri** (Khan Academy, PhET e StoryWeaver).
+
+![Explorador de Conteúdo ZIM e Wikipédia](docs/images/explorador-zim-wikipedia.png)
+
+### 5. Central de Mapeamento de Discos de Download (Para TODOS os Módulos)
+Botão mestre **"⚡ Mapear TUDO para este HD"** que move automaticamente pastas de dados pesados para HDs secundários ou externos sem quebrar nenhuma aplicação.
+
+![Central de Mapeamento de Discos](docs/images/mapeamento-discos.png)
+
+### 6. Sistema Real de Autenticação em MySQL & 5 Níveis de Permissão
+Banco relacional com senhas protegidas por hash `scrypt`, separação entre **Bloquear Terminal** e **Deslogar**, e controle de permissões por nível militar (Nível 01 a 05).
+
+![Segurança e Perfis de Operador](docs/images/seguranca-operadores.png)
+
+---
+
+## 🚀 Instalação Rápida
+
+### Opção 1: Via Docker Compose (Recomendado)
+
+Crie um arquivo `docker-compose.yml`:
+
+```yaml
+services:
+  nomad_admin:
+    image: ghcr.io/oneithan/nexus-nomad:latest
+    container_name: nomad_admin
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+      - "9999:9999"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /opt/project-nomad/storage:/app/storage
+      - /mnt/nomad_storage:/mnt/nomad_storage
+    environment:
+      - NODE_ENV=production
+      - PORT=80
+```
+
+Suba o contêiner:
+```bash
+docker compose up -d
+```
+
+Acesse no navegador:
+```text
+http://localhost:8080   (ou http://IP-DO-SERVIDOR:8080)
+```
+
+---
+
+### Opção 2: Instalação Automática em 1 Comando (Debian 12/13 ou Ubuntu)
+
+Em um servidor limpo:
 
 ```bash
-sudo apt-get update && \
-sudo apt-get install -y curl && \
-curl -fsSL https://raw.githubusercontent.com/ONeithan/Nexus-Nomad/main/install/install_nomad.sh \
-  -o install_nomad.sh && \
+sudo apt-get update && sudo apt-get install -y curl && \
+curl -fsSL https://raw.githubusercontent.com/ONeithan/Nexus-Nomad/main/install/install_nomad.sh -o install_nomad.sh && \
 sudo bash install_nomad.sh
 ```
 
-Pronto! Abra o navegador e acesse `http://localhost:8080` (ou `http://IP_DO_DISPOSITIVO:8080` a partir de outro computador ou celular na mesma rede) para explorar o **Centro de Comando**.
-
-> **Armazenamento Secundário (Opcional):** caso o seu servidor possua um segundo disco montado em `/mnt/nomad_storage` antes da instalação, o instalador o detectará automaticamente e armazenará todos os dados dos aplicativos (ZIMs, mapas, livros e mídias) nele, mantendo o sistema e o banco de dados no disco principal.
-
-### Instalação Avançada (Docker Compose)
-
-Para controle manual completo sobre portas, caminhos de volumes e variáveis de ambiente, utilize o template [install/management_compose.yaml](install/management_compose.yaml), substitua os valores `replaceme` e execute `docker compose up -d`.
-
 ---
 
-## Como Funciona
+## 🔑 Portas Padrão & Credenciais de Fábrica
 
-O NOMAD funciona como um **Centro de Comando** (painel web + API) que orquestra uma coleção de ferramentas e acervos em contêineres [Docker](https://www.docker.com/), cuidando da instalação, configuração e atualizações em um só lugar.
-
-**Capacidades integradas:**
-
-- **Chat de IA com Base de Conhecimento (RAG)** — assistente de IA alimentado por [Ollama](https://ollama.com/) (rodando localmente no próprio equipamento **ou** conectado a qualquer instância remota de Ollama / API compatível com OpenAI como LM Studio e `llama.cpp`), com upload de documentos e busca semântica via [Qdrant](https://qdrant.tech/).
-- **Biblioteca de Informações** — Wikipédia em português, referências médicas, livros e enciclopédias offline via [Kiwix](https://kiwix.org/).
-- **Plataforma Educacional** — cursos interativos, matemática, ciências e Khan Academy com acompanhamento de progresso via [Kolibri](https://learningequality.org/kolibri/).
-- **Mapas Offline** — mapas vetoriais regionais e mundiais para navegação sem internet via [ProtoMaps](https://protomaps.com).
-- **Guia de Medicamentos & Manuais Técnicos** — referência farmacológica offline e 28 guias técnicos integrados em português (captação e tratamento de água, cultivo de alimentos, energia solar off-grid, bioconstrução, primeiros socorros e oficina).
-- **Ferramentas de Dados & Notas** — codificação, criptografia e análise via [CyberChef](https://gchq.github.io/CyberChef/) e caderno local em Markdown via [FlatNotes](https://github.com/dullage/flatnotes).
-- **Depósito de Suprimentos** — catálogo de aplicativos instaláveis em 1 clique (Stirling PDF, FileBrowser, Calibre Web, Vaultwarden, Jellyfin, IT Tools, Excalidraw, Homebox, Meshtastic) além de suporte a contêineres Docker personalizados.
-- **Monitoramento de Sistema & Discos** — telemetria em tempo real de CPU, RAM e topologia detalhada das unidades de armazenamento conectadas.
-- **Configuração Rápida (Easy Setup)** — assistente inicial guiado para baixar coleções curadas de conteúdo offline.
-
----
-
-## O Que Está Incluído
-
-| Capacidade | Motor | O Que Você Recebe |
-| :--- | :--- | :--- |
-| **Biblioteca Offline** | Kiwix | Wikipédia PT-BR, referências médicas, guias técnicos e livros em formato ZIM |
-| **Assistente de IA** | Ollama / API OpenAI + Qdrant | Chat integrado (local ou remoto) com leitura de documentos e busca semântica |
-| **Plataforma Educacional** | Kolibri (Gen 2) | Videoaulas, exercícios interativos e cursos estruturados offline |
-| **Mapas Offline** | ProtoMaps | Mapas regionais e mundiais baixáveis para consulta sem internet |
-| **Manuais & Documentação** | Markdoc Nativo | Guias práticos em português integrados diretamente na central `/docs` |
-| **Bloco de Notas** | FlatNotes | Anotações rápidas em Markdown com armazenamento local |
-| **Ferramentas de Dados** | CyberChef | Utilitários offline de criptografia, hashes, conversão e análise |
-| **Depósito de Suprimentos** | Docker Engine | Instalação em 1 clique de Stirling PDF, FileBrowser, Calibre Web, Vaultwarden e mais |
-| **Sistema & Armazenamento** | Disk Collector | Inspeção em tempo real de discos físicos, partições, montagens de rede e recursos |
-
----
-
-## Requisitos Recomendados
-
-| Perfil de Uso | CPU | Memória RAM | Armazenamento |
+| Aplicação | Porta TCP | Credenciais Padrão | Finalidade |
 | :--- | :--- | :--- | :--- |
-| **Mínimo (Biblioteca, Mapas e Apps leves)** | x86_64 Dual-Core | 4 GB | 32 GB+ SSD |
-| **Recomendado (Múltiplos Apps + Wikipédia Completa)** | x86_64 Quad-Core | 8 – 16 GB | 256 GB – 1 TB+ |
-| **Com IA Local no Próprio Servidor** | x86_64 Moderno (+ GPU NVIDIA/AMD opcional) | 16 GB+ | 500 GB+ SSD NVMe |
-
-*(Dica: máquinas mais modestas também podem usar o Assistente de IA normalmente apontando a **Conexão Remota** em Configurações para outro computador da rede que execute Ollama ou API compatível com OpenAI).*
-
----
-
-## Scripts Auxiliares de Manutenção
-
-Após instalado, os scripts auxiliares ficam disponíveis em `/opt/project-nomad`:
-
-```bash
-# Iniciar todos os contêineres de gerenciamento do NOMAD
-sudo bash /opt/project-nomad/start_nomad.sh
-
-# Parar os contêineres de gerenciamento
-sudo bash /opt/project-nomad/stop_nomad.sh
-
-# Atualizar o Centro de Comando para a imagem mais recente
-sudo bash /opt/project-nomad/update_nomad.sh
-```
+| **Centro de Comando NOMAD** | `:8080` | Cadastrado no 1º acesso | Painel principal e orquestrador do sistema |
+| **Monitor de Logs Docker (Dozzle)** | `:9999` | Integrado ao NOMAD | Monitoramento de logs de contêineres em tempo real |
+| **Open WebUI (Chat IA)** | `:8500` | Cadastro no 1º acesso | Interface avançada de inteligência artificial |
+| **Biblioteca Offline (Kiwix)** | `:8090` | Aberto / Sem senha | Consulta a arquivos ZIM e Wikipédia |
+| **Ferramentas de TI (IT-Tools)** | `:8430` | Aberto (100% PT-BR) | Utilitários de rede, conversão e criptografia |
+| **Ferramentas de Dados (CyberChef)**| `:8100` | Aberto (100% PT-BR) | Canivete suíço de análise e decodificação |
+| **Gerenciador de Arquivos (FileBrowser)** | `:8410` | `admin` / `nomad` | Gerenciador de arquivos web |
+| **Biblioteca de E-books (Calibre-Web)** | `:8083` | `admin` / `admin123` | Leitor e catálogo digital de livros (pasta `/books`) |
+| **Manipulação de PDFs (Stirling PDF)**| `:8087` | Aberto localmente | Divisão, mesclagem e OCR em PDFs |
+| **Rede Samba (Compartilhamento LAN)**| Porta SMB | Definido em Armazenamento | Acesso via rede local: `\\IP-DO-NOMAD\nomad` |
 
 ---
 
-## Segurança de Rede
+## 💻 Requisitos de Hardware
 
-O NOMAD foi projetado para uso local/offline na sua rede confiável (LAN) e **não** deve ser exposto diretamente para a internet pública sem camada de autenticação/VPN apropriada.
+| Perfil de Uso | Processador | Memória RAM | Armazenamento |
+| :--- | :--- | :--- | :--- |
+| **Mínimo** | x86_64 Dual-Core | 4 GB | 32 GB SSD |
+| **Recomendado** | x86_64 Quad-Core | 8 a 16 GB | 500 GB a 1 TB+ (SSD/HD) |
+| **Com IA Local (Ollama/WebUI)** | x86_64 Moderno | 16 GB+ | 1 TB+ NVMe (+ GPU NVIDIA/AMD opcional) |
 
-## Licença e Autoria
+> [!TIP]
+> **Aceleração com GPU Externa:** Você pode rodar o N.O.M.A.D. em um notebook ou servidor modesto e conectar a IA diretamente à placa de vídeo do seu PC gamer (ex: RTX 5060) através da rede local. Veja o passo a passo completo no guia de [Inteligência Artificial na Wiki](https://github.com/ONeithan/Nexus-Nomad/wiki/Inteligencia-Artificial-e-Chat).
 
-- **Projeto Pessoal e Independente:** O **Nexus N.O.M.A.D** é mantido e desenvolvido de forma independente, com novas funcionalidades, motor de temas em tempo real, integração com Portainer, sistema de autenticação tática e tradução completa para Português Brasileiro (PT-BR).
-- **Licença Aberta Não Comercial:** Código aberto para estudo e uso pessoal/educacional sem fins lucrativos. **É estritamente proibida a venda, revenda ou qualquer uso comercial desta versão.** Consulte o arquivo [LICENSE](LICENSE) para os termos completos.
-- **Base Original:** Construído sobre a base do [Project NOMAD](https://github.com/Crosstalk-Solutions/project-nomad) (Apache 2.0).
+---
+
+## 📜 Licença e Termos de Uso
+
+* **Projeto Aberto e Não Comercial:** O Nexus Project N.O.M.A.D. é distribuído livremente para fins de sobrevivência, estudo, preparação comunitária e uso pessoal.
+* **Proibição Comercial:** É expressamente **proibida** a comercialização, venda, revenda ou licenciamento pago de distribuições derivadas desta versão. Consulte o arquivo [LICENSE](LICENSE) para maiores detalhes.
+* **Créditos:** Baseado e expandido a partir da fundação open-source do [Project NOMAD](https://github.com/Crosstalk-Solutions/project-nomad) (Apache 2.0).
