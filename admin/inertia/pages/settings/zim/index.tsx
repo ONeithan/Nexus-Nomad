@@ -46,7 +46,7 @@ export default function ZimPage() {
     return res?.data || { files: [] }
   }
 
-  const data = listResponse?.files || []
+  const data = Array.isArray(listResponse?.files) ? listResponse.files : []
   const storageInfo = listResponse?.storage
 
   const sortedData = useMemo(() => {
@@ -192,7 +192,7 @@ export default function ZimPage() {
                   >
                     {storageInfo.currentDiskLabel}
                   </span>
-                  {storageInfo.isSymlink && (
+                  {storageInfo.isSymlink && !storageInfo.isPrimaryDisk && (
                     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-desert-orange/15 text-desert-orange border border-desert-orange/30">
                       <IconLink className="size-3.5" />
                       Link Ativo (HD Secundário)

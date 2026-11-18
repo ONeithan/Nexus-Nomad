@@ -8,11 +8,10 @@ export default class SupplyDepotController {
 
   async index({ inertia }: HttpContext) {
     const KVStore = (await import('#models/kv_store')).default
-    const [services, portainer, savedTarget, autoUseDefault] = await Promise.all([
+    const [services, portainer, savedTarget] = await Promise.all([
       this.systemService.getServices({ installedOnly: false }),
       this.systemService.getPortainerStatus(),
       KVStore.getValue('portainer.deployTarget').catch(() => null),
-      KVStore.getValue('portainer.autoUseDefaultTarget').catch(() => false),
     ])
     const deployTarget: 'local' | 'portainer' =
       savedTarget === 'portainer' && portainer?.enabled ? 'portainer' : 'local'
@@ -22,7 +21,6 @@ export default class SupplyDepotController {
         ? {
             ...portainer,
             deployTarget,
-            autoUseDefaultTarget: Boolean(autoUseDefault),
           }
         : undefined,
     })

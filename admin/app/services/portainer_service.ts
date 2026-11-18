@@ -10,6 +10,10 @@ import KVStore from '#models/kv_store'
 import Service from '#models/service'
 import type { ServiceSlim } from '../../types/services.js'
 import { BROADCAST_CHANNELS } from '../../constants/broadcast.js'
+import {
+  containerMatchesCatalogService,
+  isNomadManagedContainer,
+} from '../utils/container_matcher.js'
 
 export interface PortainerContainerInfo {
   id?: string
@@ -446,7 +450,23 @@ export class PortainerService {
     const remoteKnown = PortainerService.REMOTE_KNOWN_SERVICES
     const deployedServices = await this.getDeployedServices()
     const { client, apiKey } = await this.getClient()
-    const endpointId = await this.getEndpointId()
+    let endpointId = await this.getEndpointId()
+
+    // Ensure active endpointId is resolved dynamically
+    if (apiKey) {
+      try {
+        const epResp = await client.get('/api/endpoints', { timeout: 6000 }).catch(() => null)
+        const endpoints: any[] = Array.isArray(epResp?.data)
+          ? epResp.data
+          : Array.isArray(epResp?.data?.values)
+            ? epResp.data.values
+            : []
+        if (endpoints.length > 0 && !endpoints.some((e) => Number(e.Id) === endpointId)) {
+          const activeEp = endpoints.find((e: any) => e.Type === 1 || e.Type === 2) || endpoints[0]
+          if (activeEp?.Id) endpointId = Number(activeEp.Id)
+        }
+      } catch {}
+    }
 
     // 1. Fetch live stacks and containers from Portainer FIRST if API Key is available
     let liveStacks: Array<{ Id: number; Name: string; Status?: number; EndpointId?: number }> = []
@@ -456,6 +476,7 @@ export class PortainerService {
       name: string
       image: string
       projectName: string
+      composeService: string
       state: string
       publicPort?: number
     }> = []
@@ -477,10 +498,9 @@ export class PortainerService {
           liveContainers = containersResp.data.map((c: any) => {
             const rawName = (c.Names && c.Names[0]) || ''
             const cleanName = rawName.replace(/^\//, '')
-            const projectName =
-              c.Labels?.['com.docker.compose.project'] ||
-              cleanName.split('-')[0] ||
-              cleanName
+            const composeProject = c.Labels?.['com.docker.compose.project'] || ''
+            const composeService = c.Labels?.['com.docker.compose.service'] || ''
+            const projectName = composeProject || cleanName.split('-')[0] || cleanName
             const publicPort = (c.Ports || []).find((p: any) => p.PublicPort)?.PublicPort
             return {
               fullId: c.Id || '',
@@ -488,6 +508,7 @@ export class PortainerService {
               name: cleanName,
               image: c.Image || '',
               projectName: projectName.toLowerCase(),
+              composeService: composeService.toLowerCase(),
               state: c.State || 'unknown',
               publicPort,
             }
@@ -523,35 +544,19 @@ export class PortainerService {
       }
     }
 
-    // 2. Reconcile & Enrich catalog services deployed to Portainer
+    // 2. Reconcile & Enrich catalog services deployed to or already running on Portainer
     const deployedSet = new Set(deployedServices)
+    const matchedByService = new Map<string, (typeof liveContainers)[number]>()
 
-    // Auto-discover any catalog service whose container exists on Portainer (by name, stack name, or Docker image)
     if (portainerReachable) {
       for (const svc of services) {
-        const sName = svc.service_name.toLowerCase()
-        const sImageBase = (svc.container_image || '').split(':')[0].toLowerCase()
-
-        const found = liveContainers.find((c) => {
-          if (c.name.endsWith('-init')) return false
-          const cName = c.name.toLowerCase()
-          const pName = (c.projectName || '').toLowerCase()
-          const cImage = (c.image || '').split(':')[0].toLowerCase()
-
-          // 1. Exact or prefix match on container name (nomad-jellyfin, nomad_jellyfin, jellyfin)
-          if (cName === `nomad-${sName}` || cName === `nomad_${sName}` || cName === sName) return true
-          // 2. Exact match on stack / project name
-          if (pName === `nomad-${sName}` || pName === `nomad_${sName}` || pName === sName) return true
-          // 3. Exact or substring match on Docker image repository (e.g. jellyfin/jellyfin, vaultwarden/server)
-          if (sImageBase && (cImage === sImageBase || cImage.includes(sImageBase) || sImageBase.includes(cImage))) return true
-          // 4. Name keyword match for services with >= 5 chars
-          if (sName.length >= 5 && (cName.includes(sName) || pName.includes(sName))) return true
-          return false
-        })
-
-        if (found && !deployedSet.has(svc.service_name)) {
-          deployedSet.add(svc.service_name)
-          await this.markAsDeployedRemotely(svc.service_name)
+        const found = liveContainers.find((c) => containerMatchesCatalogService(svc, c))
+        if (found) {
+          matchedByService.set(svc.service_name, found)
+          if (!deployedSet.has(svc.service_name)) {
+            deployedSet.add(svc.service_name)
+            await this.markAsDeployedRemotely(svc.service_name)
+          }
         }
       }
     }
@@ -559,31 +564,13 @@ export class PortainerService {
     for (const deployedName of Array.from(deployedSet)) {
       const index = services.findIndex((s) => s.service_name === deployedName)
       const targetSvc = services.find((s) => s.service_name === deployedName)
-      const sImageBase = (targetSvc?.container_image || '').split(':')[0].toLowerCase()
-
-      const matchedCont = liveContainers.find((c) => {
-        if (c.name.endsWith('-init')) return false
-        const cName = c.name.toLowerCase()
-        const pName = (c.projectName || '').toLowerCase()
-        const cImage = (c.image || '').split(':')[0].toLowerCase()
-
-        if (
-          cName === `nomad-${deployedName.toLowerCase()}` ||
-          cName === `nomad_${deployedName.toLowerCase()}` ||
-          cName === deployedName.toLowerCase() ||
-          pName === `nomad-${deployedName.toLowerCase()}` ||
-          pName === deployedName.toLowerCase()
-        ) {
-          return true
-        }
-        if (sImageBase && (cImage === sImageBase || cImage.includes(sImageBase) || sImageBase.includes(cImage))) {
-          return true
-        }
-        if (deployedName.length >= 5 && (cName.includes(deployedName.toLowerCase()) || pName.includes(deployedName.toLowerCase()))) {
-          return true
-        }
-        return false
-      })
+      const matchedCont =
+        matchedByService.get(deployedName) ||
+        (targetSvc
+          ? liveContainers.find((c) => containerMatchesCatalogService(targetSvc, c))
+          : liveContainers.find((c) =>
+              containerMatchesCatalogService({ service_name: deployedName }, c)
+            ))
 
       // If Portainer is reachable and the container no longer exists (e.g. removed by user or failed deploy),
       // automatically unmark it so NOMAD shows "Instalar" instead of a phantom "Ativo" card!
@@ -619,68 +606,55 @@ export class PortainerService {
             ? 'running'
             : 'stopped'
           : 'running'
+        const isExternal = matchedCont
+          ? !isNomadManagedContainer(matchedCont.name, matchedCont.projectName)
+          : false
 
         services[index] = {
           ...item,
           installed: true,
           status: realStatus,
           node: 'portainer',
-          node_label: 'Servidor Portainer',
+          node_label: isExternal ? 'Portainer (Vinculado)' : 'Servidor Portainer',
           ui_location: remoteUrl,
-          custom_url: remoteUrl,
+          custom_url: item.custom_url || remoteUrl,
         }
       }
     }
 
-    // Helper map to quickly find container info by stack name or container name
-    const findContainerForApp = (namePattern: string) => {
-      const lower = namePattern.toLowerCase()
-      return liveContainers.find(
-        (c) =>
-          c.name.toLowerCase().includes(lower) ||
-          c.projectName.toLowerCase() === lower ||
-          lower.includes(c.projectName.toLowerCase())
-      )
-    }
-
-    // 3. Mark Jellyfin if found in catalog or running remotely
-    const jellyfinIndex = services.findIndex((s) => s.service_name.toLowerCase() === 'jellyfin')
-    if (jellyfinIndex !== -1) {
-      const jellyfin = services[jellyfinIndex]
-      const runningJelly = findContainerForApp('jellyfin')
-      const port = runningJelly?.publicPort || 8096
-      services[jellyfinIndex] = {
-        ...jellyfin,
-        installed: true,
-        status: runningJelly ? (runningJelly.state === 'running' ? 'running' : 'stopped') : 'running',
-        node: 'portainer',
-        node_label: 'Servidor Portainer',
-        ui_location: `http://${hostIp}:${port}`,
-        custom_url: `http://${hostIp}:${port}`,
-        is_unmanaged: true,
-        friendly_name: jellyfin.friendly_name || 'Jellyfin Media Server',
-        description:
-          jellyfin.description ||
-          `Central de mídia pessoal conectada ao Servidor Portainer (Porta ${port})`,
+    // Track which live containers are already linked to catalog apps so we never show duplicates
+    const claimedContainerIds = new Set<string>()
+    for (const svc of services) {
+      if (svc.installed) {
+        const match = matchedByService.get(svc.service_name)
+        if (match?.fullId) claimedContainerIds.add(match.fullId)
       }
     }
 
-    // 4. Inject Known Remote Services (Komga, Navidrome, Suwayomi, Meelo, Yubal, Ignis, etc.)
+    // 3. Inject Known Remote Services ONLY if their container ACTUALLY exists on Portainer and wasn't already linked to catalog
     const existingServiceNames = new Set(services.map((s) => s.service_name.toLowerCase()))
     let nextId = 9000
 
     for (const remoteApp of remoteKnown) {
+      const barePattern = remoteApp.service_name.replace(/-nexus$/, '').replace(/-remote$/, '')
       if (
         existingServiceNames.has(remoteApp.service_name.toLowerCase()) ||
-        remoteApp.service_name === 'jellyfin'
+        existingServiceNames.has(`nomad_${barePattern}`) ||
+        services.some((s) => s.installed && s.service_name.toLowerCase().includes(barePattern))
       ) {
         continue
       }
 
-      // Check if real container/stack exists on Portainer for live status and port
-      const matched = findContainerForApp(remoteApp.service_name.replace('-nexus', ''))
-      const resolvedPort = matched?.publicPort || remoteApp.port
-      const isRunning = matched ? matched.state === 'running' : true
+      const matched = liveContainers.find(
+        (c) =>
+          !claimedContainerIds.has(c.fullId) &&
+          containerMatchesCatalogService({ service_name: barePattern }, c)
+      )
+      if (!matched) continue
+
+      claimedContainerIds.add(matched.fullId)
+      const resolvedPort = matched.publicPort || remoteApp.port
+      const isRunning = matched.state === 'running'
       const launchUrl = `${remoteApp.protocol}://${hostIp}:${resolvedPort}`
 
       services.push({
@@ -696,7 +670,7 @@ export class PortainerService {
         custom_url: launchUrl,
         powered_by: 'Servidor Remoto',
         display_order: 50 + nextId,
-        container_image: 'remote-container',
+        container_image: matched.image || 'remote-container',
         available_update_version: null,
         auto_update_enabled: false,
         is_custom: false,
@@ -706,36 +680,38 @@ export class PortainerService {
         link_color: '#10b981',
         category: remoteApp.category,
         node: 'portainer',
-        node_label: 'Servidor Portainer',
+        node_label: 'Portainer (Vinculado)',
         is_unmanaged: true,
       })
       existingServiceNames.add(remoteApp.service_name.toLowerCase())
     }
 
-    // 5. Dynamic Discovery: Add any OTHER stacks running on Portainer (all 15 stacks guaranteed)
+    // 4. Dynamic Discovery: Add any OTHER standalone containers/stacks running on Portainer not yet in catalog
     for (const stack of liveStacks) {
       const rawStackName = stack.Name || ''
       const lowerStackName = rawStackName.toLowerCase()
 
-      // Skip NOMAD-managed catalog stacks or stacks already matched by catalog or known remote services
+      const stackContainers = liveContainers.filter(
+        (c) =>
+          !c.name.endsWith('-init') &&
+          (c.projectName === lowerStackName || c.name.toLowerCase().includes(lowerStackName))
+      )
+      const allClaimed =
+        stackContainers.length > 0 && stackContainers.every((c) => claimedContainerIds.has(c.fullId))
+
       const alreadyHandled =
+        allClaimed ||
         lowerStackName.startsWith('nomad-') ||
         lowerStackName.startsWith('nomad_') ||
         existingServiceNames.has(lowerStackName) ||
         existingServiceNames.has(`${lowerStackName}-nexus`) ||
         existingServiceNames.has(`nomad-${lowerStackName}`) ||
-        Array.from(existingServiceNames).some((name) => name.includes(lowerStackName))
+        existingServiceNames.has(`nomad_${lowerStackName}`)
 
       if (alreadyHandled) {
         continue
       }
 
-      // Find public port and running state from containers belonging to this stack
-      const stackContainers = liveContainers.filter(
-        (c) =>
-          c.projectName === lowerStackName ||
-          c.name.toLowerCase().includes(lowerStackName)
-      )
       const isRunning =
         stackContainers.length > 0
           ? stackContainers.some((c) => c.state === 'running')
@@ -747,6 +723,9 @@ export class PortainerService {
         : `https://${hostIp}:9443`
 
       const friendlyTitle = this.formatStackTitle(rawStackName)
+      for (const c of stackContainers) {
+        if (c.fullId) claimedContainerIds.add(c.fullId)
+      }
 
       services.push({
         id: nextId++,
@@ -1146,9 +1125,7 @@ export class PortainerService {
 `
       : ''
 
-    return `version: '3.8'
-
-services:
+    return `services:
   ${serviceName}:
     image: ${image}
     container_name: nomad-${serviceName}
@@ -1670,14 +1647,10 @@ ${cmdBlock}${topLevelVolumesBlock}`
     const scheme = /^https:/i.test(service.ui_location || '') ? 'https' : 'http'
     const targetUrl = `${scheme}://${hostIp}:${hostPort}`
     const stackName = `nomad-${serviceName}`
-    this.pendingGpuServices.delete(serviceName)
-    if (serviceName === 'nomad_ollama' && (await this.endpointSupportsGpuRuntime(client, endpointId))) {
-      this.pendingGpuServices.add(serviceName)
-    }
     const extraEnv = preinstall?.extraEnv || []
 
     try {
-      // 1. Resolve real active endpointId if available
+      // 1. Resolve real active endpointId FIRST before checking GPU or containers
       try {
         const epResp = await client.get('/api/endpoints', { timeout: 10000 }).catch(() => null)
         let endpoints: any[] = []
@@ -1686,11 +1659,85 @@ ${cmdBlock}${topLevelVolumesBlock}`
         } else if (epResp?.data && Array.isArray(epResp.data.values)) {
           endpoints = epResp.data.values
         }
-        if (endpoints.length > 0) {
+        if (endpoints.length > 0 && !endpoints.some((e: any) => Number(e?.Id) === endpointId)) {
           const activeEp = endpoints.find((e: any) => e.Type === 1 || e.Type === 2) || endpoints[0]
-          if (activeEp?.Id) endpointId = activeEp.Id
+          if (activeEp?.Id) endpointId = Number(activeEp.Id)
         }
       } catch {}
+
+      this.pendingGpuServices.delete(serviceName)
+      if (serviceName === 'nomad_ollama' && (await this.endpointSupportsGpuRuntime(client, endpointId))) {
+        this.pendingGpuServices.add(serviceName)
+      }
+
+      // 1.5 Pre-deploy check: auto-link pre-existing user container instead of creating conflicting stack,
+      // and check host port collisions BEFORE modifying stacks!
+      try {
+        const preCheckResp = await client
+          .get(`/api/endpoints/${endpointId}/docker/containers/json?all=1`, { timeout: 10000 })
+          .catch(() => null)
+        if (Array.isArray(preCheckResp?.data)) {
+          const mappedPre = preCheckResp.data.map((c: any) => {
+            const rawName = (c.Names && c.Names[0]) || ''
+            const cleanName = rawName.replace(/^\//, '')
+            const composeProject = c.Labels?.['com.docker.compose.project'] || ''
+            const composeService = c.Labels?.['com.docker.compose.service'] || ''
+            const projectName = composeProject || cleanName.split('-')[0] || cleanName
+            const publicPort = (c.Ports || []).find((p: any) => p.PublicPort)?.PublicPort
+            const allPublicPorts = (c.Ports || []).map((p: any) => Number(p.PublicPort)).filter(Boolean)
+            return {
+              fullId: c.Id || '',
+              name: cleanName,
+              image: c.Image || '',
+              projectName: projectName.toLowerCase(),
+              composeService: composeService.toLowerCase(),
+              state: c.State || 'unknown',
+              publicPort,
+              allPublicPorts,
+            }
+          })
+
+          const existingMatch = mappedPre.find((c) => containerMatchesCatalogService(service, c))
+          if (existingMatch && !isNomadManagedContainer(existingMatch.name, existingMatch.projectName)) {
+            const linkedPort = existingMatch.publicPort ? String(existingMatch.publicPort) : hostPort
+            const linkedUrl = serviceName === 'nomad_ollama' ? '/chat' : `${scheme}://${hostIp}:${linkedPort}`
+            await this.markAsDeployedRemotely(serviceName)
+            service.installed = true
+            service.installation_status = 'idle'
+            service.custom_url = serviceName === 'nomad_ollama' ? null : linkedUrl
+            if (serviceName === 'nomad_ollama') {
+              service.ui_location = '/chat'
+              await KVStore.setValue('ai.remoteOllamaUrl', `http://${hostIp}:${linkedPort}`).catch(() => {})
+            }
+            await service.save()
+            this.broadcast(
+              serviceName,
+              'completed',
+              `Contêiner existente "${existingMatch.name}" identificado no Portainer e vinculado automaticamente (porta ${linkedPort})!`
+            )
+            return
+          }
+
+          const requestedPortNum = Number(hostPort)
+          const portHolder =
+            requestedPortNum > 0
+              ? mappedPre.find(
+                  (c) =>
+                    !isNomadManagedContainer(c.name, c.projectName) &&
+                    c.allPublicPorts.includes(requestedPortNum)
+                )
+              : undefined
+          if (portHolder) {
+            throw new Error(
+              `A porta ${hostPort} já está em uso no Portainer pelo contêiner "${portHolder.name}". Libere esta porta ou adicione um App Personalizado em outra porta.`
+            )
+          }
+        }
+      } catch (preErr: any) {
+        if (preErr?.message?.includes('já está em uso no Portainer')) {
+          throw preErr
+        }
+      }
 
       // 2. Clean up any existing conflicting containers or broken stacks BEFORE deploying
       this.broadcast(
@@ -1822,7 +1869,7 @@ ${cmdBlock}${topLevelVolumesBlock}`
             stackFileContent: composeContent,
             env: [],
           },
-          { timeout: 120000 }
+          { timeout: 300000 }
         )
         deployedViaStack = true
       } catch (stackErr: any) {
@@ -1884,6 +1931,18 @@ ${cmdBlock}${topLevelVolumesBlock}`
               [`${internalPort}/tcp`]: [{ HostPort: String(hostPort) }],
             },
             Binds: defaultBinds,
+            ExtraHosts: ['host.docker.internal:host-gateway'],
+            ...(this.pendingGpuServices.has(serviceName)
+              ? {
+                  DeviceRequests: [
+                    {
+                      Driver: 'nvidia',
+                      Count: -1,
+                      Capabilities: [['gpu']],
+                    },
+                  ],
+                }
+              : {}),
           },
         }
 
@@ -1955,7 +2014,11 @@ ${cmdBlock}${topLevelVolumesBlock}`
       const cState = inspectCheck?.data?.State
       const restartCount = inspectCheck?.data?.RestartCount ?? 0
       const isHealthyRunning =
-        Boolean(cState?.Running) && !cState?.Restarting && restartCount === 0
+        Boolean(cState?.Running) &&
+        cState?.Status !== 'exited' &&
+        cState?.Status !== 'dead' &&
+        !cState?.Restarting &&
+        restartCount <= 2
 
       if (!isHealthyRunning) {
         let logs = ''
@@ -2059,14 +2122,36 @@ ${cmdBlock}${topLevelVolumesBlock}`
 
     if (apiKey) {
       try {
-        await this.cleanupBeforeRemoteDeploy(client, endpointId, serviceName, stackName)
-        if (removeImage && service.container_image) {
-          await client
-            .delete(
-              `/api/endpoints/${endpointId}/docker/images/${encodeURIComponent(service.container_image)}?force=true`,
-              { timeout: 15000 }
-            )
-            .catch(() => {})
+        const listResp = await client
+          .get(`/api/endpoints/${endpointId}/docker/containers/json?all=1`, { timeout: 10000 })
+          .catch(() => null)
+        const containers: any[] = Array.isArray(listResp?.data) ? listResp.data : []
+        const matched = containers.find((c: any) =>
+          containerMatchesCatalogService(service, {
+            name: (c.Names?.[0] || '').replace(/^\//, ''),
+            image: c.Image || '',
+            projectName: c.Labels?.['com.docker.compose.project'] || '',
+            composeService: c.Labels?.['com.docker.compose.service'] || '',
+          })
+        )
+        const matchedName = (matched?.Names?.[0] || '').replace(/^\//, '')
+        const matchedProject = matched?.Labels?.['com.docker.compose.project'] || ''
+        const isExternal = matched && !isNomadManagedContainer(matchedName, matchedProject)
+
+        if (!isExternal) {
+          await this.cleanupBeforeRemoteDeploy(client, endpointId, serviceName, stackName)
+          if (removeImage && service.container_image) {
+            await client
+              .delete(
+                `/api/endpoints/${endpointId}/docker/images/${encodeURIComponent(service.container_image)}?force=true`,
+                { timeout: 15000 }
+              )
+              .catch(() => {})
+          }
+        } else {
+          logger.info(
+            `[PortainerService] Unlinking user-managed container "${matchedName}" without deleting it from Portainer.`
+          )
         }
       } catch (err: any) {
         logger.warn(`[PortainerService] Undeploy remote container error: ${err.message}`)
@@ -2104,18 +2189,20 @@ ${cmdBlock}${topLevelVolumesBlock}`
 
     try {
       // 1. Direct container action (works reliably for both Stack containers and standalone containers)
+      const svcRecord = await Service.query().where('service_name', serviceName).first().catch(() => null)
       const listResp = await client
         .get(`/api/endpoints/${endpointId}/docker/containers/json?all=1`, { timeout: 15000 })
         .catch(() => null)
-      const existing = (listResp?.data || []).find(
-        (c: any) =>
-          !c.Names?.some((n: string) => n.endsWith('-init')) &&
-          c.Names?.some(
-            (n: string) =>
-              n.toLowerCase() === `/${stackName.toLowerCase()}` ||
-              n.toLowerCase() === `/${serviceName.toLowerCase()}` ||
-              n.toLowerCase().includes(stackName.toLowerCase())
-          )
+      const existing = (listResp?.data || []).find((c: any) =>
+        containerMatchesCatalogService(
+          svcRecord || { service_name: serviceName },
+          {
+            name: (c.Names?.[0] || '').replace(/^\//, ''),
+            image: c.Image || '',
+            projectName: c.Labels?.['com.docker.compose.project'] || '',
+            composeService: c.Labels?.['com.docker.compose.service'] || '',
+          }
+        )
       )
       if (existing?.Id) {
         await client.post(

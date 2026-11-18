@@ -1,7 +1,9 @@
 import KVStore from '#models/kv_store'
+import { OperatorAuthService } from '#services/operator_auth_service'
 import { SystemService } from '#services/system_service'
 import { defineConfig } from '@adonisjs/inertia'
 import type { InferSharedProps } from '@adonisjs/inertia/types'
+import type { HttpContext } from '@adonisjs/core/http'
 
 let _assistantNameCache: { value: string; expiresAt: number } | null = null
 
@@ -21,6 +23,13 @@ const inertiaConfig = defineConfig({
   sharedData: {
     appVersion: () => SystemService.getAppVersion(),
     environment: process.env.NODE_ENV || 'production',
+    authUser: async (ctx: HttpContext) => {
+      try {
+        return await OperatorAuthService.getAuthStatus(ctx)
+      } catch {
+        return null
+      }
+    },
     tacticalAuth: async () => {
       try {
         return (await KVStore.getValue('auth.operators')) ?? null

@@ -197,11 +197,11 @@ class API {
   ) {
     const cleanMetadata = metadata
       ? {
-          title: metadata.title,
-          ...(metadata.summary ? { summary: metadata.summary } : {}),
-          ...(metadata.author ? { author: metadata.author } : {}),
-          ...(typeof metadata.size_bytes === 'number' ? { size_bytes: metadata.size_bytes } : {}),
-        }
+        title: metadata.title,
+        ...(metadata.summary ? { summary: metadata.summary } : {}),
+        ...(metadata.author ? { author: metadata.author } : {}),
+        ...(typeof metadata.size_bytes === 'number' ? { size_bytes: metadata.size_bytes } : {}),
+      }
       : undefined
     return this.postWithReadableError<{ message: string; filename: string; url: string }>(
       '/zim/download-remote',
@@ -220,11 +220,11 @@ class API {
       url: item.url,
       metadata: item.metadata
         ? {
-            title: item.metadata.title,
-            ...(item.metadata.summary ? { summary: item.metadata.summary } : {}),
-            ...(item.metadata.author ? { author: item.metadata.author } : {}),
-            ...(typeof item.metadata.size_bytes === 'number' ? { size_bytes: item.metadata.size_bytes } : {}),
-          }
+          title: item.metadata.title,
+          ...(item.metadata.summary ? { summary: item.metadata.summary } : {}),
+          ...(item.metadata.author ? { author: item.metadata.author } : {}),
+          ...(typeof item.metadata.size_bytes === 'number' ? { size_bytes: item.metadata.size_bytes } : {}),
+        }
         : undefined,
     }))
     return this.postWithReadableError<{
@@ -754,6 +754,31 @@ class API {
     }
   }
 
+  async rescanDockerServices() {
+    try {
+      const response = await this.client.post<{
+        success: boolean
+        linkedCount: number
+        linkedNames: string[]
+        services: ServiceSlim[]
+        message?: string
+      }>('/system/services/rescan-docker')
+      return response.data
+    } catch (error) {
+      if (error instanceof AxiosError && error.response?.data?.message) {
+        return {
+          success: false,
+          linkedCount: 0,
+          linkedNames: [],
+          services: [],
+          message: error.response.data.message,
+        }
+      }
+      console.error('Error rescanning Docker services:', error)
+      return undefined
+    }
+  }
+
   async getPortainerStatus() {
     try {
       const response = await this.client.get<{
@@ -904,7 +929,7 @@ class API {
   async listCuratedCategories() {
     return catchInternal(async () => {
       const response = await this.client.get<CategoryWithStatus[]>('/easy-setup/curated-categories')
-      return response.data
+      return Array.isArray(response.data) ? response.data : []
     })()
   }
 
@@ -1005,7 +1030,7 @@ class API {
     return catchInternal(async () => {
       const response =
         await this.client.get<ListCatalogLanguagesResponse>('/zim/catalog-languages')
-      return response.data.languages
+      return Array.isArray(response.data?.languages) ? response.data.languages : []
     })()
   }
 
@@ -1014,7 +1039,7 @@ class API {
       const response = await this.client.get<{ id: number; name: string; base_url: string; is_default: boolean }[]>(
         '/zim/custom-libraries'
       )
-      return response.data
+      return Array.isArray(response.data) ? response.data : []
     })()
   }
 
@@ -1074,7 +1099,7 @@ class API {
     return catchInternal(async () => {
       const endpoint = filetype ? `/downloads/jobs/${filetype}` : '/downloads/jobs'
       const response = await this.client.get<DownloadJobWithProgress[]>(endpoint)
-      return response.data
+      return Array.isArray(response.data) ? response.data : []
     })()
   }
 
@@ -1253,14 +1278,15 @@ class API {
   }
 
   async selectWikipedia(
-    optionId: string
+    optionId: string,
+    targetDisk?: string
   ): Promise<{ success: boolean; jobId?: string; message?: string } | undefined> {
     return catchInternal(async () => {
       const response = await this.client.post<{
         success: boolean
         jobId?: string
         message?: string
-      }>('/zim/wikipedia/select', { optionId })
+      }>('/zim/wikipedia/select', { optionId, targetDisk: targetDisk || undefined })
       return response.data
     })()
   }

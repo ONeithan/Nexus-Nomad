@@ -203,6 +203,7 @@ export const downloadCategoryTierValidator = vine.compile(
 export const selectWikipediaValidator = vine.compile(
   vine.object({
     optionId: vine.string().trim().minLength(1),
+    targetDisk: vine.string().trim().optional(),
   })
 )
 

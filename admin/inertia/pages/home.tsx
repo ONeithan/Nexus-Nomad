@@ -58,6 +58,7 @@ import { APP_CATALOG } from '../../constants/app_catalog_data'
 import { linkTileColor } from '../../constants/link_tile_colors'
 import { useThemeContext } from '~/providers/ThemeProvider'
 import { getActiveOperator } from '~/components/TacticalBootGate'
+import type { AuthStatusPayload } from '../../types/auth'
 import { useAiStatus } from '~/hooks/useAiStatus'
 import AiChooserModal from '~/components/chat/AiChooserModal'
 
@@ -311,9 +312,9 @@ export default function Home(props: {
   const updateInfo = useUpdateAvailable()
   const rerunBanner = useBenchmarkRerunBanner()
   const queryClient = useQueryClient()
-  const { aiAssistantName, tacticalAuth } = usePage<{
+  const { aiAssistantName, authUser } = usePage<{
     aiAssistantName: string
-    tacticalAuth?: string | null
+    authUser?: AuthStatusPayload | null
   }>().props
   const { effectiveTacticalHome, currentThemeDef } = useThemeContext()
 
@@ -366,9 +367,12 @@ export default function Home(props: {
     }
     return { order: [], hidden: [] }
   })
-  const [activeOperator, setActiveOperator] = useState<{ username: string; level: string }>(() =>
-    getActiveOperator(tacticalAuth)
-  )
+  const [activeOperator, setActiveOperator] = useState<{
+    username: string
+    level: string
+    roleLevel: number
+    shortLabel: string
+  }>(() => getActiveOperator(authUser))
 
   // TrueNAS Dashboard Customization state
   const [dashboardConfig, setDashboardConfig] = useState<DashboardConfig>(() => {
@@ -568,16 +572,18 @@ export default function Home(props: {
 
   useEffect(() => {
     const syncOp = () => {
-      const op = getActiveOperator(tacticalAuth)
+      const op = getActiveOperator(authUser)
       setActiveOperator({
-        username: op?.username?.trim() || 'OPERADOR',
-        level: op?.level || 'NÍVEL 05 // COMANDO-GERAL',
+        username: op?.username?.trim() || 'Operador',
+        level: op?.level || 'NÍVEL 05 // ADMIN TOTAL',
+        roleLevel: op?.roleLevel ?? 5,
+        shortLabel: op?.shortLabel || 'Admin Total',
       })
     }
     syncOp()
     window.addEventListener('nomad:operator-updated', syncOp)
     return () => window.removeEventListener('nomad:operator-updated', syncOp)
-  }, [tacticalAuth])
+  }, [authUser])
 
   const refreshServices = () => router.reload({ only: ['system'] })
 
@@ -746,7 +752,7 @@ export default function Home(props: {
               </span>
               <span className="text-border-default hidden sm:inline">•</span>
               <span>
-                Operador: <strong className="text-text-primary">{activeOperator.username.toUpperCase()}</strong>
+                Operador: <strong className="text-text-primary">{activeOperator.username}</strong>
               </span>
               <span className="text-border-default hidden sm:inline">•</span>
               <span>

@@ -21,6 +21,7 @@ import {
   IconServer,
   IconTrash,
   IconWorld,
+  IconX,
 } from '@tabler/icons-react'
 import AppLayout from '~/layouts/AppLayout'
 import DynamicIcon, { DynamicIconName } from '~/components/DynamicIcon'
@@ -151,20 +152,32 @@ export default function SupplyDepotPage(props: {
   const [services, setServices] = useState<ServiceSlim[]>(props.system.services || [])
   const [modal, setModal] = useState<Modal>(null)
   const [loading, setLoading] = useState(false)
+  const [rescanningDocker, setRescanningDocker] = useState(false)
   const [checkingUpdates, setCheckingUpdates] = useState(false)
   const [openDropdown, setOpenDropdown] = useState<string | null>(null)
   const [customAppOpen, setCustomAppOpen] = useState(false)
   const [portainerModalOpen, setPortainerModalOpen] = useState(false)
   const [editApp, setEditApp] = useState<CustomAppInitial | null>(null)
-  const [defaultTarget, setDefaultTarget] = useState<'local' | 'portainer'>(
-    props.portainer?.deployTarget === 'portainer' && props.portainer?.enabled ? 'portainer' : 'local'
-  )
-  const [autoUseDefaultTarget, setAutoUseDefaultTarget] = useState<boolean>(
-    Boolean(props.portainer?.autoUseDefaultTarget)
-  )
-  const [installTarget, setInstallTarget] = useState<'local' | 'portainer'>(
-    props.portainer?.deployTarget === 'portainer' && props.portainer?.enabled ? 'portainer' : 'local'
-  )
+  const [defaultTarget, setDefaultTarget] = useState<'local' | 'portainer'>(() => {
+    if (!props.portainer?.enabled) return 'local'
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('nomad:last_install_target')
+        if (saved === 'portainer' || saved === 'local') return saved
+      } catch {}
+    }
+    return 'local'
+  })
+  const [installTarget, setInstallTarget] = useState<'local' | 'portainer'>(() => {
+    if (!props.portainer?.enabled) return 'local'
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('nomad:last_install_target')
+        if (saved === 'portainer' || saved === 'local') return saved
+      } catch {}
+    }
+    return 'local'
+  })
   // App whose custom launch URL is being configured (null while the modal is closed).
   const [urlApp, setUrlApp] = useState<ServiceSlim | null>(null)
   const [removeImage, setRemoveImage] = useState(false)
@@ -175,70 +188,45 @@ export default function SupplyDepotPage(props: {
   const [selectedForBulk, setSelectedForBulk] = useState<Set<string>>(new Set())
   const [bulkModalOpen, setBulkModalOpen] = useState(false)
 
-  const handleSaveDefaultTarget = async (nextTarget: 'local' | 'portainer') => {
-    setDefaultTarget(nextTarget)
-    try {
-      await api.updateSetting('portainer.deployTarget', nextTarget)
-      addNotification({
-        type: 'success',
-        message: `Destino padrão definido para: ${nextTarget === 'portainer' ? 'Servidor Portainer' : 'Instalação Local'}.`,
-      })
-    } catch {}
-  }
-
-  const handleToggleAutoUseDefault = async (enabled: boolean) => {
-    setAutoUseDefaultTarget(enabled)
-    try {
-      await api.updateSetting('portainer.autoUseDefaultTarget', enabled)
-      addNotification({
-        type: 'info',
-        message: enabled
-          ? 'Instalação rápida em 1 clique ativada (pula confirmação quando não houver alertas).'
-          : 'Confirmação antes de instalar reativada.',
-      })
-    } catch {}
-  }
-
-  const openInstallModalOrDirect = async (service: ServiceSlim) => {
-    const preferred: 'local' | 'portainer' = isPortainerConfigured ? defaultTarget : 'local'
-    setInstallTarget(preferred)
-    setForceInstall(false)
-
-    if (autoUseDefaultTarget) {
-      setLoading(true)
+  const rememberInstallTarget = (target: 'local' | 'portainer') => {
+    setDefaultTarget(target)
+    if (typeof window !== 'undefined') {
       try {
-        const check = await api.preflightCheck(service.service_name)
-        const hasWarnings =
-          (check?.portConflicts?.length ?? 0) > 0 || (check?.resourceWarnings?.length ?? 0) > 0
-        if (!hasWarnings) {
-          const result = await api.installService(service.service_name, preferred)
-          setLoading(false)
-          if (!result?.success) {
-            showError(result?.message || 'Falha ao iniciar a instalação.')
-          } else {
-            setServices((prev) =>
-              prev.map((s) =>
-                s.service_name === service.service_name
-                  ? { ...s, installation_status: 'installing' }
-                  : s
-              )
-            )
-            addNotification({
-              message:
-                result.message ||
-                `Instalação de ${service.friendly_name} iniciada (${preferred === 'portainer' ? 'Portainer' : 'Local'})!`,
-              type: 'success',
-            })
-          }
-          return
-        }
-      } catch {
-        // Fallback to confirmation modal on preflight error
-      } finally {
-        setLoading(false)
-      }
+        localStorage.setItem('nomad:last_install_target', target)
+      } catch {}
     }
+    void api.updateSetting('portainer.deployTarget', target).catch(() => {})
+  }
 
+  const handleRescanDocker = async () => {
+    setRescanningDocker(true)
+    try {
+      const res = await api.rescanDockerServices()
+      if (!res?.success) {
+        showError(res?.message || 'Falha ao sincronizar contêineres Docker/Portainer.')
+      } else {
+        if (Array.isArray(res.services) && res.services.length > 0) {
+          setServices(res.services)
+        }
+        addNotification({
+          type: 'success',
+          message:
+            res.linkedCount > 0
+              ? `Sincronização concluída: ${res.linkedCount} módulo(s) ativo(s) ou vinculado(s) no Docker/Portainer.`
+              : 'Sincronização concluída: nenhum novo contêiner externo pendente de vínculo.',
+        })
+      }
+    } catch {
+      showError('Erro de comunicação ao sincronizar Docker e Portainer.')
+    } finally {
+      setRescanningDocker(false)
+    }
+  }
+
+  const openInstallModal = (service: ServiceSlim) => {
+    const remembered: 'local' | 'portainer' = isPortainerConfigured ? defaultTarget : 'local'
+    setInstallTarget(remembered)
+    setForceInstall(false)
     setModal({ type: 'install', service })
   }
 
@@ -433,6 +421,7 @@ export default function SupplyDepotPage(props: {
 
     if (hasWarnings && !forceInstall) return
 
+    rememberInstallTarget(installTarget)
     setLoading(true)
     const result = await api.installService(service.service_name, installTarget)
     setModal(null)
@@ -682,76 +671,105 @@ export default function SupplyDepotPage(props: {
               <InstallActivityFeed activity={installActivity} withHeader />
             )}
 
-            {/* Search + Add Custom App */}
-            <div className="flex flex-col sm:flex-row gap-3">
-              <div className="relative flex-1">
-                <IconSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted h-4 w-4" />
-                <input
-                  type="text"
-                  placeholder="Pesquisar módulos e aplicativos..."
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  className="w-full pl-9 pr-4 py-2 rounded-md bg-surface-secondary border border-desert-stone-lighter text-text-primary text-sm focus:outline-none focus:ring-1 focus:ring-desert-green placeholder:text-text-muted/50"
-                />
+            {/* Search + Action Toolbar (2-row layout so search field never collapses) */}
+            <div className="space-y-2.5">
+              <div className="flex flex-col md:flex-row items-stretch md:items-center gap-2.5">
+                <div className="relative flex-1 min-w-[240px]">
+                  <IconSearch className="absolute left-3.5 top-1/2 -translate-y-1/2 text-text-muted h-4 w-4 pointer-events-none" />
+                  <input
+                    type="text"
+                    placeholder="Pesquisar módulos e aplicativos (ex: Jellyfin, Open WebUI, Navidrome...)"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    aria-label="Pesquisar módulos e aplicativos"
+                    className="w-full min-h-[2.625rem] pl-10 pr-9 py-2 rounded-lg bg-surface-secondary border border-border-default text-text-primary text-sm focus:outline-none focus:ring-2 focus:ring-desert-green/50 focus:border-desert-green placeholder:text-text-muted/60"
+                  />
+                  {search && (
+                    <button
+                      type="button"
+                      onClick={() => setSearch('')}
+                      title="Limpar pesquisa"
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 rounded text-text-muted hover:text-text-primary cursor-pointer"
+                    >
+                      <IconX size={15} />
+                    </button>
+                  )}
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2 shrink-0">
+                  <StyledButton
+                    icon="IconRefresh"
+                    variant="outline"
+                    onClick={handleRescanDocker}
+                    loading={rescanningDocker}
+                    className="whitespace-nowrap"
+                    title="Detectar e vincular contêineres já existentes no Docker local e Portainer"
+                  >
+                    Sincronizar Docker
+                  </StyledButton>
+                  <StyledButton
+                    icon="IconBolt"
+                    variant={isBulkMode || selectedForBulk.size > 0 ? 'primary' : 'outline'}
+                    className="whitespace-nowrap"
+                    onClick={() => {
+                      if (selectedForBulk.size > 0) {
+                        setBulkModalOpen(true)
+                      } else {
+                        setIsBulkMode((prev) => !prev)
+                      }
+                    }}
+                    title="Selecionar vários aplicativos para instalar juntos em fila"
+                  >
+                    {selectedForBulk.size > 0
+                      ? `Instalar Selecionados (${selectedForBulk.size})`
+                      : isBulkMode
+                        ? 'Ocultar Barra em Massa'
+                        : 'Instalação em Massa'}
+                  </StyledButton>
+                </div>
               </div>
-              <StyledButton
-                icon="IconRefreshAlert"
-                variant="outline"
-                onClick={handleCheckUpdates}
-                loading={checkingUpdates}
-                disabled={checkingUpdates || !isOnline}
-              >
-                Verificar Atualizações
-              </StyledButton>
-              <StyledButton
-                icon="IconBook"
-                variant="outline"
-                onClick={() => openAppCatalog()}
-                title="Abrir Catálogo Completo & Guia Operacional de todas as Aplicações"
-              >
-                Catálogo &amp; Guias ({services.length})
-              </StyledButton>
-              <StyledButton
-                icon="IconServer"
-                variant="outline"
-                onClick={() => setPortainerModalOpen(true)}
-              >
-                Servidores Remotos
-              </StyledButton>
-              <StyledButton
-                icon="IconBrandDocker"
-                variant="outline"
-                onClick={() => setCustomAppOpen(true)}
-              >
-                Adicionar App Docker
-              </StyledButton>
-              <StyledButton
-                icon="IconBolt"
-                variant={isBulkMode ? "primary" : "outline"}
-                onClick={() => {
-                  const next = !isBulkMode
-                  setIsBulkMode(next)
-                  if (!next) setSelectedForBulk(new Set())
-                }}
-                title="Ativar modo de seleção múltipla para instalar por categorias ou todos os aplicativos de uma vez"
-              >
-                {isBulkMode ? `Modo Massa (${selectedForBulk.size})` : 'Instalação em Massa'}
-              </StyledButton>
-              {isPortainerConfigured && (
-                <button
-                  type="button"
-                  onClick={() => handleToggleAutoUseDefault(!autoUseDefaultTarget)}
-                  title="Alternar instalação direta em 1 clique usando o destino padrão"
-                  className={`px-2.5 py-1.5 rounded-md border text-xs font-semibold cursor-pointer transition-colors ${
-                    autoUseDefaultTarget
-                      ? 'border-emerald-500/60 bg-emerald-500/15 text-emerald-400'
-                      : 'border-border-default bg-surface-secondary text-text-secondary hover:border-desert-tan'
-                  }`}
+
+              <div className="flex flex-wrap items-center gap-2">
+                <StyledButton
+                  icon="IconRefreshAlert"
+                  variant="outline"
+                  size="sm"
+                  className="whitespace-nowrap"
+                  onClick={handleCheckUpdates}
+                  loading={checkingUpdates}
+                  disabled={checkingUpdates || !isOnline}
                 >
-                  Padrão: {defaultTarget === 'portainer' ? 'Portainer' : 'Local'}
-                  {autoUseDefaultTarget ? ' (1-Clique ✓)' : ''}
-                </button>
-              )}
+                  Verificar Atualizações
+                </StyledButton>
+                <StyledButton
+                  icon="IconBook"
+                  variant="outline"
+                  size="sm"
+                  className="whitespace-nowrap"
+                  onClick={() => openAppCatalog()}
+                  title="Abrir Catálogo Completo & Guia Operacional de todas as Aplicações"
+                >
+                  Catálogo &amp; Guias ({services.length})
+                </StyledButton>
+                <StyledButton
+                  icon="IconServer"
+                  variant="outline"
+                  size="sm"
+                  className="whitespace-nowrap"
+                  onClick={() => setPortainerModalOpen(true)}
+                >
+                  Servidores Remotos
+                </StyledButton>
+                <StyledButton
+                  icon="IconBrandDocker"
+                  variant="outline"
+                  size="sm"
+                  className="whitespace-nowrap"
+                  onClick={() => setCustomAppOpen(true)}
+                >
+                  Adicionar App Docker
+                </StyledButton>
+              </div>
             </div>
 
             {/* Category filters */}
@@ -795,8 +813,8 @@ export default function SupplyDepotPage(props: {
               </button>
             </div>
 
-            {/* Tactical Bulk Selection Bar */}
-            {isBulkMode && (
+            {/* Tactical Bulk Selection Bar — auto-appears whenever user checks cards or opens bulk mode */}
+            {(isBulkMode || selectedForBulk.size > 0) && (
               <div className="p-3.5 rounded-xl bg-desert-orange/10 border border-desert-orange/30 space-y-3 shadow-sm">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div className="flex flex-wrap items-center gap-2 text-xs">
@@ -919,7 +937,7 @@ export default function SupplyDepotPage(props: {
                       openDropdown={openDropdown}
                       dropdownRef={dropdownRef}
                       onOpenDropdown={setOpenDropdown}
-                      onInstall={() => openInstallModalOrDirect(service)}
+                      onInstall={() => openInstallModal(service)}
                       onStart={() => setModal({ type: 'start', service })}
                       onStop={() => setModal({ type: 'stop', service })}
                       onRestart={() => setModal({ type: 'restart', service })}
@@ -958,7 +976,7 @@ export default function SupplyDepotPage(props: {
                       openDropdown={openDropdown}
                       dropdownRef={dropdownRef}
                       onOpenDropdown={setOpenDropdown}
-                      onInstall={() => openInstallModalOrDirect(service)}
+                      onInstall={() => openInstallModal(service)}
                       onStart={() => setModal({ type: 'start', service })}
                       onStop={() => setModal({ type: 'stop', service })}
                       onRestart={() => setModal({ type: 'restart', service })}
@@ -1045,35 +1063,9 @@ export default function SupplyDepotPage(props: {
                     </div>
                   </button>
                 </div>
-                <div className="flex flex-col gap-1.5 pt-2 border-t border-border-subtle">
-                  <label className="inline-flex items-center gap-2 text-xs text-text-primary cursor-pointer select-none">
-                    <input
-                      type="checkbox"
-                      checked={defaultTarget === installTarget}
-                      onChange={(e) => {
-                        if (e.target.checked) {
-                          void handleSaveDefaultTarget(installTarget)
-                        } else {
-                          const other = installTarget === 'portainer' ? 'local' : 'portainer'
-                          void handleSaveDefaultTarget(other)
-                        }
-                      }}
-                      className="rounded border-border-default text-emerald-500 focus:ring-emerald-500"
-                    />
-                    <span>
-                      Definir <strong>{installTarget === 'portainer' ? 'Servidor Portainer' : 'Instalação Local'}</strong> como destino padrão
-                    </span>
-                  </label>
-                  <label className="inline-flex items-center gap-2 text-xs text-text-secondary cursor-pointer select-none">
-                    <input
-                      type="checkbox"
-                      checked={autoUseDefaultTarget}
-                      onChange={(e) => void handleToggleAutoUseDefault(e.target.checked)}
-                      className="rounded border-border-default text-desert-orange focus:ring-desert-orange"
-                    />
-                    <span>Instalar direto em 1 clique nas próximas vezes (pular modal quando não houver alertas)</span>
-                  </label>
-                </div>
+                <p className="text-[0.6875rem] text-text-muted pt-1">
+                  O N.O.M.A.D. memoriza automaticamente sua última escolha confirmada para as próximas instalações.
+                </p>
               </div>
             )}
 
@@ -1381,6 +1373,7 @@ export default function SupplyDepotPage(props: {
         selectedServices={availableServices.filter((s) => selectedForBulk.has(s.service_name))}
         isPortainerConfigured={isPortainerConfigured}
         defaultTarget={defaultTarget}
+        onTargetSelected={rememberInstallTarget}
         installActivity={installActivity}
         onCompletedAll={() => {
           setBulkModalOpen(false)
@@ -1564,18 +1557,26 @@ function AppCard({
           </div>
         </div>
 
-        {/* Status indicator + Guide button */}
+        {/* Status indicator + Multi-select checkbox + Guide button */}
         <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
-          {isBulkMode && !service.installed && (
-            <input
-              type="checkbox"
-              checked={Boolean(isSelected)}
-              onChange={(e) => {
-                e.stopPropagation()
-                onToggleSelect?.()
-              }}
-              className="w-4 h-4 rounded text-desert-orange focus:ring-desert-orange border-desert-stone cursor-pointer mr-1"
-            />
+          {!service.installed && service.installation_status !== 'installing' && (
+            <label
+              className={`inline-flex items-center justify-center p-1 rounded-md border transition-colors cursor-pointer mr-0.5 ${
+                isSelected
+                  ? 'border-desert-orange bg-desert-orange/15'
+                  : 'border-border-subtle bg-surface-secondary/80 hover:border-desert-orange/60'
+              }`}
+              title="Selecionar para instalar vários aplicativos juntos"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <input
+                type="checkbox"
+                checked={Boolean(isSelected)}
+                onChange={() => onToggleSelect?.()}
+                aria-label={`Selecionar ${service.friendly_name ?? service.service_name} para instalação em lote`}
+                className="w-4 h-4 rounded text-desert-orange focus:ring-desert-orange border-desert-stone cursor-pointer"
+              />
+            </label>
           )}
           {onOpenCatalog && (
             <button
@@ -1640,9 +1641,10 @@ function AppCard({
                 : 'bg-desert-sand/30 text-desert-green-darker border-desert-stone-lighter/60'
             }`}
           >
-            {service.node === 'portainer' || service.node === 'dell-micro'
-              ? 'Servidor Portainer'
-              : 'Local (NOMAD)'}
+            {service.node_label ||
+              (service.node === 'portainer' || service.node === 'dell-micro'
+                ? 'Servidor Portainer'
+                : 'Local (NOMAD)')}
           </span>
         )}
         {service.is_custom ? (

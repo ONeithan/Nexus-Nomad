@@ -40,10 +40,11 @@ const ActiveDownloads = ({ filetype, filetypes, withHeader = false }: ActiveDown
   const { data: rawDownloads, invalidate } = useDownloads({
     filetype: filetypes && filetypes.length > 0 ? undefined : filetype,
   })
+  const safeRawDownloads = Array.isArray(rawDownloads) ? rawDownloads : []
   const downloads =
-    filetypes && filetypes.length > 0 && rawDownloads
-      ? rawDownloads.filter((d) => d.filetype && filetypes.includes(d.filetype))
-      : rawDownloads
+    filetypes && filetypes.length > 0
+      ? safeRawDownloads.filter((d) => d.filetype && filetypes.includes(d.filetype))
+      : safeRawDownloads
   const [cancellingJobs, setCancellingJobs] = useState<Set<string>>(new Set())
   const [confirmingCancel, setConfirmingCancel] = useState<string | null>(null)
   const [retryingJobs, setRetryingJobs] = useState<Set<string>>(new Set())
@@ -134,6 +135,17 @@ const ActiveDownloads = ({ filetype, filetypes, withHeader = false }: ActiveDown
             const speed = getSpeed(download.jobId, download.downloadedBytes)
             const isCancelling = cancellingJobs.has(download.jobId)
             const isConfirming = confirmingCancel === download.jobId
+            const queueIndex =
+              status === 'queued'
+                ? downloads.filter((d) => getDownloadStatus(d) === 'queued').indexOf(download) + 1
+                : 0
+            const storageDirHint = download.filepath
+              ? download.filepath.startsWith('/mnt/')
+                ? download.filepath.split('/').slice(0, 3).join('/')
+                : download.filepath.includes('/storage/')
+                  ? 'Armazenamento Interno NOMAD'
+                  : ''
+              : ''
 
             const isRetrying = retryingJobs.has(download.jobId)
 
@@ -250,12 +262,17 @@ const ActiveDownloads = ({ filetype, filetypes, withHeader = false }: ActiveDown
                     </div>
 
                     {/* Size info */}
-                    <div className="flex justify-between items-baseline text-sm text-text-muted font-mono">
+                    <div className="flex flex-wrap justify-between items-baseline gap-2 text-sm text-text-muted font-mono">
                       <span>
-                        {download.downloadedBytes && download.totalBytes
-                          ? `${formatBytes(download.downloadedBytes, 1)} / ${formatBytes(download.totalBytes, 1)}`
-                          : `${download.progress}% / 100%`}
+                        {download.totalBytes && download.totalBytes > 0
+                          ? `${formatBytes(download.downloadedBytes || 0, 1)} / ${formatBytes(download.totalBytes, 1)}`
+                          : `${Math.round(download.progress || 0)}% / 100%`}
                       </span>
+                      {storageDirHint && (
+                        <span className="text-[0.6875rem] px-2 py-0.5 rounded bg-surface-secondary border border-border-subtle text-text-secondary">
+                          Destino: {storageDirHint}
+                        </span>
+                      )}
                     </div>
 
                     {/* Progress bar */}
@@ -282,7 +299,11 @@ const ActiveDownloads = ({ filetype, filetypes, withHeader = false }: ActiveDown
                       {status === 'queued' && (
                         <>
                           <div className="w-2 h-2 rounded-full bg-desert-stone" />
-                          <span className="text-xs text-text-muted">Aguardando...</span>
+                          <span className="text-xs text-text-muted">
+                            {queueIndex > 0
+                              ? `Na fila (#${queueIndex}) — aguardando vaga no carregador`
+                              : 'Na fila — preparando download...'}
+                          </span>
                         </>
                       )}
                       {status === 'active' && (

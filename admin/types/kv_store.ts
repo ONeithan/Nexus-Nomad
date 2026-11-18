@@ -49,6 +49,7 @@ export const KV_STORE_SCHEMA = {
   'ui.hasVisitedEasySetup':     'boolean',
   'ui.theme':                   'string',
   'auth.operators':             'string',
+  'auth.v1029ReonboardingDone': 'boolean',
   'ai.assistantCustomName':     'string',
   'gpu.type':                   'string',
   'ai.remoteOllamaUrl':         'string',

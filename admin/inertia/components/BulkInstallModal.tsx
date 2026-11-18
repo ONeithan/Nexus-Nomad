@@ -19,6 +19,7 @@ interface BulkInstallModalProps {
   selectedServices: ServiceSlim[]
   isPortainerConfigured: boolean
   defaultTarget?: 'local' | 'portainer'
+  onTargetSelected?: (target: 'local' | 'portainer') => void
   onCompletedAll?: () => void
   installActivity?: any[]
 }
@@ -36,6 +37,7 @@ export default function BulkInstallModal({
   selectedServices,
   isPortainerConfigured,
   defaultTarget = 'local',
+  onTargetSelected,
   onCompletedAll,
   installActivity = [],
 }: BulkInstallModalProps) {
@@ -161,6 +163,7 @@ export default function BulkInstallModal({
 
   const startBulkInstall = async () => {
     if (selectedServices.length === 0) return
+    onTargetSelected?.(target)
     setIsRunning(true)
     setIsFinished(false)
     cancelRequestedRef.current = false

@@ -84,7 +84,7 @@ export class ZimService {
     const dirLst = await lstat(dirPath).catch(() => null)
     const dirIsSymlink = Boolean(dirLst?.isSymbolicLink())
     const dirRealPath = await realpath(dirPath).catch(() => resolve(dirPath))
-    const dirRealHostPath = storageSvc
+    let dirRealHostPath = storageSvc
       ? await storageSvc.resolveRealHostPath(dirRealPath).catch(() => dirRealPath)
       : dirRealPath
 
@@ -93,12 +93,17 @@ export class ZimService {
       path: resolve(process.cwd(), 'storage'),
       isPrimary: true,
       diskType: 'Sistema',
+      realHostPath: '/opt/project-nomad/storage',
+    }
+    if (dirRealHostPath.startsWith('/app/update')) {
+      dirRealHostPath = join(defaultPrimaryDisk.realHostPath || '/opt/project-nomad/storage', 'zim')
     }
     const activeDirDisk =
       (storageSvc &&
         (storageSvc.findDiskForResolvedPath(dirRealPath, mountTargets) ||
           storageSvc.findDiskForResolvedPath(dirRealHostPath, mountTargets))) ||
       defaultPrimaryDisk
+    const effectiveSecondaryLink = Boolean(dirIsSymlink && !activeDirDisk.isPrimary)
 
     const resolveEntryStorageMeta = async (
       filePath: string,
@@ -107,7 +112,7 @@ export class ZimService {
       fallbackDisk: typeof defaultPrimaryDisk
     ) => {
       const [stats, entryLst, fileRealPath] = await Promise.all([
-        getFileStatsIfExists(filePath),
+        getFileStatsIfExists(filePath).catch(() => null),
         lstat(filePath).catch(() => null),
         realpath(filePath).catch(() => resolve(filePath)),
       ])
@@ -133,13 +138,13 @@ export class ZimService {
       }
     }
 
-    const all = await listDirectoryContents(dirPath)
+    const all = await listDirectoryContents(dirPath).catch(() => [])
     const zimEntries = all.filter((item) => item.name.endsWith('.zim'))
 
     const activeFiles: ZimFileWithMetadata[] = await Promise.all(
       zimEntries.map(async (entry) => {
         const filePath = entry.type === 'file' ? entry.key : join(dirPath, entry.name)
-        const meta = await resolveEntryStorageMeta(filePath, dirIsSymlink, true, activeDirDisk)
+        const meta = await resolveEntryStorageMeta(filePath, effectiveSecondaryLink, true, activeDirDisk)
         return {
           ...entry,
           title: null,
@@ -223,7 +228,7 @@ export class ZimService {
         diskType: activeDirDisk.diskType,
         realPath: dirRealPath,
         realHostPath: dirRealHostPath,
-        isSymlink: dirIsSymlink,
+        isSymlink: effectiveSecondaryLink,
         disksSummary: Array.from(diskMap.values()),
       },
     }
@@ -262,7 +267,7 @@ export class ZimService {
     })
 
     // Snapshot locally-installed files once — the filesystem won't change mid-request.
-    const existing = await this.list()
+    const existing = await this.list().catch(() => ({ files: [] as ZimFileWithMetadata[] }))
     const existingKeys = new Set(existing.files.map((file) => file.name))
 
     const accumulated: RemoteZimFileEntry[] = []
@@ -280,6 +285,7 @@ export class ZimService {
           ...(query ? { q: query } : {}),
         },
         responseType: 'text',
+        timeout: 15000,
       })
 
       const parsed = parser.parse(res.data)
@@ -305,8 +311,9 @@ export class ZimService {
       for (const raw of rawEntries) {
         if (!isRawRemoteZimFileEntry(raw)) continue
         const entry = raw as RawRemoteZimFileEntry
+        const links = Array.isArray(entry.link) ? entry.link : entry.link ? [entry.link] : []
 
-        const downloadLink = entry.link.find(
+        const downloadLink = links.find(
           (link: any) =>
             typeof link === 'object' &&
             'rel' in link &&
@@ -325,18 +332,22 @@ export class ZimService {
         seenIds.add(entry.id)
 
         const sizeBytes = parseInt(downloadLink['length'], 10)
+        const resolvedAuthor =
+          typeof entry.author === 'string'
+            ? entry.author
+            : entry.author?.name || 'Kiwix'
         accumulated.push({
           id: entry.id,
           title: entry.title,
-          updated: entry.updated,
-          summary: entry.summary,
+          updated: entry.updated || new Date().toISOString(),
+          summary: entry.summary || '',
           size_bytes: sizeBytes || 0,
           download_url,
-          author: entry.author.name,
+          author: resolvedAuthor,
           file_name,
           language: entry.language,
           category: entry.category,
-          tags: entry.tags,
+          tags: typeof entry.tags === 'string' ? entry.tags : '',
           article_count: entry.articleCount,
           media_count: entry.mediaCount,
           publisher: entry.publisher?.name,
@@ -1106,7 +1117,7 @@ export class ZimService {
 
   async getWikipediaState(): Promise<WikipediaState> {
     const options = await this.getWikipediaOptions()
-    const selection = await this.getWikipediaSelection()
+    let selection = await this.getWikipediaSelection()
 
     // Reconcile stale "downloading" state (e.g., if container restarted or PT/non-EN download finished)
     if (selection && selection.status === 'downloading') {
@@ -1118,7 +1129,7 @@ export class ZimService {
           queue.getWaiting(),
         ])
         const isJobRunning = [...activeJobs, ...waitingJobs].some(
-          (j: any) => j?.data?.url === selection.url
+          (j: any) => j?.data?.url === selection!.url
         )
 
         if (!isJobRunning) {
@@ -1139,20 +1150,80 @@ export class ZimService {
       }
     }
 
+    // Auto-detect Wikipedia ZIM already downloaded on disk (active folder or secondary HDs)
+    if (!selection || (selection.status !== 'installed' && selection.status !== 'downloading')) {
+      try {
+        const { files } = await this.list()
+        const validWikipediaFiles = files.filter(
+          (f) => f.name.toLowerCase().startsWith('wikipedia_') && (f.size_bytes ?? 0) > 10 * 1024 * 1024
+        )
+        let matchedOption: WikipediaOption | undefined
+        let matchedFile: ZimFileWithMetadata | undefined
+
+        for (const opt of options) {
+          if (!opt.url) continue
+          const optFilename = (opt.url.split('/').pop() || '').toLowerCase()
+          const optPrefix = optFilename.replace(/_\d{4}-\d{2}\.zim$/i, '').replace(/\.zim$/i, '')
+          matchedFile =
+            validWikipediaFiles.find((f) => f.name.toLowerCase() === optFilename) ||
+            (optPrefix
+              ? validWikipediaFiles.find((f) => f.name.toLowerCase().startsWith(optPrefix))
+              : undefined)
+          if (matchedFile) {
+            matchedOption = opt
+            break
+          }
+        }
+
+        if (matchedOption && matchedFile) {
+          if (selection) {
+            selection.option_id = matchedOption.id
+            selection.status = 'installed'
+            selection.filename = matchedFile.name
+            selection.url = matchedOption.url ?? selection.url
+            await selection.save().catch(() => {})
+          } else {
+            selection = await WikipediaSelection.create({
+              option_id: matchedOption.id,
+              status: 'installed',
+              filename: matchedFile.name,
+              url: matchedOption.url ?? null,
+            }).catch(() => null)
+          }
+          if (!selection) {
+            return {
+              options,
+              currentSelection: {
+                optionId: matchedOption.id,
+                status: 'installed',
+                filename: matchedFile.name,
+                url: matchedOption.url ?? null,
+              },
+            }
+          }
+        }
+      } catch (err) {
+        logger.warn('[ZimService] Failed scanning disk for installed Wikipedia:', err)
+      }
+    }
+
     return {
       options,
       currentSelection: selection
         ? {
-          optionId: selection.option_id,
-          status: selection.status,
-          filename: selection.filename,
-          url: selection.url,
-        }
+            optionId: selection.option_id,
+            status: selection.status,
+            filename: selection.filename,
+            url: selection.url,
+          }
         : null,
     }
   }
 
-  async selectWikipedia(optionId: string): Promise<{ success: boolean; jobId?: string; message?: string }> {
+  async selectWikipedia(
+    optionId: string,
+    targetDisk?: string
+  ): Promise<{ success: boolean; jobId?: string; message?: string }> {
     const options = await this.getWikipediaOptions()
     const selectedOption = options.find((opt) => opt.id === optionId)
 
@@ -1222,7 +1293,9 @@ export class ZimService {
       throw new Error('Could not determine filename from URL')
     }
 
-    const filepath = join(process.cwd(), ZIM_STORAGE_PATH, filename)
+    const requiredBytes = selectedOption.size_mb ? selectedOption.size_mb * 1024 * 1024 : undefined
+    const { targetDir } = await this.resolveZimTargetDir(targetDisk, requiredBytes)
+    const filepath = join(targetDir, filename)
 
     // Update or create selection record to show downloading status
     let selection: WikipediaSelection

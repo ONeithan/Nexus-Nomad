@@ -30,7 +30,11 @@ export default class EasySetupController {
   }
 
   async listCuratedCategories({}: HttpContext) {
-    return await this.zimService.listCuratedCategories()
+    try {
+      return await this.zimService.listCuratedCategories()
+    } catch {
+      return []
+    }
   }
 
   async refreshManifests({}: HttpContext) {

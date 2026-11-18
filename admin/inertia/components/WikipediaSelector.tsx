@@ -30,7 +30,9 @@ const WikipediaSelector: React.FC<WikipediaSelectorProps> = ({
   // Determine which option to highlight
   const highlightedOptionId = selectedOptionId ?? currentSelection?.optionId ?? null
 
-  const { data: zimDownloads = [] } = useDownloads({ filetype: 'zim' })
+  const safeOptions = Array.isArray(options) ? options : []
+  const { data: zimDownloadsRaw } = useDownloads({ filetype: 'zim' })
+  const safeDownloads = Array.isArray(zimDownloadsRaw) ? zimDownloadsRaw : []
 
   // Check if current selection is downloading or failed
   const isDownloading = currentSelection?.status === 'downloading'
@@ -73,7 +75,7 @@ const WikipediaSelector: React.FC<WikipediaSelectorProps> = ({
 
       {/* Options grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {options.map((option) => {
+        {safeOptions.map((option) => {
           const isSelected = highlightedOptionId === option.id
           const isInstalled =
             currentSelection?.optionId === option.id && currentSelection?.status === 'installed'
@@ -83,7 +85,7 @@ const WikipediaSelector: React.FC<WikipediaSelectorProps> = ({
             currentSelection?.optionId === option.id && currentSelection?.status === 'failed'
           const isPending = selectedOptionId === option.id && selectedOptionId !== currentSelection?.optionId
 
-          const matchingJob = zimDownloads.find(
+          const matchingJob = safeDownloads.find(
             (d) =>
               d.status !== 'failed' &&
               ((option.url && d.url === option.url) ||

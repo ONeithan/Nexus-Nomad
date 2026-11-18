@@ -18,20 +18,39 @@ import { ZIM_STORAGE_PATH, ensureDirectoryExists, sanitizeFilename } from '../ut
 
 @inject()
 export default class ZimController {
-  constructor(private zimService: ZimService) {}
+  constructor(private zimService: ZimService) { }
 
-  async list({}: HttpContext) {
-    return await this.zimService.list()
+  async list({ }: HttpContext) {
+    try {
+      return await this.zimService.list()
+    } catch (error: any) {
+      logger.error('[ZimController] list() failed:', error)
+      return { files: [] }
+    }
   }
 
-  async listRemote({ request }: HttpContext) {
+  async listRemote({ request, response }: HttpContext) {
     const payload = await request.validateUsing(listRemoteZimValidator)
     const { start = 0, count = 12, query, language } = payload
-    return await this.zimService.listRemote({ start, count, query, language })
+    try {
+      return await this.zimService.listRemote({ start, count, query, language })
+    } catch (error: any) {
+      logger.error('[ZimController] listRemote() failed:', error)
+      return response.ok({
+        items: [],
+        has_more: false,
+        total_count: 0,
+        next_start: start,
+      })
+    }
   }
 
-  async listCatalogLanguages({}: HttpContext) {
-    return { languages: await this.zimService.listCatalogLanguages() }
+  async listCatalogLanguages({ }: HttpContext) {
+    try {
+      return { languages: await this.zimService.listCatalogLanguages() }
+    } catch {
+      return { languages: [] }
+    }
   }
 
   async downloadRemote({ request, response }: HttpContext) {
@@ -75,8 +94,13 @@ export default class ZimController {
     }
   }
 
-  async listCuratedCategories({}: HttpContext) {
-    return await this.zimService.listCuratedCategories()
+  async listCuratedCategories({ }: HttpContext) {
+    try {
+      return await this.zimService.listCuratedCategories()
+    } catch (error: any) {
+      logger.error('[ZimController] listCuratedCategories() failed:', error)
+      return []
+    }
   }
 
   async downloadCategoryTier({ request, response }: HttpContext) {
@@ -101,7 +125,7 @@ export default class ZimController {
     }
   }
 
-  async rescanLibrary({}: HttpContext) {
+  async rescanLibrary({ }: HttpContext) {
     const result = await this.zimService.rescanLibrary()
     return {
       message: 'Kiwix library rescanned',
@@ -203,7 +227,7 @@ export default class ZimController {
       logger.error('[ZimController] Upload failed:', error)
       if (tmpPath) {
         const { unlink } = await import('fs/promises')
-        await unlink(tmpPath).catch(() => {})
+        await unlink(tmpPath).catch(() => { })
       }
       return response.status(500).send({ message: 'Upload failed' })
     }
@@ -211,19 +235,35 @@ export default class ZimController {
 
   // Wikipedia selector endpoints
 
-  async getWikipediaState({}: HttpContext) {
-    return this.zimService.getWikipediaState()
+  async getWikipediaState({ }: HttpContext) {
+    try {
+      return await this.zimService.getWikipediaState()
+    } catch (error: any) {
+      logger.error('[ZimController] getWikipediaState() failed:', error)
+      return { options: [], currentSelection: null }
+    }
   }
 
-  async selectWikipedia({ request }: HttpContext) {
+  async selectWikipedia({ request, response }: HttpContext) {
     const payload = await request.validateUsing(selectWikipediaValidator)
-    return this.zimService.selectWikipedia(payload.optionId)
+    try {
+      return await this.zimService.selectWikipedia(payload.optionId, payload.targetDisk)
+    } catch (error: any) {
+      return response.badRequest({
+        success: false,
+        message: error?.message || 'Falha ao iniciar seleção da Wikipédia.',
+      })
+    }
   }
 
   // Custom library endpoints
 
-  async listCustomLibraries({}: HttpContext) {
-    return this.zimService.listCustomLibraries()
+  async listCustomLibraries({ }: HttpContext) {
+    try {
+      return await this.zimService.listCustomLibraries()
+    } catch {
+      return []
+    }
   }
 
   async addCustomLibrary({ request, response }: HttpContext) {

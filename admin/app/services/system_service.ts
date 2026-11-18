@@ -340,6 +340,11 @@ export class SystemService {
 
     for (const service of services) {
       const status = statuses.find((s) => s.service_name === service.service_name)
+      const isExternalLocal = Boolean(status?.isExternal)
+      const resolvedUiLocation =
+        isExternalLocal && status?.hostPort
+          ? String(status.hostPort)
+          : service.ui_location || ''
       toReturn.push({
         id: service.id,
         service_name: service.service_name,
@@ -349,7 +354,7 @@ export class SystemService {
         installed: service.installed,
         installation_status: service.installation_status,
         status: status ? status.status : 'unknown',
-        ui_location: service.ui_location || '',
+        ui_location: resolvedUiLocation,
         custom_url: service.custom_url,
         powered_by: service.powered_by,
         display_order: service.display_order,
@@ -362,6 +367,9 @@ export class SystemService {
         is_link_tile: service.is_link_tile,
         link_color: service.link_color,
         category: service.category,
+        ...(isExternalLocal
+          ? { node: 'local' as const, node_label: 'Docker Local (Vinculado)' }
+          : {}),
       })
     }
 
@@ -1057,7 +1065,9 @@ export class SystemService {
    * Containers that exist but are stopped, paused, or restarting will still be considered installed.
    * Returns the fetched service status list so callers can reuse it without a second Docker API call.
    */
-  private async _syncContainersWithDatabase(): Promise<{ service_name: string; status: string }[]> {
+  private async _syncContainersWithDatabase(): Promise<
+    { service_name: string; status: string; hostPort?: number; isExternal?: boolean }[]
+  > {
     try {
       const allServices = await Service.all()
       const serviceStatusList = await this.dockerService.getServicesStatus()

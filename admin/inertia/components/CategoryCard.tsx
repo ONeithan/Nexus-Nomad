@@ -26,8 +26,9 @@ const CategoryCard: React.FC<CategoryCardProps> = ({ category, selectedTier, onC
     return total
   }
 
-  const minSize = getTierTotalSize(category.tiers[0], category.tiers)
-  const maxSize = getTierTotalSize(category.tiers[category.tiers.length - 1], category.tiers)
+  const safeTiers = Array.isArray(category.tiers) ? category.tiers : []
+  const minSize = safeTiers.length > 0 ? getTierTotalSize(safeTiers[0], safeTiers) : 0
+  const maxSize = safeTiers.length > 0 ? getTierTotalSize(safeTiers[safeTiers.length - 1], safeTiers) : 0
 
   // Priority order for the prominent corner badge + lime border:
   //   1. selectedTier — in-session wizard pick (highest priority, reflects
@@ -37,10 +38,10 @@ const CategoryCard: React.FC<CategoryCardProps> = ({ category, selectedTier, onC
   //      any single file has finished downloading
   //   3. installedTierSlug — fully on disk
   const downloadingTier = !selectedTier && category.downloadingTierSlug
-    ? category.tiers.find((t) => t.slug === category.downloadingTierSlug)
+    ? safeTiers.find((t) => t.slug === category.downloadingTierSlug)
     : null
   const installedTier = !selectedTier && !downloadingTier && category.installedTierSlug
-    ? category.tiers.find((t) => t.slug === category.installedTierSlug)
+    ? safeTiers.find((t) => t.slug === category.installedTierSlug)
     : null
   const badgeTier = selectedTier || downloadingTier || installedTier
   const badgeStatus: 'selected' | 'downloading' | 'installed' | null = selectedTier
@@ -89,14 +90,14 @@ const CategoryCard: React.FC<CategoryCardProps> = ({ category, selectedTier, onC
 
       <div className="mt-4 pt-4 border-t border-white/20">
         <p className="text-sm text-gray-300 mb-2">
-          {category.tiers.length}{' '}
-          {category.tiers.length === 1 ? 'nível disponível' : 'níveis disponíveis'}
+          {safeTiers.length}{' '}
+          {safeTiers.length === 1 ? 'nível disponível' : 'níveis disponíveis'}
           {!highlightedTierSlug && (
             <span className="text-gray-400"> - Clique para escolher</span>
           )}
         </p>
         <div className="flex flex-wrap gap-2">
-          {category.tiers.map((tier) => {
+          {safeTiers.map((tier) => {
             const isInstalled = tier.slug === highlightedTierSlug
             return (
               <span

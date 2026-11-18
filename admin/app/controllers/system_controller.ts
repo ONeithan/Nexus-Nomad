@@ -1,6 +1,5 @@
 import { DockerService } from '#services/docker_service';
 import { SystemService } from '#services/system_service'
-import KVStore from '#models/kv_store'
 import { SystemUpdateService } from '#services/system_update_service'
 import { ContainerRegistryService } from '#services/container_registry_service'
 import { AutoUpdateService } from '#services/auto_update_service'
@@ -69,9 +68,9 @@ export default class SystemController {
     async installService({ request, response }: HttpContext) {
         const payload = await request.validateUsing(installServiceValidator);
 
-        // Check if deploy target is Portainer (Remote Server) or Local
+        // Check if deploy target is Portainer (Remote Server) or Local (defaults to Local)
         const portainerEnabled = await this.systemService.isPortainerEnabled()
-        const target = payload.target || (portainerEnabled ? ((await KVStore.getValue('portainer.deployTarget')) || 'portainer') : 'local')
+        const target = payload.target || 'local'
         if (target === 'portainer' && portainerEnabled) {
             const result = await this.systemService.deployToPortainer(payload.service_name)
             if (result.success) {
@@ -86,6 +85,26 @@ export default class SystemController {
             response.send({ success: true, message: result.message });
         } else {
             response.status(400).send({ success: false, message: result.message });
+        }
+    }
+
+    async rescanDockerServices({ response }: HttpContext) {
+        try {
+            this.dockerService.invalidateServicesStatusCache()
+            const services = await this.systemService.getServices({ installedOnly: false })
+            const linked = services.filter((s) => s.installed)
+            return response.send({
+                success: true,
+                linkedCount: linked.length,
+                linkedNames: linked.map((s) => s.friendly_name || s.service_name),
+                services,
+            })
+        } catch (error: any) {
+            logger.error({ err: error }, '[SystemController] rescanDockerServices failed')
+            return response.status(500).send({
+                success: false,
+                message: 'Falha ao sincronizar contêineres Docker/Portainer.',
+            })
         }
     }
 
@@ -141,8 +160,7 @@ export default class SystemController {
         const portainerEnabled = await this.systemService.isPortainerEnabled();
         const isRemote =
             portainerEnabled &&
-            ((await this.systemService.portainerService.isDeployedRemotely(payload.service_name)) ||
-                ((await KVStore.getValue('portainer.deployTarget')) || 'portainer') === 'portainer');
+            (await this.systemService.portainerService.isDeployedRemotely(payload.service_name));
 
         if (isRemote) {
             await this.systemService.portainerService.undeployService(payload.service_name, false).catch(() => {});

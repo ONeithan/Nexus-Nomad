@@ -377,7 +377,9 @@ export default function MapsManager(props: {
                   </span>
                   <span
                     className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold border ${
-                      props.maps.storage?.isPrimaryDisk !== false
+                      currentMapsDiskPath === storageOverview?.storageRoot ||
+                      (props.maps.storage?.isPrimaryDisk !== false &&
+                        !storageOverview?.moduleLocations?.['maps']?.isSymlink)
                         ? 'bg-surface-secondary text-text-primary border-border-default'
                         : 'bg-desert-green/15 text-desert-green border-desert-green/30'
                     }`}
@@ -386,8 +388,13 @@ export default function MapsManager(props: {
                       props.maps.storage?.currentDiskLabel ||
                       'Armazenamento Interno NOMAD'}
                   </span>
-                  {(storageOverview?.moduleLocations?.['maps']?.isSymlink ||
-                    props.maps.storage?.isSymlink) && (
+                  {Boolean(
+                    (storageOverview?.moduleLocations?.['maps']?.isSymlink ||
+                      props.maps.storage?.isSymlink) &&
+                      currentMapsDiskPath &&
+                      storageOverview?.storageRoot &&
+                      currentMapsDiskPath !== storageOverview.storageRoot
+                  ) && (
                     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-desert-orange/15 text-desert-orange border border-desert-orange/30">
                       <IconLink className="size-3.5" />
                       Link Ativo (HD Secundário)
@@ -424,7 +431,9 @@ export default function MapsManager(props: {
                     loading={switchingDisk}
                     onClick={applyDiskMoveNow}
                   >
-                    Mover & Vincular Mapas Neste HD
+                    {(props.maps.regionFiles?.length ?? 0) > 0
+                      ? 'Mover & Vincular Mapas Neste HD'
+                      : 'Vincular Pasta de Mapas neste HD'}
                   </StyledButton>
                 )}
                 <Link

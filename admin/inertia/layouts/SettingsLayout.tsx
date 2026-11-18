@@ -15,18 +15,38 @@ import {
   IconPalette,
   IconServer,
   IconSettings,
+  IconShieldCheck,
   IconWand,
   IconZoom
 } from '@tabler/icons-react'
-import { usePage } from '@inertiajs/react'
+import { useEffect } from 'react'
+import { Link, usePage } from '@inertiajs/react'
 import StyledSidebar from '~/components/StyledSidebar'
 import { getServiceLink } from '~/lib/navigation'
 import useCreatorPacks from '~/hooks/useCreatorPacks'
 import TacticalBootGate from '~/components/TacticalBootGate'
+import type { AuthStatusPayload } from '../../types/auth'
 
 export default function SettingsLayout({ children }: { children: React.ReactNode }) {
-  const { aiAssistantName } = usePage<{ aiAssistantName: string }>().props
+  const { aiAssistantName, authUser } = usePage<{
+    aiAssistantName: string
+    authUser?: AuthStatusPayload | null
+  }>().props
   const { configured: creatorPacksConfigured } = useCreatorPacks()
+  const isLevel1Restricted =
+    authUser?.authenticated && authUser?.operator && authUser.operator.roleLevel <= 1
+  const currentPath = typeof window !== 'undefined' ? window.location.pathname : ''
+  const blockSettingsForLevel1 = isLevel1Restricted && currentPath !== '/settings/profile'
+
+  useEffect(() => {
+    const root = document.documentElement
+    root.dataset.uiContext = 'settings'
+    return () => {
+      if (root.dataset.uiContext === 'settings') {
+        delete root.dataset.uiContext
+      }
+    }
+  }, [])
 
   const aiLabel =
     aiAssistantName && aiAssistantName !== 'AI Assistant' && aiAssistantName !== 'Assistente de IA'
@@ -34,6 +54,7 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
       : 'Assistente de IA'
 
   const navigation = [
+    { name: 'Perfil & Operadores', href: '/settings/profile', icon: IconShieldCheck, current: false },
     { name: 'Sistema & Discos', href: '/settings/system', icon: IconSettings, current: false },
     { name: 'Armazenamento & Samba', href: '/settings/storage', icon: IconDatabase, current: false },
     { name: 'Downloads Ativos', href: '/settings/downloads', icon: IconDownload, current: false },
@@ -68,8 +89,40 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
   return (
     <TacticalBootGate>
       <div className="min-h-screen flex flex-row bg-surface-secondary/90">
-        <StyledSidebar title="Configurações" items={navigation} />
-        {children}
+        <StyledSidebar
+          title="Configurações"
+          items={isLevel1Restricted ? navigation.slice(0, 1) : navigation}
+        />
+        {blockSettingsForLevel1 ? (
+          <div className="xl:pl-72 w-full flex items-center justify-center p-8">
+            <div className="max-w-md w-full chamfer-box p-6 text-center space-y-4">
+              <h2 className="text-xl font-bold text-desert-orange">
+                Acesso Restrito (Nível 1)
+              </h2>
+              <p className="text-sm text-text-secondary leading-relaxed">
+                Sua conta possui autorização{' '}
+                <strong>{authUser?.operator?.badgeLabel}</strong> (somente Painel Inicial e
+                Perfil). Para liberar acesso às configurações, solicite ao Administrador Nível 5.
+              </p>
+              <div className="flex flex-wrap justify-center gap-3 pt-2">
+                <Link
+                  href="/home"
+                  className="px-4 py-2 rounded-lg bg-desert-green text-white text-xs font-bold hover:opacity-90"
+                >
+                  Voltar ao Início
+                </Link>
+                <Link
+                  href="/settings/profile"
+                  className="px-4 py-2 rounded-lg border border-border-default bg-surface-primary text-xs font-semibold text-text-primary hover:border-desert-green"
+                >
+                  Abrir Meu Perfil
+                </Link>
+              </div>
+            </div>
+          </div>
+        ) : (
+          children
+        )}
       </div>
     </TacticalBootGate>
   )

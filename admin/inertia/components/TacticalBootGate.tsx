@@ -1,28 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react'
-import { usePage } from '@inertiajs/react'
+import { router, usePage } from '@inertiajs/react'
+import type { AuthStatusPayload } from '../../types/auth'
 
-export interface TacticalOperator {
-  username: string
-  passwordHash: string
-  level: string
-  isMaster?: boolean
-  createdAt: string
-}
-
-interface NomadAuthDBState {
-  setupCompleted: boolean
-  operators: TacticalOperator[]
-  activeSession: {
-    username: string
-    level: string
-    remember: boolean
-  } | null
-  lockedExplicitly?: boolean
-}
-
-const AUTH_STORAGE_KEY = 'nomad_tactical_auth_v4'
-const LEGACY_STORAGE_KEYS = ['nomad_tactical_auth_v4', 'nomad_auth_db_v3', 'nomad_auth_db_v2']
-const SESSION_UNLOCKED_KEY = 'nomad_session_unlocked_v4'
+const LEGACY_STORAGE_KEYS = [
+  'nomad_tactical_auth_v4',
+  'nomad_auth_db_v3',
+  'nomad_auth_db_v2',
+  'nomad_session_unlocked_v4',
+]
 const PENDING_APP_ACTION_KEY = 'nomad:pending_app_action'
 
 export interface PendingAppAction {
@@ -56,171 +41,102 @@ function consumePendingAppAction(): PendingAppAction | null {
   return null
 }
 
-// Flag em memória do documento: é false ao abrir o site ou dar F5 (reload),
-// e passa a true após exibir a tela rápida "INICIALIZANDO NEXUS N.O.M.A.D. OS..."
-// para que a navegação interna entre páginas não repita o boot.
+// Flag em memória do documento: evita repetir o boot rápido durante navegação SPA interna.
 let hasBootedInCurrentDocument = false
+let latestAuthStatusCache: AuthStatusPayload | null = null
 
-function parseAuthState(raw: string | null | undefined): NomadAuthDBState | null {
-  if (!raw || typeof raw !== 'string') return null
-  try {
-    const parsed = JSON.parse(raw)
-    if (!parsed || typeof parsed !== 'object') return null
-    const operators = Array.isArray(parsed.operators) ? parsed.operators : []
-    return {
-      setupCompleted: Boolean(parsed.setupCompleted) || operators.length > 0,
-      operators,
-      activeSession: parsed.activeSession || null,
-      lockedExplicitly: Boolean(parsed.lockedExplicitly),
-    }
-  } catch {
-    return null
+function clearLegacyClientAuthStorage() {
+  if (typeof window === 'undefined') return
+  for (const key of LEGACY_STORAGE_KEYS) {
+    try {
+      localStorage.removeItem(key)
+      sessionStorage.removeItem(key)
+    } catch {}
   }
 }
 
-function loadAuthDB(serverRaw?: string | null): NomadAuthDBState {
-  const mergedOps: TacticalOperator[] = []
-  let setupCompleted = false
-  let activeSession: NomadAuthDBState['activeSession'] = null
-  let lockedExplicitly = false
-
-  const mergeFrom = (state: NomadAuthDBState | null) => {
-    if (!state) return
-    if (state.setupCompleted) setupCompleted = true
-    if (state.lockedExplicitly) lockedExplicitly = true
-    if (state.activeSession && !activeSession) {
-      activeSession = state.activeSession
-    }
-    for (const op of state.operators) {
-      if (
-        op &&
-        op.username &&
-        !mergedOps.some((existing) => existing.username.toLowerCase() === op.username.toLowerCase())
-      ) {
-        mergedOps.push(op)
-      }
-    }
-  }
-
-  // 1. Prioriza o banco de dados SQLite do servidor (KVStore 'auth.operators')
-  const parsedServer = parseAuthState(serverRaw)
-  mergeFrom(parsedServer)
-
-  // 2. Mescla com localStorage (incluindo chaves de versões anteriores para nunca perder dados)
+function updateCachedAuthStatus(next: AuthStatusPayload | null) {
+  latestAuthStatusCache = next
   if (typeof window !== 'undefined') {
-    for (const key of LEGACY_STORAGE_KEYS) {
-      try {
-        const parsedLocal = parseAuthState(localStorage.getItem(key))
-        mergeFrom(parsedLocal)
-      } catch {
-        // ignore
-      }
-    }
-    // A chave primária local ou do servidor decide o estado de bloqueio atual (evita trava por chave legada)
-    const primaryLocal = parseAuthState(localStorage.getItem(AUTH_STORAGE_KEY))
-    if (primaryLocal) {
-      lockedExplicitly = Boolean(primaryLocal.lockedExplicitly)
-    } else if (parsedServer) {
-      lockedExplicitly = Boolean(parsedServer.lockedExplicitly)
-    }
-  }
-
-  if (mergedOps.length > 0) {
-    setupCompleted = true
-    if (!activeSession && !lockedExplicitly) {
-      activeSession = {
-        username: mergedOps[0].username,
-        level: mergedOps[0].level,
-        remember: true,
-      }
-    }
-  }
-
-  return {
-    setupCompleted,
-    operators: mergedOps,
-    activeSession,
-    lockedExplicitly,
+    window.dispatchEvent(new CustomEvent('nomad:operator-updated'))
   }
 }
 
-function saveAuthDB(state: NomadAuthDBState) {
-  if (typeof window === 'undefined') return
-  try {
-    const serialized = JSON.stringify(state)
-    localStorage.setItem(AUTH_STORAGE_KEY, serialized)
-    for (const key of LEGACY_STORAGE_KEYS) {
-      if (key !== AUTH_STORAGE_KEY && localStorage.getItem(key)) {
-        localStorage.setItem(key, serialized)
-      }
-    }
-  } catch {
-    // ignore storage errors
-  }
-}
-
-async function syncAuthDBToServer(state: NomadAuthDBState) {
-  try {
-    await fetch('/api/settings', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        key: 'auth.operators',
-        value: JSON.stringify({
-          setupCompleted: state.setupCompleted,
-          operators: state.operators,
-          activeSession: state.activeSession,
-          lockedExplicitly: Boolean(state.lockedExplicitly),
-        }),
-      }),
-    })
-  } catch {
-    // Non-fatal offline fallback
-  }
-}
-
-export function getActiveOperator(serverRaw?: string | null): { username: string; level: string } {
-  const db = loadAuthDB(serverRaw)
-  if (db.activeSession) {
+export function getActiveOperator(
+  authInput?: AuthStatusPayload | string | null
+): { username: string; level: string; roleLevel: number; shortLabel: string } {
+  const payload =
+    authInput && typeof authInput === 'object' ? authInput : latestAuthStatusCache
+  const op = payload?.operator
+  if (op) {
     return {
-      username: db.activeSession.username,
-      level: db.activeSession.level,
+      username: op.username,
+      level: op.badgeLabel,
+      roleLevel: op.roleLevel,
+      shortLabel: op.shortLabel,
     }
   }
-  if (db.operators.length > 0) {
+  if (payload?.locked && payload.lockedUsername) {
     return {
-      username: db.operators[0].username,
-      level: db.operators[0].level,
+      username: payload.lockedUsername,
+      level: payload.lockedRoleLabel || 'TERMINAL BLOQUEADO',
+      roleLevel: 0,
+      shortLabel: 'Bloqueado',
     }
   }
   return {
-    username: 'OPERADOR',
-    level: 'NÍVEL 05 // COMANDO-GERAL',
+    username: 'Operador',
+    level: 'NÍVEL 05 // ADMIN TOTAL',
+    roleLevel: 5,
+    shortLabel: 'Admin Total',
   }
 }
 
-export function lockTacticalConsole() {
+export async function lockTacticalConsole() {
   if (typeof window === 'undefined') return
-  const db = loadAuthDB()
-  if (db.operators.length === 0) {
-    // Sem operador cadastrado: não trava em tela de login sem usuário; abre registro rápido no terminal
-    window.dispatchEvent(new CustomEvent('nomad:lock-no-operator'))
-    return
-  }
-  db.activeSession = null
-  db.lockedExplicitly = true
-  saveAuthDB(db)
-  syncAuthDBToServer(db)
-  sessionStorage.removeItem(SESSION_UNLOCKED_KEY)
+  try {
+    const res = await fetch('/api/auth/lock', { method: 'POST', credentials: 'same-origin' })
+    const data = await res.json().catch(() => null)
+    if (res.ok && data?.success) {
+      updateCachedAuthStatus({
+        needsOnboarding: false,
+        hasOperators: true,
+        authenticated: false,
+        locked: true,
+        lockedUsername: data.lockedUsername || latestAuthStatusCache?.operator?.username || null,
+        lockedRoleLabel: latestAuthStatusCache?.operator?.badgeLabel || null,
+        operator: null,
+      })
+      window.dispatchEvent(
+        new CustomEvent('nomad:lock-console', {
+          detail: { lockedUsername: data.lockedUsername || '' },
+        })
+      )
+      return
+    }
+  } catch {}
   window.dispatchEvent(new CustomEvent('nomad:lock-console'))
+}
+
+export async function logoutTacticalConsole() {
+  if (typeof window === 'undefined') return
+  try {
+    await fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' })
+  } catch {}
+  updateCachedAuthStatus({
+    needsOnboarding: false,
+    hasOperators: true,
+    authenticated: false,
+    locked: false,
+    lockedUsername: null,
+    lockedRoleLabel: null,
+    operator: null,
+  })
+  window.dispatchEvent(new CustomEvent('nomad:logout-console'))
 }
 
 export function rebootNomadSystem() {
   if (typeof window === 'undefined') return
-  const db = loadAuthDB()
-  db.lockedExplicitly = false
-  saveAuthDB(db)
-  syncAuthDBToServer(db)
   hasBootedInCurrentDocument = false
   window.dispatchEvent(new CustomEvent('nomad:system-reboot'))
 }
@@ -515,21 +431,39 @@ const BOOT_SCOPED_CSS = `
 `
 
 export default function TacticalBootGate({ children }: { children: React.ReactNode }) {
-  const { tacticalAuth, appVersion } = usePage<{
-    tacticalAuth?: string | null
+  const { authUser, appVersion } = usePage<{
+    authUser?: AuthStatusPayload | null
     appVersion?: string
   }>().props
   const displayVersion =
     appVersion && appVersion !== '0.0.0' && appVersion !== 'dev'
       ? `v${appVersion.replace(/^v/i, '').replace(/-nexus$/i, '')}`
-      : 'v1.0.28'
+      : 'v1.0.29'
+
+  const [authState, setAuthState] = useState<AuthStatusPayload | null>(() => {
+    if (authUser) {
+      latestAuthStatusCache = authUser
+      return authUser
+    }
+    return latestAuthStatusCache
+  })
+
+  useEffect(() => {
+    if (authUser) {
+      latestAuthStatusCache = authUser
+      setAuthState(authUser)
+    }
+  }, [authUser])
 
   const [stage, setStage] = useState<BootStage>(() => {
-    const initialDb = loadAuthDB(tacticalAuth)
-    if (initialDb.lockedExplicitly && initialDb.operators.length > 0) {
+    const initial = authUser ?? latestAuthStatusCache
+    if (initial?.needsOnboarding) {
+      return 'CRT_POWERON'
+    }
+    if (initial?.locked || (!initial?.authenticated && initial?.hasOperators)) {
       return 'LOGIN_SCREEN'
     }
-    if (!hasBootedInCurrentDocument && initialDb.setupCompleted && initialDb.operators.length > 0) {
+    if (!hasBootedInCurrentDocument && initial?.authenticated) {
       return 'CLEAN_BOOT_OS'
     }
     return 'UNLOCKED'
@@ -556,26 +490,17 @@ export default function TacticalBootGate({ children }: { children: React.ReactNo
   const [tpmStatus, setTpmStatus] = useState('CRIPTOGRAFANDO CREDENCIAIS NO BANCO LOCAL...')
   const [regSubmitting, setRegSubmitting] = useState(false)
 
-  // Login states
-  const [loginUser, setLoginUser] = useState(() => {
-    const db = loadAuthDB(tacticalAuth)
-    return db.operators[0]?.username || ''
-  })
+  // Login / Unlock states
+  const [loginUser, setLoginUser] = useState(() => authUser?.lockedUsername || '')
   const [loginPass, setLoginPass] = useState('')
   const [showLoginPass, setShowLoginPass] = useState(false)
   const [rememberSession, setRememberSession] = useState(true)
   const [loginError, setLoginError] = useState('')
+  const [loginSubmitting, setLoginSubmitting] = useState(false)
 
   // Finalizing stage states
   const [finPct] = useState(0)
   const [finStatus] = useState('Sincronizando subsistemas táticos e módulos offline...')
-
-  // Subordinate operator modal states
-  const [showAddOpModal, setShowAddOpModal] = useState(false)
-  const [subOpName, setSubOpName] = useState('')
-  const [subOpPass, setSubOpPass] = useState('')
-  const [subOpLevel, setSubOpLevel] = useState('NÍVEL 03 // OPERADOR TÁTICO (Mapas & IA)')
-  const [subOpSuccess, setSubOpSuccess] = useState('')
 
   const terminalBodyRef = useRef<HTMLDivElement>(null)
   const bootLogRef = useRef<HTMLDivElement>(null)
@@ -613,38 +538,61 @@ export default function TacticalBootGate({ children }: { children: React.ReactNo
     const bootStartedThisMount = hasBootedInCurrentDocument
 
     async function initGate() {
-      let db = loadAuthDB(tacticalAuth)
-
-      // Se não veio no sharedData nem no localStorage, consulta a API do banco SQLite com query param correto (?key=auth.operators)
-      if (db.operators.length === 0) {
-        try {
-          const res = await fetch('/api/settings?key=auth.operators')
-          if (res.ok) {
-            const data = await res.json()
-            if (data?.value) {
-              db = loadAuthDB(data.value)
-            }
+      let currentStatus: AuthStatusPayload | null = authUser ?? null
+      try {
+        const res = await fetch('/api/auth/status', {
+          cache: 'no-store',
+          credentials: 'same-origin',
+        })
+        if (res.ok) {
+          const data = await res.json().catch(() => null)
+          if (data && typeof data === 'object' && typeof data.needsOnboarding === 'boolean') {
+            currentStatus = data as AuthStatusPayload
           }
-        } catch {
-          // ignore
         }
+      } catch {
+        // Fallback to Inertia prop when network hiccups
       }
 
       if (!mounted) return
 
-      // Garante sincronização bidirecional imediata: salva no localStorage e no SQLite do servidor
-      if (db.operators.length > 0) {
-        saveAuthDB(db)
-        if (!tacticalAuth) {
-          syncAuthDBToServer(db)
-        }
-        window.dispatchEvent(new CustomEvent('nomad:operator-updated'))
+      if (currentStatus) {
+        updateCachedAuthStatus(currentStatus)
+        setAuthState(currentStatus)
       }
 
-      if (db.lockedExplicitly && db.operators.length > 0) {
+      if (currentStatus?.needsOnboarding) {
+        clearLegacyClientAuthStorage()
+        if (!bootStartedThisMount && !initialBootStartedRef.current) {
+          initialBootStartedRef.current = true
+          hasBootedInCurrentDocument = true
+          startColdBootSequence()
+        } else {
+          hasBootedInCurrentDocument = true
+          startFirstBootRecovery()
+        }
+        return
+      }
+
+      if (currentStatus?.locked) {
         hasBootedInCurrentDocument = true
+        setLoginUser(currentStatus.lockedUsername || '')
+        setLoginPass('')
+        setLoginError('')
         setStage('LOGIN_SCREEN')
-      } else if (!bootStartedThisMount && !initialBootStartedRef.current && db.setupCompleted && db.operators.length > 0) {
+        return
+      }
+
+      if (currentStatus && !currentStatus.authenticated && currentStatus.hasOperators) {
+        hasBootedInCurrentDocument = true
+        setLoginUser('')
+        setLoginPass('')
+        setLoginError('')
+        setStage('LOGIN_SCREEN')
+        return
+      }
+
+      if (!bootStartedThisMount && !initialBootStartedRef.current) {
         initialBootStartedRef.current = true
         hasBootedInCurrentDocument = true
         runCleanStabilizedOSBoot('UNLOCKED', 280, false)
@@ -656,12 +604,39 @@ export default function TacticalBootGate({ children }: { children: React.ReactNo
 
     initGate()
 
-    const handleLock = () => {
-      const db = loadAuthDB(tacticalAuth)
-      if (db.operators.length === 0) return
-      if (!loginUser) {
-        setLoginUser(db.operators[0].username)
-      }
+    const handleLock = (ev: Event) => {
+      const detail = (ev as CustomEvent<{ lockedUsername?: string }>)?.detail
+      const targetUser =
+        detail?.lockedUsername ||
+        latestAuthStatusCache?.lockedUsername ||
+        latestAuthStatusCache?.operator?.username ||
+        ''
+      setAuthState((prev) => ({
+        needsOnboarding: false,
+        hasOperators: true,
+        authenticated: false,
+        locked: true,
+        lockedUsername: targetUser || null,
+        lockedRoleLabel: prev?.operator?.badgeLabel || prev?.lockedRoleLabel || null,
+        operator: null,
+      }))
+      setLoginUser(targetUser)
+      setLoginPass('')
+      setLoginError('')
+      setStage('LOGIN_SCREEN')
+    }
+
+    const handleLogout = () => {
+      setAuthState({
+        needsOnboarding: false,
+        hasOperators: true,
+        authenticated: false,
+        locked: false,
+        lockedUsername: null,
+        lockedRoleLabel: null,
+        operator: null,
+      })
+      setLoginUser('')
       setLoginPass('')
       setLoginError('')
       setStage('LOGIN_SCREEN')
@@ -675,27 +650,25 @@ export default function TacticalBootGate({ children }: { children: React.ReactNo
 
     const handleReboot = () => {
       clearAllTimers()
-      const db = loadAuthDB(tacticalAuth)
-      if (db.operators.length > 0) {
-        setLoginUser(db.operators[0].username)
-      }
       setLoginPass('')
       setLoginError('')
 
       // Dispara o restart do contêiner em paralelo e já exibe a animação imediatamente
-      fetch('/api/system/restart-nomad', { method: 'POST' }).catch(() => null)
+      fetch('/api/system/restart-nomad', { method: 'POST', credentials: 'same-origin' }).catch(() => null)
 
       hasBootedInCurrentDocument = true
       runCleanStabilizedOSBoot('UNLOCKED', 420, true)
     }
 
     window.addEventListener('nomad:lock-console', handleLock)
+    window.addEventListener('nomad:logout-console', handleLogout)
     window.addEventListener('nomad:lock-no-operator', handleLockNoOp)
     window.addEventListener('nomad:system-reboot', handleReboot)
     return () => {
       mounted = false
       clearAllTimers()
       window.removeEventListener('nomad:lock-console', handleLock)
+      window.removeEventListener('nomad:logout-console', handleLogout)
       window.removeEventListener('nomad:lock-no-operator', handleLockNoOp)
       window.removeEventListener('nomad:system-reboot', handleReboot)
     }
@@ -756,7 +729,7 @@ export default function TacticalBootGate({ children }: { children: React.ReactNo
         {
           pct: 64,
           status: 'CARREGANDO BANCO DE AUTENTICAÇÃO...',
-          msg: '[ 0.2091 ] PROCURANDO TABELA DE OPERADORES (nomad_auth_db)...',
+          msg: '[ 0.2091 ] PROCURANDO TABELA DE OPERADORES (MySQL // nomad_operators)...',
           color: '#eab308',
         },
         {
@@ -937,7 +910,7 @@ export default function TacticalBootGate({ children }: { children: React.ReactNo
     }
   }
 
-  function handleMasterRegister(e: React.FormEvent) {
+  async function handleMasterRegister(e: React.FormEvent) {
     e.preventDefault()
     const user = regUser.trim()
     if (!user || !regPass) {
@@ -952,66 +925,69 @@ export default function TacticalBootGate({ children }: { children: React.ReactNo
     setRegError('')
     setRegSubmitting(true)
     setTpmProgressVisible(true)
-    setTpmPct(15)
-    setTpmStatus('GERANDO HASH CRIPTOGRÁFICO DE CREDENCIAIS...')
+    setTpmPct(20)
+    setTpmStatus('GERANDO HASH SCRYPT CRIPTOGRÁFICO DE CREDENCIAIS...')
 
-    setTimeout(() => {
-      setTpmPct(55)
-      setTpmStatus('CRIANDO TABELA DE OPERADORES (nomad_auth_db)...')
-    }, 450)
-
-    setTimeout(() => {
-      setTpmPct(90)
-      setTpmStatus('SELANDO CHAVE MESTRE NO CHIP TPM...')
-      const db = loadAuthDB(tacticalAuth)
-      const newOp: TacticalOperator = {
-        username: user,
-        passwordHash: btoa(unescape(encodeURIComponent(regPass))),
-        level: 'NÍVEL 05 // COMANDO-GERAL (SUPREMO)',
-        isMaster: true,
-        createdAt: new Date().toISOString(),
+    try {
+      const res = await fetch('/api/auth/setup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ username: user, password: regPass }),
+      })
+      const data = await res.json().catch(() => null)
+      if (!res.ok || !data?.success || !data?.operator) {
+        setTpmProgressVisible(false)
+        setRegSubmitting(false)
+        setRegError(data?.message || 'Não foi possível salvar o operador no banco de dados.')
+        triggerGlitch(180)
+        return
       }
-      db.operators = [
-        newOp,
-        ...db.operators.filter((o) => o.username.toLowerCase() !== user.toLowerCase()),
-      ]
-      db.setupCompleted = true
-      db.activeSession = {
-        username: newOp.username,
-        level: newOp.level,
-        remember: true,
-      }
-      db.lockedExplicitly = false
-      saveAuthDB(db)
-      syncAuthDBToServer(db)
-    }, 950)
 
-    setTimeout(() => {
-      setTpmPct(100)
-      setTpmStatus('OPERADOR MESTRE GRAVADO COM SUCESSO!')
-    }, 1350)
+      clearLegacyClientAuthStorage()
+      updateCachedAuthStatus({
+        needsOnboarding: false,
+        hasOperators: true,
+        authenticated: true,
+        locked: false,
+        lockedUsername: null,
+        lockedRoleLabel: null,
+        operator: data.operator,
+      })
+      setAuthState(latestAuthStatusCache)
 
-    setTimeout(() => {
-      triggerGlitch(220)
-      setTpmProgressVisible(false)
-      setRegSubmitting(false)
-      setRecoveryStep('AWAIT_INICIAR')
-      const safeUser = user.replace(/</g, '&lt;').replace(/>/g, '&gt;')
-      appendDynLog(`
-        <div style="color: #4ade80; font-weight: bold; margin-top: 6px;">[SUCESSO] Banco de Autenticação inicializado e Operador Mestre salvo!</div>
-        <div style="color: #ffffff; font-size: 12px;">[CREDENCIAL ATIVA] Usuário: <strong style="color: #c2a677;">${safeUser}</strong> | Nível: 05 SUPREMO | Status: <strong style="color: #4ade80;">AUTORIZADO</strong></div>
+      setTpmPct(70)
+      setTpmStatus('GRAVANDO OPERADOR MESTRE NO BANCO MYSQL (nomad_operators)...')
+
+      setTimeout(() => {
+        setTpmPct(100)
+        setTpmStatus('OPERADOR MESTRE GRAVADO NO BANCO COM SUCESSO!')
+      }, 450)
+
+      setTimeout(() => {
+        triggerGlitch(220)
+        setTpmProgressVisible(false)
+        setRegSubmitting(false)
+        setRecoveryStep('AWAIT_INICIAR')
+        const safeUser = data.operator.username.replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        appendDynLog(`
+        <div style="color: #4ade80; font-weight: bold; margin-top: 6px;">[SUCESSO] Banco de Autenticação inicializado e Operador Mestre salvo no MySQL!</div>
+        <div style="color: #ffffff; font-size: 12px;">[CREDENCIAL ATIVA] Usuário: <strong style="color: #c2a677;">${safeUser}</strong> | Nível: 05 ADMIN TOTAL | Status: <strong style="color: #4ade80;">AUTORIZADO</strong></div>
         <div style="margin: 8px 0; border-top: 1px solid #3d4d40; border-bottom: 1px solid #3d4d40; padding: 8px 0; font-size: 11.5px;">
           <div style="color: #eab308; font-weight: bold; margin-bottom: 4px;">=== HISTÓRICO DE TENTATIVAS ANTERIORES NO TERMINAL ===</div>
-          <div style="color: #ef4444;">[FALHA] 2026-11-13 02:14:01 | 'iniciar sistema' -&gt; TRAVOU (Falta de Operador Mestre)</div>
-          <div style="color: #ef4444;">[FALHA] 2026-11-13 03:40:22 | 'iniciar sistema' -&gt; ABORTADO (Assinatura de segurança ausente)</div>
-          <div style="color: #ef4444;">[FALHA] 2026-11-13 05:11:58 | 'iniciar sistema' -&gt; KERNEL LOCKUP (Registro corrompido)</div>
-          <div style="color: #728376; font-size: 11px; margin-top: 4px;">Todos os boots anteriores falharam por falta de autorização de Comando.</div>
+          <div style="color: #ef4444;">[FALHA] 'iniciar sistema' -&gt; BLOQUEADO (Banco de operadores ausente)</div>
+          <div style="color: #728376; font-size: 11px; margin-top: 4px;">Agora que existe um Administrador Nível 5 gravado, execute o comando final abaixo.</div>
         </div>
-        <div style="color: #86efac; font-size: 11.5px;">[AVISO] Credencial de Comando Supremo agora presente no buffer do Kernel.</div>
+        <div style="color: #86efac; font-size: 11.5px;">[AVISO] Sessão autenticada criada com cookie seguro no banco de dados.</div>
       `)
-      setRecoveryHint('INICIAR')
-      setTimeout(() => recoveryInputRef.current?.focus(), 80)
-    }, 1750)
+        setRecoveryHint('INICIAR')
+        setTimeout(() => recoveryInputRef.current?.focus(), 80)
+      }, 900)
+    } catch {
+      setTpmProgressVisible(false)
+      setRegSubmitting(false)
+      setRegError('Erro de comunicação com o servidor ao registrar operador.')
+    }
   }
 
   function runSystemStabilizationAndBoot() {
@@ -1055,10 +1031,14 @@ export default function TacticalBootGate({ children }: { children: React.ReactNo
         appendDynLog(`
           <div style="margin: 10px 0; padding: 10px; background: rgba(5, 46, 22, 0.85); border: 1px solid #16a34a; border-radius: 4px; text-align: center;">
             <strong style="color: #86efac; font-size: 13px;">✓ REPAROS DE KERNEL CONCLUÍDOS!</strong><br>
-            <span style="font-size: 11px; color: #8fa692;">Reinicializando o sistema NEXUS com vídeo estabilizado...</span>
+            <span style="font-size: 11px; color: #8fa692;">Inicializando Centro de Comando com sessão autenticada...</span>
           </div>
         `)
-        setTimeout(() => runCleanStabilizedOSBoot('LOGIN_SCREEN', 550), 1200)
+        setTimeout(() => {
+          hasBootedInCurrentDocument = true
+          runCleanStabilizedOSBoot('UNLOCKED', 420)
+          router.reload({ only: ['authUser'] })
+        }, 1100)
       }
     }
     setTimeout(nextRepair, 450)
@@ -1178,7 +1158,7 @@ export default function TacticalBootGate({ children }: { children: React.ReactNo
           {
             pct: 70,
             status: 'CONECTANDO BANCO DE AUTENTICAÇÃO...',
-            msg: '[ OK ] BANCO DE OPERADORES (nomad_auth_db) CARREGADO',
+            msg: '[ OK ] BANCO DE OPERADORES (MySQL // nomad_operators) CARREGADO',
           },
           {
             pct: 90,
@@ -1277,91 +1257,70 @@ export default function TacticalBootGate({ children }: { children: React.ReactNo
     registerTimeout(nextStep, 180)
   }
 
-  function handleMainLogin(e: React.FormEvent) {
+  const isLockedMode = Boolean(authState?.locked && authState?.lockedUsername)
+
+  async function handleMainLogin(e: React.FormEvent) {
     e.preventDefault()
-    const db = loadAuthDB(tacticalAuth)
-    const user = loginUser.trim()
-    const encodedPass = btoa(unescape(encodeURIComponent(loginPass)))
-    const encodedTrimmed = btoa(unescape(encodeURIComponent(loginPass.trim())))
-
-    const matched = db.operators.find((o) => {
-      const userMatch =
-        o.username.trim().toLowerCase() === user.toLowerCase() ||
-        (!user && db.operators.length === 1)
-      const passMatch =
-        o.passwordHash === encodedPass ||
-        o.passwordHash === encodedTrimmed ||
-        o.passwordHash === loginPass ||
-        o.passwordHash === loginPass.trim()
-      return userMatch && passMatch
-    })
-
-    if (!matched) {
-      setLoginError('ACESSO NEGADO: Usuário ou senha inválidos no banco nomad_auth_db.')
-      triggerGlitch(180)
-      return
-    }
+    if (loginSubmitting) return
 
     setLoginError('')
-    db.setupCompleted = true
-    db.lockedExplicitly = false
-    db.activeSession = {
-      username: matched.username,
-      level: matched.level,
-      remember: rememberSession,
+    setLoginSubmitting(true)
+
+    try {
+      const endpoint = isLockedMode ? '/api/auth/unlock' : '/api/auth/login'
+      const bodyPayload = isLockedMode
+        ? { password: loginPass }
+        : {
+            username: loginUser.trim(),
+            password: loginPass,
+            remember: rememberSession,
+          }
+
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify(bodyPayload),
+      })
+      const data = await res.json().catch(() => null)
+
+      if (!res.ok || !data?.success || !data?.operator) {
+        setLoginError(
+          data?.message ||
+            'ACESSO NEGADO: Usuário ou senha inválidos no banco de dados MySQL.'
+        )
+        triggerGlitch(180)
+        setLoginSubmitting(false)
+        return
+      }
+
+      const nextStatus: AuthStatusPayload = {
+        needsOnboarding: false,
+        hasOperators: true,
+        authenticated: true,
+        locked: false,
+        lockedUsername: null,
+        lockedRoleLabel: null,
+        operator: data.operator,
+      }
+      updateCachedAuthStatus(nextStatus)
+      setAuthState(nextStatus)
+      setLoginPass('')
+      setLoginError('')
+      setLoginSubmitting(false)
+      hasBootedInCurrentDocument = true
+      setStage('UNLOCKED')
+      router.reload({ only: ['authUser'] })
+    } catch {
+      setLoginError('Erro de comunicação com o servidor ao validar credenciais.')
+      triggerGlitch(180)
+      setLoginSubmitting(false)
     }
-    saveAuthDB(db)
-    syncAuthDBToServer(db)
-    sessionStorage.setItem(SESSION_UNLOCKED_KEY, 'true')
-    window.dispatchEvent(new CustomEvent('nomad:operator-updated'))
-
-    setStage('UNLOCKED')
-  }
-
-  function handleAddSubordinateOperator(e: React.FormEvent) {
-    e.preventDefault()
-    const name = subOpName.trim()
-    if (!name || !subOpPass) return
-
-    const db = loadAuthDB(tacticalAuth)
-    const newOp: TacticalOperator = {
-      username: name,
-      passwordHash: btoa(unescape(encodeURIComponent(subOpPass))),
-      level: subOpLevel,
-      isMaster: false,
-      createdAt: new Date().toISOString(),
-    }
-    db.operators = [
-      ...db.operators.filter((o) => o.username.toLowerCase() !== name.toLowerCase()),
-      newOp,
-    ]
-    db.setupCompleted = true
-    db.lockedExplicitly = false
-    saveAuthDB(db)
-    syncAuthDBToServer(db)
-
-    setLoginUser(name)
-    setSubOpName('')
-    setSubOpPass('')
-    setSubOpSuccess(`Operador '${name}' cadastrado com sucesso!`)
-    setTimeout(() => {
-      setSubOpSuccess('')
-      setShowAddOpModal(false)
-    }, 900)
   }
 
   function resetFullBootSimulation() {
     if (typeof window === 'undefined') return
-    for (const key of LEGACY_STORAGE_KEYS) {
-      localStorage.removeItem(key)
-    }
-    sessionStorage.removeItem(SESSION_UNLOCKED_KEY)
-    syncAuthDBToServer({
-      setupCompleted: false,
-      operators: [],
-      activeSession: null,
-      lockedExplicitly: false,
-    })
+    clearLegacyClientAuthStorage()
     startColdBootSequence()
   }
 
@@ -2141,11 +2100,11 @@ export default function TacticalBootGate({ children }: { children: React.ReactNo
             </div>
             <div>
               [ 0.078210 ] AUTH DATABASE:{' '}
-              <strong style={{ color: '#4ade80' }}>ONLINE (nomad_auth_db)</strong>
+              <strong style={{ color: '#4ade80' }}>ONLINE (MySQL // nomad_operators)</strong>
             </div>
           </div>
 
-          {/* Formulário de Login */}
+          {/* Formulário de Login / Desbloqueio */}
           <form
             onSubmit={handleMainLogin}
             style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}
@@ -2153,16 +2112,37 @@ export default function TacticalBootGate({ children }: { children: React.ReactNo
             <div
               className="font-mono-mil"
               style={{
-                color: '#c2a677',
+                color: isLockedMode ? '#eab308' : '#c2a677',
                 fontWeight: 'bold',
                 fontSize: '12px',
-                borderLeft: '2px solid #c2a677',
+                borderLeft: `2px solid ${isLockedMode ? '#eab308' : '#c2a677'}`,
                 paddingLeft: '8px',
                 textTransform: 'uppercase',
               }}
             >
-              ■ AUTENTICAÇÃO DE OPERADOR DE CAMPO:
+              {isLockedMode
+                ? `■ TERMINAL BLOQUEADO // ÚLTIMO OPERADOR ATIVO: ${authState?.lockedUsername || loginUser}`
+                : '■ LOGIN DE OPERADOR // AUTENTICAÇÃO VIA BANCO DE DADOS'}
             </div>
+
+            {isLockedMode && (
+              <div
+                className="font-mono-mil"
+                style={{
+                  fontSize: '11.5px',
+                  color: '#fde047',
+                  background: 'rgba(66, 32, 6, 0.5)',
+                  border: '1px solid rgba(234, 179, 8, 0.4)',
+                  borderRadius: '4px',
+                  padding: '8px 12px',
+                }}
+              >
+                Sessão bloqueada por segurança. Somente o último operador conectado (
+                <strong>{authState?.lockedUsername || loginUser}</strong>) pode desbloquear com a
+                senha. Para acessar outra conta, clique em{' '}
+                <strong>Deslogar / Trocar Usuário</strong> abaixo.
+              </div>
+            )}
 
             <div className="form-grid-2">
               <div>
@@ -2178,14 +2158,33 @@ export default function TacticalBootGate({ children }: { children: React.ReactNo
                 >
                   IDENTIFICAÇÃO / USUÁRIO:
                 </label>
-                <input
-                  type="text"
-                  required
-                  value={loginUser}
-                  onChange={(e) => setLoginUser(e.target.value)}
-                  placeholder="Digite seu usuário..."
-                  className="mil-input"
-                />
+                {isLockedMode ? (
+                  <div
+                    className="mil-input"
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      background: '#0d140f',
+                      borderColor: '#eab308',
+                      color: '#ffffff',
+                      fontWeight: 'bold',
+                    }}
+                  >
+                    <span>{authState?.lockedUsername || loginUser}</span>
+                    <span style={{ fontSize: '10px', color: '#eab308' }}>🔒 BLOQUEADO</span>
+                  </div>
+                ) : (
+                  <input
+                    type="text"
+                    required
+                    autoFocus
+                    value={loginUser}
+                    onChange={(e) => setLoginUser(e.target.value)}
+                    placeholder="Digite seu usuário..."
+                    className="mil-input"
+                  />
+                )}
               </div>
 
               <div>
@@ -2215,9 +2214,13 @@ export default function TacticalBootGate({ children }: { children: React.ReactNo
                     fontWeight: 'bold',
                     fontSize: '11.5px',
                     whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
                   }}
                 >
-                  NÍVEL 05 // COMANDO-GERAL
+                  {isLockedMode
+                    ? authState?.lockedRoleLabel || 'OPERADOR BLOQUEADO'
+                    : 'VALIDADO PELO BANCO (NÍVEL 01–05)'}
                 </div>
               </div>
 
@@ -2238,7 +2241,7 @@ export default function TacticalBootGate({ children }: { children: React.ReactNo
                       textTransform: 'uppercase',
                     }}
                   >
-                    SENHA DE CAMPO:
+                    {isLockedMode ? 'SENHA PARA DESBLOQUEAR:' : 'SENHA DE ACESSO:'}
                   </label>
                   <button
                     type="button"
@@ -2259,37 +2262,40 @@ export default function TacticalBootGate({ children }: { children: React.ReactNo
                 <input
                   type={showLoginPass ? 'text' : 'password'}
                   required
+                  autoFocus={isLockedMode}
                   value={loginPass}
                   onChange={(e) => setLoginPass(e.target.value)}
-                  placeholder="Digite sua senha..."
+                  placeholder={isLockedMode ? 'Digite sua senha para desbloquear...' : 'Digite sua senha...'}
                   className="mil-input"
                 />
               </div>
             </div>
 
-            <div>
-              <label
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  cursor: 'pointer',
-                  color: '#8fa692',
-                  fontSize: '12px',
-                  userSelect: 'none',
-                }}
-              >
-                <input
-                  type="checkbox"
-                  checked={rememberSession}
-                  onChange={(e) => setRememberSession(e.target.checked)}
-                  style={{ width: '16px', height: '16px', accentColor: '#22c55e' }}
-                />
-                <span>
-                  Vincular e manter autenticado neste dispositivo local (salvar sessão permanente)
-                </span>
-              </label>
-            </div>
+            {!isLockedMode && (
+              <div>
+                <label
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    cursor: 'pointer',
+                    color: '#8fa692',
+                    fontSize: '12px',
+                    userSelect: 'none',
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={rememberSession}
+                    onChange={(e) => setRememberSession(e.target.checked)}
+                    style={{ width: '16px', height: '16px', accentColor: '#22c55e' }}
+                  />
+                  <span>
+                    Manter conectado neste navegador (sessão salva por 30 dias via cookie seguro)
+                  </span>
+                </label>
+              </div>
+            )}
 
             {loginError && (
               <div
@@ -2310,7 +2316,7 @@ export default function TacticalBootGate({ children }: { children: React.ReactNo
             <div
               style={{
                 display: 'flex',
-                justifyContent: 'space-between',
+                justifyContent: isLockedMode ? 'space-between' : 'flex-end',
                 alignItems: 'center',
                 gap: '12px',
                 paddingTop: '10px',
@@ -2318,21 +2324,28 @@ export default function TacticalBootGate({ children }: { children: React.ReactNo
                 flexWrap: 'wrap',
               }}
             >
-              <button
-                type="button"
-                onClick={() => setShowAddOpModal(true)}
-                className="mil-btn"
-                style={{ color: '#8fa692' }}
-              >
-                ➕ CADASTRAR ACESSO PARA OUTRO OPERADOR
-              </button>
+              {isLockedMode && (
+                <button
+                  type="button"
+                  onClick={() => void logoutTacticalConsole()}
+                  className="mil-btn"
+                  style={{ color: '#eab308' }}
+                >
+                  ⎋ DESLOGAR / TROCAR USUÁRIO
+                </button>
+              )}
 
               <button
                 type="submit"
+                disabled={loginSubmitting}
                 className="mil-btn"
                 style={{ color: '#4ade80', padding: '10px 20px', fontSize: '12px' }}
               >
-                DESTRAVAR CONSOLE ➔
+                {loginSubmitting
+                  ? 'VERIFICANDO...'
+                  : isLockedMode
+                    ? 'DESBLOQUEAR TERMINAL ➔'
+                    : 'ENTRAR NO SISTEMA ➔'}
               </button>
             </div>
           </form>
@@ -2397,213 +2410,6 @@ export default function TacticalBootGate({ children }: { children: React.ReactNo
             style={{ fontSize: '12px', color: '#c2a677', fontWeight: 'bold' }}
           >
             {finStatus}
-          </div>
-        </div>
-      )}
-
-      {/* ========================================================================= */}
-      {/* 5. MODAL: CADASTRAR OPERADOR SUBORDINADO (SEM PASSAR PELO FIRST BOOT)     */}
-      {/* ========================================================================= */}
-      {showAddOpModal && (
-        <div
-          className="font-mono-mil"
-          style={{
-            position: 'fixed',
-            inset: 0,
-            zIndex: 10020,
-            background: 'rgba(7, 9, 8, 0.9)',
-            backdropFilter: 'blur(4px)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: '16px',
-          }}
-        >
-          <div
-            className="boot-chamfer"
-            style={{
-              width: '100%',
-              maxWidth: '440px',
-              border: '2px solid #c2a677',
-              background: '#141815',
-              padding: '20px',
-              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.85)',
-            }}
-          >
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                borderBottom: '1px solid #38453b',
-                paddingBottom: '12px',
-                marginBottom: '16px',
-              }}
-            >
-              <div
-                className="font-stencil"
-                style={{
-                  fontSize: '12px',
-                  fontWeight: 'bold',
-                  color: '#ffffff',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.05em',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                }}
-              >
-                <span
-                  style={{
-                    width: '10px',
-                    height: '10px',
-                    background: '#c2a677',
-                    borderRadius: '50%',
-                    display: 'inline-block',
-                  }}
-                />
-                <span>NOVO ACESSO // ALISTAMENTO DE OPERADOR</span>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowAddOpModal(false)}
-                style={{
-                  color: '#728376',
-                  background: 'transparent',
-                  border: 'none',
-                  fontWeight: 'bold',
-                  fontSize: '12px',
-                  cursor: 'pointer',
-                }}
-              >
-                [ ✕ FECHAR ]
-              </button>
-            </div>
-
-            <p style={{ fontSize: '11px', color: '#8fa692', marginBottom: '16px' }}>
-              Cadastre um operador adicional para acessar a base local. Esta conta não precisará
-              passar pelo processo de recuperação do sistema:{' '}
-              <strong style={{ color: '#ffffff' }}>ela acessa diretamente o console após o login.</strong>
-            </p>
-
-            <form
-              onSubmit={handleAddSubordinateOperator}
-              style={{ display: 'flex', flexDirection: 'column', gap: '12px', fontSize: '12px' }}
-            >
-              <div>
-                <label
-                  style={{
-                    display: 'block',
-                    fontSize: '10px',
-                    color: '#728376',
-                    textTransform: 'uppercase',
-                    fontWeight: 'bold',
-                    marginBottom: '4px',
-                  }}
-                >
-                  Nome do Operador:
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={subOpName}
-                  onChange={(e) => setSubOpName(e.target.value)}
-                  placeholder="Ex: Sargento_Silva, Operador_02..."
-                  className="mil-input"
-                />
-              </div>
-
-              <div>
-                <label
-                  style={{
-                    display: 'block',
-                    fontSize: '10px',
-                    color: '#728376',
-                    textTransform: 'uppercase',
-                    fontWeight: 'bold',
-                    marginBottom: '4px',
-                  }}
-                >
-                  Senha de Acesso:
-                </label>
-                <input
-                  type="password"
-                  required
-                  value={subOpPass}
-                  onChange={(e) => setSubOpPass(e.target.value)}
-                  placeholder="Digite a senha..."
-                  className="mil-input"
-                />
-              </div>
-
-              <div>
-                <label
-                  style={{
-                    display: 'block',
-                    fontSize: '10px',
-                    color: '#728376',
-                    textTransform: 'uppercase',
-                    fontWeight: 'bold',
-                    marginBottom: '4px',
-                  }}
-                >
-                  Nível de Autorização:
-                </label>
-                <select
-                  value={subOpLevel}
-                  onChange={(e) => setSubOpLevel(e.target.value)}
-                  className="mil-input"
-                  style={{ color: '#c2a677', fontWeight: 'bold' }}
-                >
-                  <option value="NÍVEL 01 // RECRUTA (Consulta Básica)">
-                    NÍVEL 01 // RECRUTA (Consulta Básica)
-                  </option>
-                  <option value="NÍVEL 03 // OPERADOR TÁTICO (Mapas & IA)">
-                    NÍVEL 03 // OPERADOR TÁTICO (Mapas &amp; IA)
-                  </option>
-                  <option value="NÍVEL 05 // OFICIAL DE COMANDO (Irrestrito)">
-                    NÍVEL 05 // OFICIAL DE COMANDO (Irrestrito)
-                  </option>
-                </select>
-              </div>
-
-              {subOpSuccess && (
-                <div
-                  style={{
-                    padding: '8px',
-                    borderRadius: '4px',
-                    background: '#0a2916',
-                    border: '1px solid #22c55e',
-                    color: '#4ade80',
-                    fontWeight: 'bold',
-                  }}
-                >
-                  {subOpSuccess}
-                </div>
-              )}
-
-              <div
-                style={{
-                  paddingTop: '8px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'flex-end',
-                  gap: '8px',
-                }}
-              >
-                <button
-                  type="button"
-                  onClick={() => setShowAddOpModal(false)}
-                  className="mil-btn"
-                  style={{ color: '#cbd5e1' }}
-                >
-                  Cancelar
-                </button>
-                <button type="submit" className="mil-btn" style={{ color: '#c2a677' }}>
-                  CADASTRAR ACESSO ➔
-                </button>
-              </div>
-            </form>
           </div>
         </div>
       )}

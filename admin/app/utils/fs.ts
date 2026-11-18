@@ -1,4 +1,4 @@
-import { mkdir, open, readdir, readFile, stat, unlink } from 'fs/promises'
+import { lstat, mkdir, open, readdir, readFile, readlink, realpath, rm, stat, unlink } from 'fs/promises'
 import path, { join } from 'path'
 import { FileEntry } from '../../types/files.js'
 import { createReadStream } from 'fs'
@@ -23,52 +23,113 @@ export const VAULTWARDEN_STORAGE_PATH = '/storage/vaultwarden'
 // _runPreinstallActions__MeshCoreWeb.
 export const MESHCORE_WEB_STORAGE_PATH = '/storage/meshcore-web'
 
-export async function listDirectoryContents(path: string): Promise<FileEntry[]> {
-  const entries = await readdir(path, { withFileTypes: true })
-  const results: FileEntry[] = []
-  for (const entry of entries) {
-    if (entry.isFile()) {
-      results.push({
-        type: 'file',
-        key: join(path, entry.name),
-        name: entry.name,
-      })
-    } else if (entry.isDirectory()) {
-      results.push({
-        type: 'directory',
-        prefix: join(path, entry.name),
-        name: entry.name,
-      })
-    }
-  }
-  return results
-}
-
-export async function listDirectoryContentsRecursive(path: string): Promise<FileEntry[]> {
-  let results: FileEntry[] = []
-  const entries = await readdir(path, { withFileTypes: true })
-  for (const entry of entries) {
-    const fullPath = join(path, entry.name)
-    if (entry.isDirectory()) {
-      const subdirectoryContents = await listDirectoryContentsRecursive(fullPath)
-      results = results.concat(subdirectoryContents)
-    } else {
-      results.push({
-        type: 'file',
-        key: fullPath,
-        name: entry.name,
-      })
-    }
-  }
-  return results
-}
-
-export async function ensureDirectoryExists(path: string): Promise<void> {
+export async function listDirectoryContents(dirPath: string): Promise<FileEntry[]> {
   try {
-    await stat(path)
+    const entries = await readdir(dirPath, { withFileTypes: true })
+    const results: FileEntry[] = []
+    for (const entry of entries) {
+      const fullPath = join(dirPath, entry.name)
+      if (entry.isFile()) {
+        results.push({
+          type: 'file',
+          key: fullPath,
+          name: entry.name,
+        })
+      } else if (entry.isDirectory()) {
+        results.push({
+          type: 'directory',
+          prefix: fullPath,
+          name: entry.name,
+        })
+      } else if (entry.isSymbolicLink()) {
+        try {
+          const st = await stat(fullPath)
+          if (st.isFile()) {
+            results.push({ type: 'file', key: fullPath, name: entry.name })
+          } else if (st.isDirectory()) {
+            results.push({ type: 'directory', prefix: fullPath, name: entry.name })
+          }
+        } catch {
+          // Ignore dangling/unmounted symlink entries instead of crashing
+        }
+      }
+    }
+    return results
+  } catch {
+    return []
+  }
+}
+
+export async function listDirectoryContentsRecursive(
+  dirPath: string,
+  visited = new Set<string>()
+): Promise<FileEntry[]> {
+  let results: FileEntry[] = []
+  try {
+    const real = await realpath(dirPath).catch(() => dirPath)
+    if (visited.has(real)) return []
+    visited.add(real)
+    const entries = await readdir(dirPath, { withFileTypes: true })
+    for (const entry of entries) {
+      const fullPath = join(dirPath, entry.name)
+      if (entry.isDirectory()) {
+        const subdirectoryContents = await listDirectoryContentsRecursive(fullPath, visited)
+        results = results.concat(subdirectoryContents)
+      } else if (entry.isFile()) {
+        results.push({
+          type: 'file',
+          key: fullPath,
+          name: entry.name,
+        })
+      } else if (entry.isSymbolicLink()) {
+        try {
+          const st = await stat(fullPath)
+          if (st.isDirectory()) {
+            const sub = await listDirectoryContentsRecursive(fullPath, visited)
+            results = results.concat(sub)
+          } else if (st.isFile()) {
+            results.push({ type: 'file', key: fullPath, name: entry.name })
+          }
+        } catch {
+          // Ignore dangling/broken symlinks
+        }
+      }
+    }
+  } catch {
+    return []
+  }
+  return results
+}
+
+export async function ensureDirectoryExists(targetPath: string): Promise<void> {
+  try {
+    await stat(targetPath)
+    return
   } catch (error: any) {
-    if (error.code === 'ENOENT') {
-      await mkdir(path, { recursive: true })
+    if (error.code !== 'ENOENT' && error.code !== 'ELOOP') {
+      throw error
+    }
+  }
+
+  // Handle dangling symlinks (lstat succeeds while stat fails with ENOENT)
+  const lst = await lstat(targetPath).catch(() => null)
+  if (lst?.isSymbolicLink()) {
+    try {
+      const linkTarget = await readlink(targetPath)
+      const resolvedTarget = path.resolve(path.dirname(targetPath), linkTarget)
+      await mkdir(resolvedTarget, { recursive: true })
+      await stat(targetPath)
+      return
+    } catch {
+      await rm(targetPath, { force: true }).catch(() => {})
+    }
+  }
+
+  try {
+    await mkdir(targetPath, { recursive: true })
+  } catch (mkdirErr: any) {
+    if (mkdirErr?.code !== 'EEXIST') {
+      throw mkdirErr
     }
   }
 }
@@ -108,7 +169,7 @@ export async function getFileStatsIfExists(
       modifiedTime: stats.mtime,
     }
   } catch (error: any) {
-    if (error.code === 'ENOENT') {
+    if (error.code === 'ENOENT' || error.code === 'ELOOP' || error.code === 'ENOTDIR') {
       return null
     }
     throw error

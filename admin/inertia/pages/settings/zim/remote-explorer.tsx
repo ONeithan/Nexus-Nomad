@@ -97,6 +97,7 @@ export default function ZimRemoteExplorer() {
 
   // Wikipedia selection state
   const [selectedWikipedia, setSelectedWikipedia] = useState<string | null>(null)
+  const [wikiTargetDisk, setWikiTargetDisk] = useState<string>('')
   const [isSubmittingWikipedia, setIsSubmittingWikipedia] = useState(false)
 
   // Custom library state - persist selection to localStorage
@@ -141,11 +142,12 @@ export default function ZimRemoteExplorer() {
   }, 400)
 
   // Fetch curated categories with tiers
-  const { data: categories } = useQuery({
+  const { data: categoriesRaw } = useQuery({
     queryKey: [CURATED_CATEGORIES_KEY],
     queryFn: () => api.listCuratedCategories(),
     refetchOnWindowFocus: false,
   })
+  const categories = Array.isArray(categoriesRaw) ? categoriesRaw : []
 
   // Fetch Wikipedia options and state
   const { data: wikipediaState, isLoading: isLoadingWikipedia } = useQuery({
@@ -154,26 +156,29 @@ export default function ZimRemoteExplorer() {
     refetchOnWindowFocus: false,
   })
 
-  const { data: localFiles } = useQuery<ZimFileWithMetadata[]>({
+  const { data: localFilesRaw } = useQuery<ZimFileWithMetadata[]>({
     queryKey: [ZIM_FILES_KEY],
     queryFn: async () => {
       const res = await api.listZimFiles()
-      return res?.data?.files || []
+      return Array.isArray(res?.data?.files) ? res.data.files : []
     },
     refetchOnWindowFocus: false,
   })
+  const localFiles = Array.isArray(localFilesRaw) ? localFilesRaw : []
 
-  const { data: downloads, invalidate: invalidateDownloads } = useDownloads({
+  const { data: downloadsRaw, invalidate: invalidateDownloads } = useDownloads({
     filetype: 'zim',
     enabled: true,
   })
+  const downloads = Array.isArray(downloadsRaw) ? downloadsRaw : []
 
   // Fetch custom libraries
-  const { data: customLibraries } = useQuery({
+  const { data: customLibrariesRaw } = useQuery({
     queryKey: [CUSTOM_LIBRARIES_KEY],
     queryFn: () => api.listCustomLibraries(),
     refetchOnWindowFocus: false,
   })
+  const customLibraries = Array.isArray(customLibrariesRaw) ? customLibrariesRaw : []
 
   // Browse custom library directory
   const {
@@ -190,12 +195,13 @@ export default function ZimRemoteExplorer() {
 
   // The catalog's own language list, so the options are exactly what can be browsed and
   // each carries a real book count. Returns [] when offline; the selector hides itself.
-  const { data: catalogLanguages } = useQuery({
+  const { data: catalogLanguagesRaw } = useQuery({
     queryKey: [CATALOG_LANGUAGES_KEY],
     queryFn: () => api.listCatalogLanguages(),
     refetchOnWindowFocus: false,
     staleTime: 1000 * 60 * 60,
   })
+  const catalogLanguages = Array.isArray(catalogLanguagesRaw) ? catalogLanguagesRaw : []
 
   const { data, fetchNextPage, isFetching, isLoading } =
     useInfiniteQuery<ListRemoteZimFilesResponse>({
@@ -226,12 +232,14 @@ export default function ZimRemoteExplorer() {
     })
 
   const flatData = useMemo(() => {
-    const mapped = data?.pages.flatMap((page) => page.items) || []
-    const localNames = new Set(localFiles?.map((f) => f.name) ?? [])
+    const pages = Array.isArray(data?.pages) ? data.pages : []
+    const mapped = pages.flatMap((page) => (Array.isArray(page?.items) ? page.items : []))
+    const localNames = new Set(localFiles.map((f) => f.name))
     let filtered = mapped.filter((item) => {
-      const isDownloading = downloads?.some((download) => {
+      if (!item || typeof item.download_url !== 'string') return false
+      const isDownloading = downloads.some((download) => {
         const filename = item.download_url.split('/').pop()
-        return filename && download.filepath.endsWith(filename)
+        return Boolean(filename && download.filepath?.endsWith(filename))
       })
       const isPresent = localNames.has(item.file_name)
       return !isDownloading && !isPresent
@@ -615,7 +623,15 @@ export default function ZimRemoteExplorer() {
 
     setIsSubmittingWikipedia(true)
     try {
-      const result = await api.selectWikipedia(selectedWikipedia)
+      const chosenDisk =
+        selectedWikipedia !== 'none'
+          ? wikiTargetDisk ||
+            storageOverview?.moduleLocations?.['zim']?.currentDiskPath ||
+            storageOverview?.preferredDownloadDisk ||
+            storageOverview?.storageRoot ||
+            undefined
+          : undefined
+      const result = await api.selectWikipedia(selectedWikipedia, chosenDisk)
       if (result?.success) {
         addNotification({
           message:
@@ -731,8 +747,8 @@ export default function ZimRemoteExplorer() {
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-desert-green"></div>
               </div>
             </div>
-          ) : wikipediaState && wikipediaState.options.length > 0 ? (
-            <div className="mt-8 bg-surface-primary rounded-lg border border-border-subtle p-6">
+          ) : wikipediaState && Array.isArray(wikipediaState.options) && wikipediaState.options.length > 0 ? (
+            <div className="mt-8 bg-surface-primary rounded-lg border border-border-subtle p-6 space-y-4">
               <WikipediaSelector
                 options={wikipediaState.options}
                 currentSelection={wikipediaState.currentSelection}
@@ -743,6 +759,30 @@ export default function ZimRemoteExplorer() {
                 onSubmit={handleWikipediaSubmit}
                 isSubmitting={isSubmittingWikipedia}
               />
+              {selectedWikipedia &&
+                selectedWikipedia !== 'none' &&
+                selectedWikipedia !== wikipediaState.currentSelection?.optionId && (
+                  <div className="pt-3 border-t border-border-subtle">
+                    <TargetDiskSelector
+                      moduleKey="zim"
+                      value={
+                        wikiTargetDisk ||
+                        storageOverview?.moduleLocations?.['zim']?.currentDiskPath ||
+                        storageOverview?.preferredDownloadDisk ||
+                        storageOverview?.storageRoot ||
+                        ''
+                      }
+                      onChange={setWikiTargetDisk}
+                      requiredBytes={
+                        ((wikipediaState.options.find((o) => o.id === selectedWikipedia)?.size_mb) || 0) *
+                        1024 *
+                        1024
+                      }
+                      disabled={isSubmittingWikipedia}
+                      title="Onde Salvar a Wikipédia (HD de Destino):"
+                    />
+                  </div>
+                )}
             </div>
           ) : null}
 
@@ -958,9 +998,11 @@ export default function ZimRemoteExplorer() {
                     accessor: 'updated',
                     title: renderSortHeader('Atualizado', 'updated'),
                     render(record) {
+                      const d = record.updated ? new Date(record.updated) : null
+                      if (!d || Number.isNaN(d.getTime())) return '—'
                       return new Intl.DateTimeFormat('pt-BR', {
                         dateStyle: 'medium',
-                      }).format(new Date(record.updated))
+                      }).format(d)
                     },
                   },
                   {
@@ -1074,7 +1116,7 @@ export default function ZimRemoteExplorer() {
                             </div>
                           )}
                         </div>
-                        {record.tags && (
+                        {typeof record.tags === 'string' && record.tags.trim().length > 0 && (
                           <div className="mt-4 flex flex-wrap gap-2">
                             {record.tags
                               .split(';')
@@ -1211,34 +1253,72 @@ export default function ZimRemoteExplorer() {
               )}
             </div>
           )}
-          {/* Central de Conteúdo Kolibri (respeita idioma e prioriza PT-BR) */}
+          {/* Central de Conteúdo Kolibri (importação guiada direto no Kolibri Device) */}
           <div className="mt-12 mb-6">
             <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
               <div>
                 <StyledSectionHeader title="Central de Conteúdo Kolibri" className="!mb-0" />
                 <p className="text-xs text-text-muted mt-1">
-                  Canais educacionais para importar diretamente na sua biblioteca Kolibri (prioridade PT-BR).
+                  Importe canais educacionais diretamente pela aba <strong>Dispositivo → Canais → Importar → Kolibri Studio</strong> do seu Kolibri (filtre por Português).
                 </p>
               </div>
-              <span
-                className={`px-2.5 py-1 rounded-full text-xs font-semibold border ${
-                  kolibriInstalled
-                    ? 'bg-desert-green/15 text-desert-green border-desert-green/40'
-                    : 'bg-surface-secondary text-text-muted border-border-default'
-                }`}
-              >
-                {kolibriInstalled ? 'Kolibri Instalado' : 'Kolibri não instalado'}
-              </span>
+              <div className="flex flex-wrap items-center gap-2">
+                <span
+                  className={`px-2.5 py-1 rounded-full text-xs font-semibold border ${
+                    kolibriInstalled
+                      ? 'bg-desert-green/15 text-desert-green border-desert-green/40'
+                      : 'bg-surface-secondary text-text-muted border-border-default'
+                  }`}
+                >
+                  {kolibriInstalled ? 'Kolibri Instalado' : 'Kolibri não instalado'}
+                </span>
+                {kolibriInstalled && (() => {
+                  const baseKolibriUrl =
+                    typeof window !== 'undefined'
+                      ? getServiceLink(
+                          kolibriServiceMatch?.ui_location || '8310',
+                          kolibriServiceMatch?.custom_url
+                        ).replace(/\/+$/, '')
+                      : 'http://localhost:8310'
+                  return (
+                    <>
+                      <a
+                        href={`${baseKolibriUrl}/pt-br/device/#/content`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="px-3 py-1.5 rounded-lg bg-desert-green text-white hover:bg-btn-green-hover text-xs font-bold"
+                      >
+                        Importar Canais no Kolibri
+                      </a>
+                      <a
+                        href={`${baseKolibriUrl}/pt-br/learn/#/library`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="px-3 py-1.5 rounded-lg border border-border-default bg-surface-secondary hover:border-desert-orange text-text-primary text-xs font-semibold"
+                      >
+                        Abrir Biblioteca
+                      </a>
+                    </>
+                  )
+                })()}
+              </div>
             </div>
 
             {(() => {
+              const kolibriBaseUrl =
+                typeof window !== 'undefined'
+                  ? getServiceLink(
+                      kolibriServiceMatch?.ui_location || '8310',
+                      kolibriServiceMatch?.custom_url
+                    ).replace(/\/+$/, '')
+                  : 'http://localhost:8310'
               const kolibriChannels = [
                 {
                   id: 'khan-pt-br',
                   title: 'Khan Academy em Português (Brasil)',
                   lang: 'por',
                   langLabel: 'PT-BR (Prioritário)',
-                  token: 'khan-academy-pt-br',
+                  searchQuery: 'Khan Academy (Português - Brasil)',
                   size: '~18 GB (completo) / Modular',
                   description:
                     'Matemática, Ciências, Física, Química, Biologia e Programação completos em Português do Brasil.',
@@ -1248,37 +1328,37 @@ export default function ZimRemoteExplorer() {
                   title: 'Wikipédia para Escolas (PT-BR)',
                   lang: 'por',
                   langLabel: 'PT-BR (Prioritário)',
-                  token: 'wikipedia-pt',
+                  searchQuery: 'Wikipedia',
                   size: '~4.5 GB',
                   description:
-                    'Seleção curada de artigos enciclopédicos em Português para ensino fundamental e médio offline.',
+                    'Seleção curada de artigos enciclopédicos para ensino fundamental e médio offline (use o filtro de idioma Português).',
                 },
                 {
                   id: 'phet-pt-br',
                   title: 'Simulações Interativas PhET (PT-BR)',
                   lang: 'por',
                   langLabel: 'PT-BR (Prioritário)',
-                  token: 'phet-pt-br',
+                  searchQuery: 'PhET Interactive Simulations',
                   size: '~650 MB',
                   description:
-                    'Laboratórios virtuais interativos de Física, Química, Matemática e Ciências da Terra traduzidos.',
+                    'Laboratórios virtuais interativos de Física, Química, Matemática e Ciências traduzidos para Português.',
                 },
                 {
                   id: 'pratham-pt',
                   title: 'Leitura e Alfabetização StoryWeaver (PT-BR)',
                   lang: 'por',
                   langLabel: 'PT-BR (Prioritário)',
-                  token: 'storyweaver-pt',
+                  searchQuery: 'StoryWeaver',
                   size: '~1.2 GB',
                   description:
-                    'Livros ilustrados e materiais de alfabetização infantil e juvenil em Português.',
+                    'Livros ilustrados e materiais de alfabetização infantil e juvenil (filtre por idioma Português na importação).',
                 },
                 {
                   id: 'khan-en',
                   title: 'Khan Academy (English)',
                   lang: 'eng',
                   langLabel: 'EN',
-                  token: 'khan-academy-en',
+                  searchQuery: 'Khan Academy (English - US)',
                   size: '~35 GB',
                   description: 'Currículo completo da Khan Academy em Inglês.',
                 },
@@ -1311,6 +1391,9 @@ export default function ZimRemoteExplorer() {
                           </span>
                         </div>
                         <p className="text-xs text-text-secondary mt-1.5">{ch.description}</p>
+                        <div className="mt-2 text-[0.6875rem] font-mono text-text-muted">
+                          Buscar no Kolibri Studio: <strong className="text-text-primary">{ch.searchQuery}</strong>
+                        </div>
                       </div>
                       <div className="flex flex-wrap items-center justify-between gap-2 pt-2.5 border-t border-border-subtle text-[0.6875rem]">
                         <span className="font-mono text-text-muted">Tamanho: {ch.size}</span>
@@ -1318,31 +1401,24 @@ export default function ZimRemoteExplorer() {
                           <button
                             type="button"
                             onClick={() => {
-                              navigator.clipboard?.writeText(ch.token)
+                              navigator.clipboard?.writeText(ch.searchQuery)
                               addNotification({
-                                message: `Identificador "${ch.token}" copiado! Cole em Dispositivo → Canais → Importar no Kolibri.`,
+                                message: `Nome "${ch.searchQuery}" copiado! No Kolibri aberto em Dispositivo → Canais → Importar → Kolibri Studio, pesquise este canal ou importe via token do studio.learningequality.org.`,
                                 type: 'success',
                               })
                             }}
                             className="px-2.5 py-1 rounded border border-border-default bg-surface-secondary hover:border-desert-orange text-text-primary font-medium cursor-pointer"
                           >
-                            Copiar Token
+                            Copiar Busca
                           </button>
                           {kolibriInstalled && (
                             <a
-                              href={
-                                typeof window !== 'undefined'
-                                  ? getServiceLink(
-                                      kolibriServiceMatch?.ui_location || '8310',
-                                      kolibriServiceMatch?.custom_url
-                                    )
-                                  : 'http://localhost:8310'
-                              }
+                              href={`${kolibriBaseUrl}/pt-br/device/#/content`}
                               target="_blank"
                               rel="noopener noreferrer"
                               className="px-2.5 py-1 rounded bg-desert-green text-white hover:bg-btn-green-hover font-medium"
                             >
-                              Abrir Kolibri
+                              Importar no Kolibri
                             </a>
                           )}
                         </div>

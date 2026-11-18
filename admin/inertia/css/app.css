@@ -129,6 +129,21 @@ html[data-ui-scale="100"] {
   font-size: 16px;
 }
 
+/* Na área de Configurações (/settings/*), preserva proporção equilibrada para sidebar, tabelas e formulários */
+html[data-ui-context="settings"] {
+  font-size: 16px !important;
+}
+
+@media (min-width: 1536px) {
+  html[data-ui-context="settings"] {
+    font-size: 16.5px !important;
+  }
+}
+
+html[data-ui-context="settings"] svg.tabler-icon {
+  zoom: 1 !important;
+}
+
 body {
   background-color: var(--color-desert-sand);
   color: var(--color-text-primary);

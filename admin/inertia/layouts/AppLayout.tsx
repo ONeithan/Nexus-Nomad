@@ -3,13 +3,28 @@ import Footer from '~/components/Footer'
 import ChatButton from '~/components/chat/ChatButton'
 import ChatModal from '~/components/chat/ChatModal'
 import AiChooserModal from '~/components/chat/AiChooserModal'
-import TacticalBootGate, { lockTacticalConsole, rebootNomadSystem } from '~/components/TacticalBootGate'
+import TacticalBootGate, {
+  lockTacticalConsole,
+  logoutTacticalConsole,
+  rebootNomadSystem,
+} from '~/components/TacticalBootGate'
 import { useAiStatus } from '~/hooks/useAiStatus'
 import { Link, router, usePage } from '@inertiajs/react'
-import { IconArrowLeft, IconHome, IconLock, IconServer, IconBook, IconRotateClockwise, IconSettings } from '@tabler/icons-react'
+import {
+  IconArrowLeft,
+  IconHome,
+  IconLock,
+  IconLogout,
+  IconServer,
+  IconBook,
+  IconRotateClockwise,
+  IconSettings,
+  IconShieldCheck,
+} from '@tabler/icons-react'
 import { Dialog, DialogBackdrop, DialogPanel } from '@headlessui/react'
 import classNames from 'classnames'
 import AppCatalogModal from '~/components/AppCatalogModal'
+import type { AuthStatusPayload } from '../../types/auth'
 
 export default function AppLayout({
   children,
@@ -28,7 +43,10 @@ export default function AppLayout({
   const [isCatalogOpen, setIsCatalogOpen] = useState(false)
   const [isRebootModalOpen, setIsRebootModalOpen] = useState(false)
   const aiStatus = useAiStatus()
-  const page = usePage()
+  const page = usePage<{ authUser?: AuthStatusPayload | null }>()
+  const authUser = page.props?.authUser
+  const isLevel1Restricted =
+    Boolean(authUser?.authenticated && authUser?.operator && authUser.operator.roleLevel <= 1)
   const currentPath = page.url || ''
   const isHome =
     currentPath === '/home' ||
@@ -155,26 +173,51 @@ export default function AppLayout({
               )}
 
               <Link
-                href="/settings/system"
-                title="Configurações"
-                aria-label="Configurações"
-                className="group relative inline-flex items-center justify-center w-9 h-9 rounded-md border border-border-default bg-surface-secondary hover:border-desert-tan text-text-secondary hover:text-text-primary transition-colors"
+                href="/settings/profile"
+                title="Perfil, Senha & Gerenciamento de Operadores"
+                aria-label="Perfil e Operadores"
+                className="group relative inline-flex items-center justify-center w-9 h-9 rounded-md border border-border-default bg-surface-secondary hover:border-desert-green text-text-secondary hover:text-desert-green transition-colors"
               >
-                <IconSettings size={18} />
+                <IconShieldCheck size={18} />
                 <span className="pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-150 absolute top-full right-0 mt-1.5 px-2 py-1 rounded bg-surface-primary border border-border-default shadow-lg text-[11px] font-semibold text-text-primary whitespace-nowrap z-50">
-                  Configurações
+                  Perfil &amp; Operadores
                 </span>
               </Link>
+              {!isLevel1Restricted && (
+                <Link
+                  href="/settings/system"
+                  title="Configurações"
+                  aria-label="Configurações"
+                  className="group relative inline-flex items-center justify-center w-9 h-9 rounded-md border border-border-default bg-surface-secondary hover:border-desert-tan text-text-secondary hover:text-text-primary transition-colors"
+                >
+                  <IconSettings size={18} />
+                  <span className="pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-150 absolute top-full right-0 mt-1.5 px-2 py-1 rounded bg-surface-primary border border-border-default shadow-lg text-[11px] font-semibold text-text-primary whitespace-nowrap z-50">
+                    Configurações
+                  </span>
+                </Link>
+              )}
               <button
                 type="button"
-                onClick={() => lockTacticalConsole()}
-                title="Bloquear Terminal"
+                onClick={() => void lockTacticalConsole()}
+                title="Bloquear Terminal (somente o usuário atual desbloqueia)"
                 aria-label="Bloquear Terminal"
                 className="group relative inline-flex items-center justify-center w-9 h-9 rounded-md border border-border-default bg-surface-secondary hover:border-status-warning text-text-secondary hover:text-status-warning transition-colors cursor-pointer"
               >
                 <IconLock size={17} />
                 <span className="pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-150 absolute top-full right-0 mt-1.5 px-2 py-1 rounded bg-surface-primary border border-border-default shadow-lg text-[11px] font-semibold text-text-primary whitespace-nowrap z-50">
                   Bloquear
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => void logoutTacticalConsole()}
+                title="Deslogar (Encerrar sessão para trocar de operador)"
+                aria-label="Deslogar"
+                className="group relative inline-flex items-center justify-center w-9 h-9 rounded-md border border-border-default bg-surface-secondary hover:border-red-500 text-text-secondary hover:text-red-400 transition-colors cursor-pointer"
+              >
+                <IconLogout size={17} />
+                <span className="pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-150 absolute top-full right-0 mt-1.5 px-2 py-1 rounded bg-surface-primary border border-border-default shadow-lg text-[11px] font-semibold text-text-primary whitespace-nowrap z-50">
+                  Deslogar
                 </span>
               </button>
               <button

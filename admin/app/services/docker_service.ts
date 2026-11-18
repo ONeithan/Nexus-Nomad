@@ -33,6 +33,10 @@ import {
   getConfiguredDefaultCredentials,
   injectDefaultCredentialEnv,
 } from '../utils/default_credentials.js'
+import {
+  containerMatchesCatalogService,
+  isNomadManagedContainer,
+} from '../utils/container_matcher.js'
 
 // Written by install_nomad.sh with the host AMD GPU's gfx target.
 const AMD_GFX_MARKER_PATH = '/app/storage/.nomad-amd-gfx'
@@ -56,8 +60,13 @@ export class DockerService {
   // storage volume relocates every child app too (#938). null = not yet resolved.
   private _hostStorageRoot: string | null = null
 
-  private _servicesStatusCache: { data: { service_name: string; status: string }[]; expiresAt: number } | null = null
-  private _servicesStatusInflight: Promise<{ service_name: string; status: string }[]> | null = null
+  private _servicesStatusCache: {
+    data: { service_name: string; status: string; hostPort?: number; isExternal?: boolean }[]
+    expiresAt: number
+  } | null = null
+  private _servicesStatusInflight: Promise<
+    { service_name: string; status: string; hostPort?: number; isExternal?: boolean }[]
+  > | null = null
 
   constructor() {
     // Support both Linux (production) and Windows (development with Docker Desktop)
@@ -178,7 +187,9 @@ export class DockerService {
    * Results are cached for 5 seconds and concurrent callers share a single in-flight request,
    * preventing Docker socket congestion during rapid page navigation.
    */
-  async getServicesStatus(): Promise<{ service_name: string; status: string }[]> {
+  async getServicesStatus(): Promise<
+    { service_name: string; status: string; hostPort?: number; isExternal?: boolean }[]
+  > {
     const now = Date.now()
     if (this._servicesStatusCache && now < this._servicesStatusCache.expiresAt) {
       return this._servicesStatusCache.data
@@ -205,10 +216,30 @@ export class DockerService {
     this._servicesStatusInflight = null
   }
 
-  private async _fetchServicesStatus(): Promise<{ service_name: string; status: string }[]> {
+  private async _fetchServicesStatus(): Promise<
+    { service_name: string; status: string; hostPort?: number; isExternal?: boolean }[]
+  > {
     try {
-      const containers = await this.docker.listContainers({ all: true })
-      const containerMap = new Map<string, Docker.ContainerInfo>()
+      const [containers, catalogServices] = await Promise.all([
+        this.docker.listContainers({ all: true }),
+        Service.query()
+          .where('is_dependency_service', false)
+          .where('is_link_tile', false)
+          .select('service_name', 'container_image', 'friendly_name')
+          .catch(() => []),
+      ])
+
+      const containerMap = new Map<
+        string,
+        { container: Docker.ContainerInfo; hostPort?: number; isExternal: boolean }
+      >()
+
+      const extractHostPort = (c: Docker.ContainerInfo): number | undefined => {
+        const pub = (c.Ports || []).find((p) => typeof p.PublicPort === 'number' && p.PublicPort > 0)
+        return pub?.PublicPort
+      }
+
+      // Pass 1: exact NOMAD-managed containers (nomad_* / nomad-nomad_*)
       containers.forEach((container) => {
         for (const raw of container.Names || []) {
           const clean = raw.replace(/^\//, '')
@@ -219,15 +250,50 @@ export class DockerService {
           if (normalized.startsWith('nomad_')) {
             const prev = containerMap.get(normalized)
             if (!prev || container.State === 'running') {
-              containerMap.set(normalized, container)
+              containerMap.set(normalized, {
+                container,
+                hostPort: extractHostPort(container),
+                isExternal: false,
+              })
             }
           }
         }
       })
 
-      return Array.from(containerMap.entries()).map(([name, container]) => ({
+      // Pass 2: link pre-existing local Docker containers (e.g. jellyfin, navidrome, komga)
+      // to unmatched catalog services so NOMAD shows their live state instead of "Instalar"
+      if (catalogServices.length > 0) {
+        for (const svc of catalogServices) {
+          if (containerMap.has(svc.service_name)) continue
+
+          const matched = containers.find((c) => {
+            const rawName = (c.Names?.[0] || '').replace(/^\//, '')
+            if (!rawName || rawName.endsWith('-init')) return false
+            return containerMatchesCatalogService(svc, {
+              name: rawName,
+              image: c.Image,
+              projectName: c.Labels?.['com.docker.compose.project'],
+              composeService: c.Labels?.['com.docker.compose.service'],
+            })
+          })
+
+          if (matched) {
+            const rawName = (matched.Names?.[0] || '').replace(/^\//, '')
+            const proj = matched.Labels?.['com.docker.compose.project'] || ''
+            containerMap.set(svc.service_name, {
+              container: matched,
+              hostPort: extractHostPort(matched),
+              isExternal: !isNomadManagedContainer(rawName, proj),
+            })
+          }
+        }
+      }
+
+      return Array.from(containerMap.entries()).map(([name, info]) => ({
         service_name: name,
-        status: container.State,
+        status: info.container.State,
+        hostPort: info.hostPort,
+        isExternal: info.isExternal,
       }))
     } catch (error: any) {
       logger.error(`Error fetching services status: ${error.message}`)
@@ -314,6 +380,23 @@ export class DockerService {
       }
       service.installed = false
       await service.save()
+    } else {
+      // Check if an existing matching container is already running locally (e.g. external user container)
+      const matchedExisting = await this._findContainerByName(serviceName)
+      if (matchedExisting) {
+        const rawName = (matchedExisting.Names?.[0] || '').replace(/^\//, '')
+        const proj = matchedExisting.Labels?.['com.docker.compose.project'] || ''
+        if (!isNomadManagedContainer(rawName, proj) && rawName.toLowerCase() !== serviceName.toLowerCase()) {
+          service.installed = true
+          service.installation_status = 'idle'
+          await service.save()
+          this.invalidateServicesStatusCache()
+          return {
+            success: true,
+            message: `Contêiner Docker existente (${rawName}) vinculado automaticamente ao N.O.M.A.D.`,
+          }
+        }
+      }
     }
 
     // Check if installation is already in progress (database-level)
@@ -2313,6 +2396,23 @@ export class DockerService {
       const container = await this._findContainerByName(serviceName)
       const imageRef = container?.Image
 
+      // Protect external user-managed containers from accidental deletion:
+      // if the matched container is not managed by NOMAD and isn't named after serviceName, unlink only.
+      if (container) {
+        const rawName = (container.Names?.[0] || '').replace(/^\//, '')
+        const proj = container.Labels?.['com.docker.compose.project'] || ''
+        if (
+          !isNomadManagedContainer(rawName, proj) &&
+          rawName.toLowerCase() !== serviceName.toLowerCase()
+        ) {
+          this.invalidateServicesStatusCache()
+          return {
+            success: true,
+            message: `Contêiner externo ${rawName} mantido intacto e desvinculado do N.O.M.A.D.`,
+          }
+        }
+      }
+
       // Always invoke _removeServiceContainer even when _findContainerByName is null,
       // so orphaned sidecars (e.g. /nomad-kiwix-init) or compose project containers are removed too.
       await this._removeServiceContainer(serviceName)
@@ -2349,10 +2449,27 @@ export class DockerService {
       return { success: false, message: `Service ${serviceName} not found` }
     }
 
-    // Container/image removal is shared with custom-app deletion — the lookup is by container
-    // name, which is the service_name for curated and custom apps alike.
-    const removal = await this.removeCustomAppContainer(serviceName, removeImage)
-    if (!removal.success) return removal
+    const container = await this._findContainerByName(serviceName)
+    let isExternalLinked = false
+    if (container) {
+      const rawName = (container.Names?.[0] || '').replace(/^\//, '')
+      const proj = container.Labels?.['com.docker.compose.project'] || ''
+      if (
+        !isNomadManagedContainer(rawName, proj) &&
+        rawName.toLowerCase() !== serviceName.toLowerCase()
+      ) {
+        isExternalLinked = true
+      }
+    }
+
+    if (!isExternalLinked) {
+      // Container/image removal is shared with custom-app deletion — the lookup is by container
+      // name, which is the service_name for curated and custom apps alike.
+      const removal = await this.removeCustomAppContainer(serviceName, removeImage)
+      if (!removal.success) return removal
+    } else {
+      logger.info(`[DockerService] Unlinking external container for ${serviceName} without deleting it.`)
+    }
 
     service.installed = false
     service.installation_status = 'idle'
@@ -2360,16 +2477,36 @@ export class DockerService {
     await service.save()
     this.invalidateServicesStatusCache()
 
-    return { success: true, message: `Serviço ${service.friendly_name || serviceName} desinstalado com sucesso.` }
+    return {
+      success: true,
+      message: isExternalLinked
+        ? `Vínculo com ${service.friendly_name || serviceName} removido no NOMAD (contêiner externo mantido intacto).`
+        : `Serviço ${service.friendly_name || serviceName} desinstalado com sucesso.`,
+    }
   }
 
-  /** Find a container by its managed service name (`/serviceName` or `/nomad-serviceName`), or null. */
+  /** Find a container by its managed service name (`/serviceName` or `/nomad-serviceName`) or matching external container. */
   private async _findContainerByName(serviceName: string) {
     const containers = await this.docker.listContainers({ all: true })
-    return (
+    const exact =
       containers.find((c) => c.Names.includes(`/${serviceName}`)) ??
       containers.find((c) => c.Names.includes(`/nomad-${serviceName}`)) ??
       null
+    if (exact) return exact
+
+    const svc = await Service.findBy('service_name', serviceName).catch(() => null)
+    const matchTarget = svc || { service_name: serviceName }
+    return (
+      containers.find((c) => {
+        const rawName = (c.Names?.[0] || '').replace(/^\//, '')
+        if (!rawName || rawName.endsWith('-init')) return false
+        return containerMatchesCatalogService(matchTarget, {
+          name: rawName,
+          image: c.Image,
+          projectName: c.Labels?.['com.docker.compose.project'],
+          composeService: c.Labels?.['com.docker.compose.service'],
+        })
+      }) ?? null
     )
   }
 

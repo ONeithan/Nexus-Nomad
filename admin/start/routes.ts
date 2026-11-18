@@ -7,6 +7,7 @@
 |
 */
 import AppTranslatorProxyController from '#controllers/app_translator_proxy_controller'
+import AuthController from '#controllers/auth_controller'
 import BenchmarkController from '#controllers/benchmark_controller'
 import CatalogController from '#controllers/catalog_controller'
 import ChatsController from '#controllers/chats_controller'
@@ -28,6 +29,7 @@ import SystemController from '#controllers/system_controller'
 import CollectionUpdatesController from '#controllers/collection_updates_controller'
 import CreatorPacksController from '#controllers/creator_packs_controller'
 import ZimController from '#controllers/zim_controller'
+import { middleware } from '#start/kernel'
 import router from '@adonisjs/core/services/router'
 import transmit from '@adonisjs/transmit/services/main'
 import { documented } from '#start/openapi/documented'
@@ -142,6 +144,24 @@ router
 
 router
   .group(() => {
+    router.get('/status', [AuthController, 'status'])
+    router.post('/setup', [AuthController, 'setup'])
+    router.post('/login', [AuthController, 'login'])
+    router.post('/lock', [AuthController, 'lock'])
+    router.post('/unlock', [AuthController, 'unlock'])
+    router.post('/logout', [AuthController, 'logout'])
+    router.post('/change-password', [AuthController, 'changePassword'])
+    router.get('/operators', [AuthController, 'listOperators'])
+    router.post('/operators', [AuthController, 'createOperator']).use(middleware.operatorPermission({ minLevel: 5 }))
+    router.patch('/operators/:id', [AuthController, 'updateOperator']).use(middleware.operatorPermission({ minLevel: 5 }))
+    router.delete('/operators/:id', [AuthController, 'deleteOperator']).use(middleware.operatorPermission({ minLevel: 5 }))
+    router.delete('/sessions/:id', [AuthController, 'revokeSession']).use(middleware.operatorPermission({ minLevel: 5 }))
+  })
+  .prefix('/api/auth')
+
+router
+  .group(() => {
+    router.get('/profile', [SettingsController, 'profile'])
     router.get('/system', [SettingsController, 'system'])
     router.get('/storage', [SettingsController, 'storage'])
     router.get('/downloads', [SettingsController, 'downloads'])
@@ -202,7 +222,7 @@ router
       summary: 'Queue a remote map download',
       tags: ['maps'],
       request: remoteDownloadValidator,
-    })
+    }).use(middleware.operatorPermission({ minLevel: 3 }))
     documented(router.post('/download-remote-preflight', [MapsController, 'downloadRemotePreflight']), {
       summary: 'Preflight a remote map download',
       tags: ['maps'],
@@ -212,7 +232,7 @@ router
       summary: 'Download a map collection',
       tags: ['maps'],
       request: downloadCollectionValidator,
-    })
+    }).use(middleware.operatorPermission({ minLevel: 3 }))
     documented(router.get('/global-map-info', [MapsController, 'globalMapInfo']), {
       summary: 'Get global map information',
       tags: ['maps'],
@@ -220,7 +240,7 @@ router
     documented(router.post('/download-global-map', [MapsController, 'downloadGlobalMap']), {
       summary: 'Download the global map',
       tags: ['maps'],
-    })
+    }).use(middleware.operatorPermission({ minLevel: 3 }))
     documented(router.get('/countries', [MapsController, 'listCountries']), {
       summary: 'List available countries',
       tags: ['maps'],
@@ -238,7 +258,7 @@ router
       summary: 'Extract a map region',
       tags: ['maps'],
       request: mapExtractValidator,
-    })
+    }).use(middleware.operatorPermission({ minLevel: 3 }))
     documented(router.get('/markers', [MapsController, 'listMarkers']), {
       summary: 'List map markers',
       tags: ['maps'],
@@ -246,20 +266,20 @@ router
     documented(router.post('/markers', [MapsController, 'createMarker']), {
       summary: 'Create a map marker',
       tags: ['maps'],
-    })
+    }).use(middleware.operatorPermission({ minLevel: 3 }))
     documented(router.patch('/markers/:id', [MapsController, 'updateMarker']), {
       summary: 'Update a map marker',
       tags: ['maps'],
-    })
+    }).use(middleware.operatorPermission({ minLevel: 3 }))
     documented(router.delete('/markers/:id', [MapsController, 'deleteMarker']), {
       summary: 'Delete a map marker',
       tags: ['maps'],
-    })
+    }).use(middleware.operatorPermission({ minLevel: 4 }))
     documented(router.delete('/:filename', [MapsController, 'delete']), {
       summary: 'Delete a map file',
       tags: ['maps'],
       params: filenameParamValidator,
-    })
+    }).use(middleware.operatorPermission({ minLevel: 4 }))
   })
   .prefix('/api/maps')
 
@@ -286,19 +306,19 @@ router
     documented(router.delete('/jobs/:jobId', [DownloadsController, 'removeJob']), {
       summary: 'Remove a download job',
       tags: ['downloads'],
-    })
+    }).use(middleware.operatorPermission({ minLevel: 4 }))
     documented(router.post('/jobs/:jobId/cancel', [DownloadsController, 'cancelJob']), {
       summary: 'Cancel a download job',
       tags: ['downloads'],
-    })
+    }).use(middleware.operatorPermission({ minLevel: 3 }))
     documented(router.post('/jobs/:jobId/retry', [DownloadsController, 'retryJob']), {
       summary: 'Retry a download job',
       tags: ['downloads'],
-    })
+    }).use(middleware.operatorPermission({ minLevel: 3 }))
     documented(router.post('/jobs/resume-all', [DownloadsController, 'resumeAll']), {
       summary: 'Resume all interrupted download jobs',
       tags: ['downloads'],
-    })
+    }).use(middleware.operatorPermission({ minLevel: 3 }))
     documented(router.get('/incomplete', [DownloadsController, 'incomplete']), {
       summary: 'List incomplete download files on disk',
       tags: ['downloads'],
@@ -306,11 +326,11 @@ router
     documented(router.delete('/incomplete', [DownloadsController, 'deleteIncomplete']), {
       summary: 'Delete an incomplete download file on disk',
       tags: ['downloads'],
-    })
+    }).use(middleware.operatorPermission({ minLevel: 4 }))
     documented(router.post('/incomplete/clear', [DownloadsController, 'clearOrphaned']), {
       summary: 'Clear all orphaned incomplete download files on disk',
       tags: ['downloads'],
-    })
+    }).use(middleware.operatorPermission({ minLevel: 4 }))
   })
   .prefix('/api/downloads')
 
@@ -348,12 +368,12 @@ router
       summary: 'Queue a model download',
       tags: ['ollama'],
       request: modelNameSchema,
-    })
+    }).use(middleware.operatorPermission({ minLevel: 3 }))
     documented(router.delete('/models', [OllamaController, 'deleteModel']), {
       summary: 'Delete a model',
       tags: ['ollama'],
       request: modelNameSchema,
-    })
+    }).use(middleware.operatorPermission({ minLevel: 4 }))
     documented(router.get('/installed-models', [OllamaController, 'installedModels']), {
       summary: 'List installed models',
       tags: ['ollama'],
@@ -571,6 +591,10 @@ router
       summary: 'List services',
       tags: ['system'],
     })
+    documented(router.post('/services/rescan-docker', [SystemController, 'rescanDockerServices']), {
+      summary: 'Rescan and auto-link existing Docker and Portainer containers',
+      tags: ['system'],
+    })
     documented(router.get('/services/portainer/status', [SystemController, 'getPortainerStatus']), {
       summary: 'Get Portainer integration status',
       tags: ['system'],
@@ -590,27 +614,27 @@ router
     documented(router.post('/restart-nomad', [SystemController, 'restartNomad']), {
       summary: 'Reinicia exclusivamente o contêiner do Nexus N.O.M.A.D.',
       tags: ['system'],
-    })
+    }).use(middleware.operatorPermission({ minLevel: 5 }))
     documented(router.post('/services/affect', [SystemController, 'affectService']), {
       summary: 'Start, stop, or restart a service',
       tags: ['system'],
       request: affectServiceValidator,
-    })
+    }).use(middleware.operatorPermission({ minLevel: 3 }))
     documented(router.post('/services/install', [SystemController, 'installService']), {
       summary: 'Install a service',
       tags: ['system'],
       request: installServiceValidator,
-    })
+    }).use(middleware.operatorPermission({ minLevel: 3 }))
     documented(router.post('/services/force-reinstall', [SystemController, 'forceReinstallService']), {
       summary: 'Force reinstall a service',
       tags: ['system'],
       request: installServiceValidator,
-    })
+    }).use(middleware.operatorPermission({ minLevel: 4 }))
     documented(router.post('/services/uninstall', [SystemController, 'uninstallService']), {
       summary: 'Uninstall a service',
       tags: ['system'],
       request: uninstallServiceValidator,
-    })
+    }).use(middleware.operatorPermission({ minLevel: 4 }))
     documented(router.post('/services/check-updates', [SystemController, 'checkServiceUpdates']), {
       summary: 'Check for service updates',
       tags: ['system'],
@@ -633,22 +657,22 @@ router
       summary: 'Create a custom app',
       tags: ['system'],
       request: customAppValidator,
-    })
+    }).use(middleware.operatorPermission({ minLevel: 3 }))
     documented(router.put('/services/custom', [SystemController, 'updateCustomApp']), {
       summary: 'Update a custom app',
       tags: ['system'],
       request: updateCustomAppValidator,
-    })
+    }).use(middleware.operatorPermission({ minLevel: 3 }))
     documented(router.post('/services/custom/update', [SystemController, 'updateCustomApp_pullLatest']), {
       summary: 'Pull the latest version of a custom app',
       tags: ['system'],
       request: installServiceValidator,
-    })
+    }).use(middleware.operatorPermission({ minLevel: 3 }))
     documented(router.delete('/services/custom', [SystemController, 'deleteCustomApp']), {
       summary: 'Delete a custom app',
       tags: ['system'],
       request: deleteCustomAppValidator,
-    })
+    }).use(middleware.operatorPermission({ minLevel: 4 }))
     documented(router.get('/services/custom/:name', [SystemController, 'getCustomApp']), {
       summary: 'Get a custom app',
       tags: ['system'],
@@ -687,7 +711,7 @@ router
       summary: 'Update a service',
       tags: ['system'],
       request: updateServiceValidator,
-    })
+    }).use(middleware.operatorPermission({ minLevel: 3 }))
     documented(router.post('/services/auto-update', [SystemController, 'setServiceAutoUpdate']), {
       summary: 'Set service auto-update',
       tags: ['system'],
@@ -714,7 +738,7 @@ router
     documented(router.post('/update', [SystemController, 'requestSystemUpdate']), {
       summary: 'Request a system update',
       tags: ['system'],
-    })
+    }).use(middleware.operatorPermission({ minLevel: 5 }))
     documented(router.get('/update/status', [SystemController, 'getSystemUpdateStatus']), {
       summary: 'Get system update status',
       tags: ['system'],
@@ -736,16 +760,16 @@ router
       summary: 'Update a system setting',
       tags: ['system'],
       request: updateSettingSchema,
-    })
+    }).use(middleware.operatorPermission({ minLevel: 5 }))
     router.get('/storage/overview', [StorageController, 'overview'])
     router.get('/storage/browse', [StorageController, 'browse'])
-    router.post('/storage/move', [StorageController, 'move'])
-    router.post('/storage/delete', [StorageController, 'delete'])
-    router.post('/storage/mkdir', [StorageController, 'mkdir'])
-    router.post('/storage/preferred-disk', [StorageController, 'setPreferredDisk'])
-    router.post('/storage/quota', [StorageController, 'setQuota'])
+    router.post('/storage/move', [StorageController, 'move']).use(middleware.operatorPermission({ minLevel: 4 }))
+    router.post('/storage/delete', [StorageController, 'delete']).use(middleware.operatorPermission({ minLevel: 4 }))
+    router.post('/storage/mkdir', [StorageController, 'mkdir']).use(middleware.operatorPermission({ minLevel: 3 }))
+    router.post('/storage/preferred-disk', [StorageController, 'setPreferredDisk']).use(middleware.operatorPermission({ minLevel: 5 }))
+    router.post('/storage/quota', [StorageController, 'setQuota']).use(middleware.operatorPermission({ minLevel: 5 }))
     router.get('/samba/status', [StorageController, 'sambaStatus'])
-    router.post('/samba/configure', [StorageController, 'configureSamba'])
+    router.post('/samba/configure', [StorageController, 'configureSamba']).use(middleware.operatorPermission({ minLevel: 5 }))
   })
   .prefix('/api/system')
 
@@ -772,22 +796,22 @@ router
       summary: 'Queue a remote ZIM download',
       tags: ['zim'],
       request: remoteDownloadWithMetadataValidator,
-    })
+    }).use(middleware.operatorPermission({ minLevel: 3 }))
     documented(router.post('/download-batch', [ZimController, 'downloadBatch']), {
       summary: 'Queue multiple remote ZIM downloads in batch',
       tags: ['zim'],
       request: downloadBatchZimValidator,
-    })
+    }).use(middleware.operatorPermission({ minLevel: 3 }))
     documented(router.post('/download-category-tier', [ZimController, 'downloadCategoryTier']), {
       summary: 'Download a ZIM category tier',
       tags: ['zim'],
       request: downloadCategoryTierValidator,
-    })
+    }).use(middleware.operatorPermission({ minLevel: 3 }))
 
     documented(router.post('/upload', [ZimController, 'upload']), {
       summary: 'Upload a ZIM file',
       tags: ['zim'],
-    })
+    }).use(middleware.operatorPermission({ minLevel: 3 }))
     documented(router.get('/wikipedia', [ZimController, 'getWikipediaState']), {
       summary: 'Get Wikipedia ZIM state',
       tags: ['zim'],
@@ -796,7 +820,7 @@ router
       summary: 'Select a Wikipedia ZIM edition',
       tags: ['zim'],
       request: selectWikipediaValidator,
-    })
+    }).use(middleware.operatorPermission({ minLevel: 3 }))
 
     documented(router.get('/custom-libraries', [ZimController, 'listCustomLibraries']), {
       summary: 'List custom ZIM libraries',
@@ -827,7 +851,7 @@ router
       summary: 'Delete a ZIM file',
       tags: ['zim'],
       params: filenameParamValidator,
-    })
+    }).use(middleware.operatorPermission({ minLevel: 4 }))
   })
   .prefix('/api/zim')
 

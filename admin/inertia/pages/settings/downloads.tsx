@@ -32,8 +32,28 @@ export default function SettingsDownloads() {
   const [deletingPath, setDeletingPath] = useState<string | null>(null)
   const [clearingOrphaned, setClearingOrphaned] = useState(false)
   const [resumingAll, setResumingAll] = useState(false)
+  const [cancellingAll, setCancellingAll] = useState(false)
+  const [confirmCancelAll, setConfirmCancelAll] = useState(false)
   const [confirmDeletePath, setConfirmDeletePath] = useState<string | null>(null)
   const [confirmClearAll, setConfirmClearAll] = useState(false)
+
+  const handleCancelAllQueue = async () => {
+    setCancellingAll(true)
+    setConfirmCancelAll(false)
+    try {
+      const pendingOrActive = downloads.filter((d) => d.status !== 'failed')
+      for (const job of pendingOrActive) {
+        await api.cancelDownloadJob(job.jobId).catch(() => {})
+      }
+      addNotification({
+        message: `${pendingOrActive.length} download(s) da fila cancelado(s).`,
+        type: 'success',
+      })
+      queryClient.invalidateQueries({ queryKey: ['download-jobs'] })
+    } finally {
+      setCancellingAll(false)
+    }
+  }
 
   const handleResumeAll = async () => {
     setResumingAll(true)
@@ -179,16 +199,51 @@ export default function SettingsDownloads() {
           <section className="space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <StyledSectionHeader title="Fila e Downloads em Curso" className="!mb-0" />
-              <button
-                type="button"
-                onClick={handleResumeAll}
-                disabled={resumingAll}
-                className="px-3 py-1.5 rounded-lg border border-desert-green/40 bg-desert-green/10 text-desert-green hover:bg-desert-green/20 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
-                title="Retomar downloads travados ou interrompidos por atualização"
-              >
-                {resumingAll ? <IconLoader2 size={14} className="animate-spin" /> : <IconRefresh size={14} />}
-                <span>Retomar Downloads Interrompidos</span>
-              </button>
+              <div className="flex flex-wrap items-center gap-2">
+                {activeCount > 0 && (
+                  confirmCancelAll ? (
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={handleCancelAllQueue}
+                        disabled={cancellingAll}
+                        className="px-3 py-1.5 rounded-lg bg-desert-red text-white text-xs font-bold hover:opacity-90 flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <IconTrash size={14} />
+                        <span>Confirmar Cancelamento ({activeCount})</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setConfirmCancelAll(false)}
+                        className="px-2.5 py-1.5 rounded-lg border border-border-default bg-surface-secondary text-xs text-text-secondary cursor-pointer"
+                      >
+                        Manter
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setConfirmCancelAll(true)}
+                      disabled={cancellingAll}
+                      className="px-3 py-1.5 rounded-lg border border-desert-red/40 bg-desert-red/10 text-desert-red hover:bg-desert-red/20 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+                      title="Cancelar todos os downloads ativos ou aguardando na fila"
+                    >
+                      <IconTrash size={14} />
+                      <span>Limpar Fila ({activeCount})</span>
+                    </button>
+                  )
+                )}
+                <button
+                  type="button"
+                  onClick={handleResumeAll}
+                  disabled={resumingAll}
+                  className="px-3 py-1.5 rounded-lg border border-desert-green/40 bg-desert-green/10 text-desert-green hover:bg-desert-green/20 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+                  title="Retomar downloads travados ou interrompidos por atualização"
+                >
+                  {resumingAll ? <IconLoader2 size={14} className="animate-spin" /> : <IconRefresh size={14} />}
+                  <span>Retomar Downloads Interrompidos</span>
+                </button>
+              </div>
             </div>
             <ActiveDownloads withHeader={false} />
             {downloads.length === 0 && (

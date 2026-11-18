@@ -32,6 +32,10 @@ export default class SettingsController {
     })
   }
 
+  async profile({ inertia }: HttpContext) {
+    return inertia.render('settings/profile', {})
+  }
+
   async themes({ inertia }: HttpContext) {
     const currentTheme = await KVStore.getValue('ui.theme')
     return inertia.render('settings/themes', {

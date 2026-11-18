@@ -107,6 +107,16 @@ export async function doResumableDownload({
   const totalBytes = parseInt(headResponse.headers['content-length']?.toString() || '0', 10)
   const supportsRangeRequests = headResponse.headers['accept-ranges'] === 'bytes'
 
+  if (onProgress && totalBytes > 0) {
+    onProgress({
+      downloadedBytes: startByte,
+      totalBytes,
+      lastProgressTime: Date.now(),
+      lastDownloadedBytes: startByte,
+      url,
+    })
+  }
+
   // If allowedMimeTypes is provided, check content type
   if (allowedMimeTypes && allowedMimeTypes.length > 0) {
     const isMimeTypeAllowed = allowedMimeTypes.some((mimeType) => contentType.includes(mimeType))

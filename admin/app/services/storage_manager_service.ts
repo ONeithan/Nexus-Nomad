@@ -114,7 +114,14 @@ export class StorageManagerService {
       if (!adminCont?.Id) return []
       const inspected = await docker.getContainer(adminCont.Id).inspect()
       const binds = (inspected?.Mounts || [])
-        .filter((m: any) => m.Type === 'bind' && m.Source && m.Destination)
+        .filter(
+          (m: any) =>
+            m.Type === 'bind' &&
+            m.Source &&
+            m.Destination &&
+            !String(m.Destination).startsWith('/app/update') &&
+            !String(m.Source).startsWith('/app/update')
+        )
         .map((m: any) => ({ source: String(m.Source), destination: String(m.Destination) }))
         .sort((a: { destination: string }, b: { destination: string }) => b.destination.length - a.destination.length)
       return binds
@@ -125,11 +132,16 @@ export class StorageManagerService {
 
   public async resolveRealHostPath(containerOrHostPath: string): Promise<string> {
     const raw = (containerOrHostPath || '').trim() || this.getStorageRoot()
-    const normalizedInput = raw === '/storage' ? this.getStorageRoot() : resolve(raw)
+    const storageRoot = this.getStorageRoot()
+    const normalizedInput =
+      raw === '/storage' || raw.startsWith('/storage/')
+        ? raw.replace(/^\/storage/, storageRoot)
+        : resolve(raw)
     const binds = await this.getAdminContainerBinds()
 
     for (const b of binds) {
       const dest = resolve(b.destination)
+      if (dest.startsWith('/app/update') || b.source.startsWith('/app/update')) continue
       if (normalizedInput === dest) return b.source
       if (normalizedInput.startsWith(dest + '/') || normalizedInput.startsWith(dest + '\\')) {
         const rel = normalizedInput.slice(dest.length).replace(/^[\\/]+/, '')
@@ -138,18 +150,18 @@ export class StorageManagerService {
     }
 
     // Fallback using DockerService's host storage root resolver for /app/storage paths
-    if (normalizedInput === this.getStorageRoot() || normalizedInput.startsWith(this.getStorageRoot() + '/')) {
+    if (normalizedInput === storageRoot || normalizedInput.startsWith(storageRoot + '/')) {
       try {
         const dockerService = new DockerService()
         const hostRoot = await dockerService.getHostStorageRoot()
-        if (hostRoot) {
-          const rel = normalizedInput.slice(this.getStorageRoot().length).replace(/^[\\/]+/, '')
+        if (hostRoot && !hostRoot.startsWith('/app/update')) {
+          const rel = normalizedInput.slice(storageRoot.length).replace(/^[\\/]+/, '')
           return rel ? join(hostRoot, rel) : hostRoot
         }
       } catch {}
     }
 
-    return raw
+    return normalizedInput
   }
 
   public async getDiskQuotas(): Promise<Record<string, DiskQuotaEntry>> {
@@ -609,7 +621,23 @@ export class StorageManagerService {
 
     for (const mt of mountTargets) {
       mt.usedBytes = Math.max(0, mt.totalBytes - mt.freeBytes)
-      mt.realHostPath = await this.resolveRealHostPath(mt.path)
+      let hostPath = await this.resolveRealHostPath(mt.path)
+      // Never display a secondary disk's mount path as the primary disk's host path
+      // unless their free space actually matches (same underlying partition)
+      if (mt.isPrimary) {
+        const collidesWithSecondary = mountTargets
+          .filter((other) => !other.isPrimary)
+          .find((other) => {
+            const matchesPath =
+              hostPath === other.path || hostPath.startsWith(other.path + '/')
+            const freeDiff = Math.abs((mt.freeBytes || 0) - (other.freeBytes || 0))
+            return matchesPath && freeDiff > 512 * 1024 * 1024
+          })
+        if (collidesWithSecondary || hostPath.startsWith('/app/update')) {
+          hostPath = '/opt/project-nomad/storage'
+        }
+      }
+      mt.realHostPath = hostPath
       const q = diskQuotas[resolve(mt.path)] || diskQuotas[mt.path]
       const minReserve = mt.isPrimary
         ? Math.min(MIN_PRIMARY_SYSTEM_RESERVE_BYTES, Math.floor(mt.totalBytes * 0.1))
@@ -679,8 +707,11 @@ export class StorageManagerService {
 
       const diskMatch =
         this.findDiskForResolvedPath(realPath, mountTargets) ||
-        mountTargets[0] || { path: storageRoot, label: 'Armazenamento Interno NOMAD' }
-      const realHostPath = await this.resolveRealHostPath(realPath)
+        mountTargets[0] || { path: storageRoot, label: 'Armazenamento Interno NOMAD', isPrimary: true }
+      let realHostPath = await this.resolveRealHostPath(realPath)
+      if (realHostPath.startsWith('/app/update')) {
+        realHostPath = join(mountTargets[0]?.realHostPath || '/opt/project-nomad/storage', modKey)
+      }
 
       const matchingExternal = externalMounts.filter((em) => em.moduleKey === modKey)
 
@@ -688,7 +719,7 @@ export class StorageManagerService {
         key: modKey,
         containerPath: defaultPath,
         exists,
-        isSymlink,
+        isSymlink: Boolean(isSymlink && !diskMatch.isPrimary),
         realPath,
         realHostPath,
         currentDiskPath: diskMatch.path,
@@ -1447,12 +1478,16 @@ export class StorageManagerService {
     const dirRealPath = await realpath(params.activeDirPath).catch(() =>
       join(rootRealPath, basename(params.activeDirPath))
     )
-    const dirRealHostPath = await this.resolveRealHostPath(dirRealPath).catch(() => dirRealPath)
+    let dirRealHostPath = await this.resolveRealHostPath(dirRealPath).catch(() => dirRealPath)
+    if (dirRealHostPath.startsWith('/app/update')) {
+      dirRealHostPath = join(defaultPrimaryDisk.realHostPath || '/opt/project-nomad/storage', basename(params.moduleRootPath))
+    }
     const activeDirDisk =
       this.findDiskForResolvedPath(dirRealPath, mountTargets) ||
       this.findDiskForResolvedPath(dirRealHostPath, mountTargets) ||
       this.findDiskForResolvedPath(rootRealPath, mountTargets) ||
       defaultPrimaryDisk
+    const effectiveSecondaryLink = Boolean(dirIsSymlink && !activeDirDisk.isPrimary)
 
     const resolveMeta = async (
       filePath: string,
@@ -1486,7 +1521,7 @@ export class StorageManagerService {
     const activeFiles = await Promise.all(
       params.activeEntries.map(async (entry) => ({
         ...entry,
-        ...(await resolveMeta(entry.key, dirIsSymlink, true, activeDirDisk)),
+        ...(await resolveMeta(entry.key, effectiveSecondaryLink, true, activeDirDisk)),
       }))
     )
 
@@ -1555,7 +1590,7 @@ export class StorageManagerService {
         diskType: activeDirDisk.diskType,
         realPath: dirRealPath,
         realHostPath: dirRealHostPath,
-        isSymlink: dirIsSymlink,
+        isSymlink: effectiveSecondaryLink,
         disksSummary: Array.from(diskMap.values()),
       },
     }
