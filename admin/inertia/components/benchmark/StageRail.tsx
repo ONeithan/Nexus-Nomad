@@ -52,7 +52,7 @@ export default function StageRail({ stages, stageIndex, status, progressPercent,
                   </div>
                   <span
                     className={classNames(
-                      'text-[11px] leading-tight text-center',
+                      'text-[0.6875rem] leading-tight text-center',
                       state === 'active' ? 'text-desert-green font-semibold' : 'text-desert-stone-dark'
                     )}
                   >

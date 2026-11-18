@@ -179,8 +179,8 @@ async function syncAuthDBToServer(state: NomadAuthDBState) {
   }
 }
 
-export function getActiveOperator(): { username: string; level: string } {
-  const db = loadAuthDB()
+export function getActiveOperator(serverRaw?: string | null): { username: string; level: string } {
+  const db = loadAuthDB(serverRaw)
   if (db.activeSession) {
     return {
       username: db.activeSession.username,
@@ -522,7 +522,7 @@ export default function TacticalBootGate({ children }: { children: React.ReactNo
   const displayVersion =
     appVersion && appVersion !== '0.0.0' && appVersion !== 'dev'
       ? `v${appVersion.replace(/^v/i, '').replace(/-nexus$/i, '')}`
-      : 'v1.0.27'
+      : 'v1.0.28'
 
   const [stage, setStage] = useState<BootStage>(() => {
     const initialDb = loadAuthDB(tacticalAuth)

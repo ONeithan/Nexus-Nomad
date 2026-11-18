@@ -47,7 +47,7 @@ class AppErrorBoundary extends React.Component<
               Ocorreu um erro na interface ou durante uma reconexão do servidor. Use uma das ações abaixo para recuperar imediatamente:
             </p>
             {this.state.errorMessage && (
-              <pre className="p-3 rounded bg-surface-secondary border border-border-default text-[11px] font-mono text-text-muted overflow-x-auto whitespace-pre-wrap">
+              <pre className="p-3 rounded bg-surface-secondary border border-border-default text-[0.6875rem] font-mono text-text-muted overflow-x-auto whitespace-pre-wrap">
                 {this.state.errorMessage}
               </pre>
             )}

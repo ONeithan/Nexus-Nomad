@@ -1,5 +1,4 @@
 import { Fragment, useState, useEffect, useMemo } from 'react'
-import axios from 'axios'
 import { Dialog, Transition } from '@headlessui/react'
 import { IconX, IconCheck, IconInfoCircle } from '@tabler/icons-react'
 import { useQuery } from '@tanstack/react-query'
@@ -11,6 +10,8 @@ import classNames from 'classnames'
 import DynamicIcon, { DynamicIconName } from './DynamicIcon'
 import StyledButton from './StyledButton'
 import KbGuardrailModal from './KbGuardrailModal'
+import { TargetDiskSelector } from './storage/TargetDiskSelector'
+import { getDiskAvailableBytes, useStorageOverview } from '~/hooks/useStorageOverview'
 import { evaluateGuardrail, type GuardrailVerdict } from '~/lib/kb_guardrail'
 import { useSystemInfo } from '~/hooks/useSystemInfo'
 import { getPrimaryDiskInfo } from '~/hooks/useDiskDisplayData'
@@ -94,7 +95,11 @@ interface TierSelectionModalProps {
   onClose: () => void
   category: CategoryWithStatus | null
   selectedTierSlug?: string | null
-  onSelectTier: (category: CategoryWithStatus, tier: SpecTier) => void
+  onSelectTier: (
+    category: CategoryWithStatus,
+    tier: SpecTier,
+    targetDisk?: string
+  ) => void | Promise<void>
 }
 
 const TierSelectionModal: React.FC<TierSelectionModalProps> = ({
@@ -107,24 +112,17 @@ const TierSelectionModal: React.FC<TierSelectionModalProps> = ({
   // Local selection state - initialized from prop
   const [localSelectedSlug, setLocalSelectedSlug] = useState<string | null>(null)
   const [targetDisk, setTargetDisk] = useState<string>('')
+  const [submitting, setSubmitting] = useState(false)
+  const [submitError, setSubmitError] = useState<string | null>(null)
 
-  const { data: storageOverview } = useQuery({
-    queryKey: ['storage-overview'],
-    queryFn: async () => {
-      const res = await axios.get<{
-        storageRoot: string
-        preferredDownloadDisk: string
-        mountTargets: { label: string; path: string; freeBytes: number; totalBytes: number }[]
-      }>('/api/system/storage/overview')
-      return res.data
-    },
-    staleTime: 60_000,
-  })
+  const { data: storageOverview } = useStorageOverview()
 
   // Reset local selection when modal opens or category changes
   useEffect(() => {
     if (isOpen && category) {
       setLocalSelectedSlug(selectedTierSlug || null)
+      setSubmitError(null)
+      setSubmitting(false)
     }
   }, [isOpen, category, selectedTierSlug])
 
@@ -187,9 +185,12 @@ const TierSelectionModal: React.FC<TierSelectionModalProps> = ({
     return Math.max(0, primary.totalSize - primary.totalUsed)
   }, [systemInfo])
 
-  const availableDisks = useMemo(() => {
-    return storageOverview?.mountTargets || []
-  }, [storageOverview?.mountTargets])
+  const resolvedDisk =
+    targetDisk ||
+    storageOverview?.moduleLocations?.['zim']?.currentDiskPath ||
+    storageOverview?.preferredDownloadDisk ||
+    storageOverview?.storageRoot ||
+    ''
 
   const ingestPolicy: 'Always' | 'Manual' =
     ingestPolicySetting?.value === 'Manual' ? 'Manual' : 'Always'
@@ -200,7 +201,13 @@ const TierSelectionModal: React.FC<TierSelectionModalProps> = ({
     return getAllResourcesForTier(tier).reduce((acc, r) => acc + r.size_mb * 1024 * 1024, 0)
   }
 
+  const selectedTierObj = localSelectedSlug
+    ? category.tiers.find((t) => t.slug === localSelectedSlug)
+    : undefined
+  const selectedTierTotalBytes = selectedTierObj ? getTierTotalSize(selectedTierObj) : 0
+
   const handleTierClick = (tier: SpecTier) => {
+    setSubmitError(null)
     // Toggle selection: if clicking the same tier, deselect it
     if (localSelectedSlug === tier.slug) {
       setLocalSelectedSlug(null)
@@ -217,32 +224,41 @@ const TierSelectionModal: React.FC<TierSelectionModalProps> = ({
   const finalizeSubmit = async () => {
     if (!localSelectedSlug || !category) return
     const selectedTier = category.tiers.find((t) => t.slug === localSelectedSlug)
-    if (selectedTier) {
-      const chosenDisk = targetDisk || storageOverview?.preferredDownloadDisk || storageOverview?.storageRoot
-      if (chosenDisk && chosenDisk !== storageOverview?.storageRoot) {
-        try {
-          await axios.post('/api/system/storage/move', {
-            sourcePath: `${storageOverview?.storageRoot || '/storage'}/zim`,
-            targetDiskPath: chosenDisk,
-            createSymlink: true,
-          })
-        } catch (e) {
-          console.warn('Could not map storage to selected disk before tier download', e)
-        }
+    if (!selectedTier) return
+
+    const diskObj = storageOverview?.mountTargets?.find((m) => m.path === resolvedDisk)
+    if (diskObj && selectedTierTotalBytes > 0) {
+      const availBytes = getDiskAvailableBytes(diskObj)
+      if (selectedTierTotalBytes > availBytes) {
+        setSubmitError(
+          `Espaço/cota insuficiente em "${diskObj.label}" (${formatBytes(availBytes, 1)} livres para ${formatBytes(selectedTierTotalBytes, 1)} estimados). Selecione outro HD abaixo.`
+        )
+        return
       }
-      onSelectTier(category, selectedTier)
     }
-    onClose()
+
+    try {
+      setSubmitting(true)
+      setSubmitError(null)
+      await onSelectTier(category, selectedTier, resolvedDisk || undefined)
+      onClose()
+    } catch (err: any) {
+      setSubmitError(
+        err?.message || 'Não foi possível iniciar os downloads desta coleção. Tente novamente.'
+      )
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   const handleSubmit = () => {
-    if (!localSelectedSlug || !category) return
+    if (!localSelectedSlug || !category || submitting) return
 
     // Guardrail only runs when we have an estimate AND the global policy
     // would auto-index this batch. Under Manual the user has already opted
     // out of automatic ingestion, so the bulk-disk warning would be a false
     // alarm — the files would just queue as pending_decision.
-    if (ingestPolicy === 'Always' && embedEstimate) {
+    if (ingestPolicy === 'Always' && !isEstimating && embedEstimate) {
       const verdict = evaluateGuardrail({
         estimateBytes: embedEstimate.totalBytes,
         freeBytes,
@@ -434,46 +450,31 @@ const TierSelectionModal: React.FC<TierSelectionModalProps> = ({
                   )}
 
                   {/* Seletor de HD de Destino */}
-                  {availableDisks.length > 0 && (
-                    <div className="mt-4 p-3.5 bg-surface-secondary border border-border-default rounded-xl space-y-2.5">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold text-text-primary uppercase tracking-wide flex items-center gap-1.5">
-                          <span>💾 Salvar coleção no disco:</span>
-                        </span>
-                        <span className="text-[11px] text-text-secondary">Destino de gravação ZIM</span>
-                      </div>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                        {availableDisks.map((disk) => {
-                          const isChosen = (targetDisk || storageOverview?.preferredDownloadDisk || storageOverview?.storageRoot) === disk.path
-                          return (
-                            <div
-                              key={`tier-disk-${disk.path}`}
-                              onClick={() => setTargetDisk(disk.path)}
-                              className={`p-2.5 rounded-lg border text-xs cursor-pointer transition-all flex items-center justify-between ${
-                                isChosen
-                                  ? 'border-desert-green bg-desert-green/10 font-bold'
-                                  : 'border-border-subtle bg-surface-primary hover:border-desert-tan'
-                              }`}
-                            >
-                              <div className="truncate mr-2">
-                                <div className="text-text-primary truncate">{disk.label}</div>
-                                <div className="text-[10px] font-mono text-text-secondary truncate">
-                                  {disk.path} • Livre: {formatBytes(disk.freeBytes, 1)}
-                                </div>
-                              </div>
-                              {isChosen && <IconCheck size={16} className="text-desert-green shrink-0" />}
-                            </div>
-                          )
-                        })}
-                      </div>
+                  <div className="mt-4 p-3.5 bg-surface-secondary border border-border-default rounded-xl">
+                    <TargetDiskSelector
+                      moduleKey="zim"
+                      value={resolvedDisk}
+                      onChange={(disk) => {
+                        setTargetDisk(disk)
+                        setSubmitError(null)
+                      }}
+                      requiredBytes={selectedTierTotalBytes}
+                      disabled={submitting}
+                      title="Salvar coleção no disco (HD de Destino):"
+                    />
+                  </div>
+
+                  {submitError && (
+                    <div className="mt-4 p-3 rounded-lg border border-desert-red/50 bg-desert-red/10 text-xs text-desert-red font-medium">
+                      {submitError}
                     </div>
                   )}
 
                   {/* Info note */}
-                  <div className="mt-4 flex items-start gap-2 text-sm text-text-muted bg-blue-50 p-3 rounded">
-                    <IconInfoCircle size={18} className="text-blue-500 flex-shrink-0 mt-0.5" />
+                  <div className="mt-4 flex items-start gap-2 text-sm text-text-muted bg-surface-secondary border border-border-subtle p-3 rounded">
+                    <IconInfoCircle size={18} className="text-desert-orange flex-shrink-0 mt-0.5" />
                     <p>
-                      Você pode alterar sua seleção a qualquer momento. Clique em Confirmar Seleção para aplicar.
+                      Os arquivos serão enviados para a fila de <strong>Downloads Ativos</strong> no HD selecionado.
                     </p>
                   </div>
                 </div>
@@ -481,12 +482,21 @@ const TierSelectionModal: React.FC<TierSelectionModalProps> = ({
                 {/* Footer */}
                 <div className="bg-surface-secondary px-6 py-4 flex justify-end gap-3">
                   <StyledButton
+                    variant='outline'
+                    size='lg'
+                    onClick={onClose}
+                    disabled={submitting}
+                  >
+                    Cancelar
+                  </StyledButton>
+                  <StyledButton
                     variant='primary'
                     size='lg'
                     onClick={handleSubmit}
-                    disabled={!localSelectedSlug || (embedEstimateRequest.length > 0 && isEstimating)}
+                    loading={submitting}
+                    disabled={!localSelectedSlug || submitting}
                   >
-                    Confirmar Seleção
+                    {submitting ? 'Enviando para a fila...' : 'Confirmar Seleção'}
                   </StyledButton>
                 </div>
               </Dialog.Panel>

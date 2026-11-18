@@ -29,6 +29,10 @@ import KVStore from '#models/kv_store'
 import { BROADCAST_CHANNELS } from '../../constants/broadcast.js'
 import { KIWIX_LIBRARY_CMD } from '../../constants/kiwix.js'
 import { DEFAULT_OLLAMA_CONTEXT_LENGTH } from '../../constants/ollama.js'
+import {
+  getConfiguredDefaultCredentials,
+  injectDefaultCredentialEnv,
+} from '../utils/default_credentials.js'
 
 // Written by install_nomad.sh with the host AMD GPU's gfx target.
 const AMD_GFX_MARKER_PATH = '/app/storage/.nomad-amd-gfx'
@@ -654,12 +658,35 @@ export class DockerService {
       // Point storage binds at wherever the admin's storage volume actually lives
       // on the host (covers dependency installs too — they recurse through here).
       await this._applyHostStorageRoot(containerConfig)
+      const defaultCreds = await getConfiguredDefaultCredentials()
+      if (defaultCreds.enabled && defaultCreds.password) {
+        containerConfig.Env = injectDefaultCredentialEnv(
+          service.service_name,
+          containerConfig.Env || [],
+          defaultCreds
+        )
+      }
+
+      const remoteOllamaUrlForWebUi =
+        service.service_name === SERVICE_NAMES.OPEN_WEBUI
+          ? String((await KVStore.getValue('ai.remoteOllamaUrl').catch(() => '')) || '').trim()
+          : ''
+      if (service.service_name === SERVICE_NAMES.OPEN_WEBUI && remoteOllamaUrlForWebUi) {
+        const currentEnv: string[] = Array.isArray(containerConfig.Env) ? [...containerConfig.Env] : []
+        const filteredEnv = currentEnv.filter((e) => !e.startsWith('OLLAMA_BASE_URL='))
+        filteredEnv.push(`OLLAMA_BASE_URL=${remoteOllamaUrlForWebUi.replace(/\/$/, '')}`)
+        containerConfig.Env = filteredEnv
+      }
 
       let dependencies = []
       if (service.depends_on) {
-        const dependency = await Service.query().where('service_name', service.depends_on).first()
-        if (dependency) {
-          dependencies.push(dependency)
+        const skipRemoteOllamaDep =
+          service.service_name === SERVICE_NAMES.OPEN_WEBUI && Boolean(remoteOllamaUrlForWebUi)
+        if (!skipRemoteOllamaDep) {
+          const dependency = await Service.query().where('service_name', service.depends_on).first()
+          if (dependency) {
+            dependencies.push(dependency)
+          }
         }
       }
 
@@ -983,11 +1010,20 @@ export class DockerService {
         `Finalizing installation of service ${service.service_name}...`
       )
       if (service.service_name === SERVICE_NAMES.FILEBROWSER) {
-        // Garante que o usuário admin / nomad funcione no FileBrowser local mesmo se o DB já existia
-        for (const cmd of [
-          ['filebrowser', 'users', 'update', 'admin', '--password', 'nomad', '-d', '/db/.filebrowser.db'],
-          ['filebrowser', 'users', 'add', 'admin', 'nomad', '--perm.admin', '-d', '/db/.filebrowser.db'],
-        ]) {
+        // Garante usuário padrão/personalizado no FileBrowser local mesmo se o DB já existia
+        const fbCreds = await getConfiguredDefaultCredentials()
+        const fbPass = fbCreds.enabled && fbCreds.password ? fbCreds.password : 'nomad'
+        const fbCmds: string[][] = [
+          ['filebrowser', 'users', 'update', 'admin', '--password', fbPass, '-d', '/db/.filebrowser.db'],
+          ['filebrowser', 'users', 'add', 'admin', fbPass, '--perm.admin', '-d', '/db/.filebrowser.db'],
+        ]
+        if (fbCreds.enabled && fbCreds.username && fbCreds.username !== 'admin') {
+          fbCmds.push(
+            ['filebrowser', 'users', 'add', fbCreds.username, fbPass, '--perm.admin', '-d', '/db/.filebrowser.db'],
+            ['filebrowser', 'users', 'update', fbCreds.username, '--password', fbPass, '-d', '/db/.filebrowser.db']
+          )
+        }
+        for (const cmd of fbCmds) {
           try {
             const exec = await container.exec({ Cmd: cmd, AttachStdout: true, AttachStderr: true })
             await exec.start({ hijack: false, stdin: false })
@@ -1004,8 +1040,9 @@ export class DockerService {
       // Remove from active installs tracking
       this.activeInstallations.delete(service.service_name)
 
-      // If Ollama was just installed, trigger Nomad docs discovery and embedding
+      // If Ollama was just installed, clear any stale remote URL and trigger Nomad docs discovery
       if (service.service_name === SERVICE_NAMES.OLLAMA) {
+        await KVStore.clearValue('ai.remoteOllamaUrl').catch(() => {})
         logger.info('[DockerService] Ollama installation complete. Default behavior is to not enable chat suggestions.')
         await KVStore.setValue('chat.suggestionsEnabled', false)
 

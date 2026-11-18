@@ -394,15 +394,15 @@ export default class OllamaController {
   async remoteStatus() {
     const remoteUrl = await KVStore.getValue('ai.remoteOllamaUrl')
     if (!remoteUrl) {
-      return { configured: false, connected: false }
+      return { configured: false, connected: false, url: null }
     }
     try {
       const testResponse = await fetch(`${remoteUrl.replace(/\/$/, '')}/v1/models`, {
         signal: AbortSignal.timeout(3000),
       })
-      return { configured: true, connected: testResponse.ok }
+      return { configured: true, connected: testResponse.ok, url: remoteUrl.trim() }
     } catch {
-      return { configured: true, connected: false }
+      return { configured: true, connected: false, url: remoteUrl.trim() }
     }
   }
 
@@ -423,6 +423,7 @@ export default class OllamaController {
       ollamaService.installed = hasLocalContainer
       ollamaService.installation_status = 'idle'
       await ollamaService.save()
+      this.dockerService.invalidateServicesStatusCache()
       return {
         success: true,
         message: hasLocalContainer
@@ -463,6 +464,7 @@ export default class OllamaController {
     ollamaService.installed = true
     ollamaService.installation_status = 'idle'
     await ollamaService.save()
+    this.dockerService.invalidateServicesStatusCache()
 
     // Stop the local nomad_ollama container (if running) so it doesn't compete with the
     // remote host for GPU / port 11434. Preserves the container and its models volume.

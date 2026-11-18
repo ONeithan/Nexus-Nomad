@@ -1,49 +1,80 @@
 import { useState } from 'react'
 import StyledModal, { StyledModalProps } from './StyledModal'
 import Input from './inputs/Input'
+import { TargetDiskSelector } from './storage/TargetDiskSelector'
+import { getDiskAvailableBytes, useStorageOverview } from '~/hooks/useStorageOverview'
 import api from '~/lib/api'
+import { formatBytes } from '~/lib/util'
 
 export type DownloadURLModalProps = Omit<
   StyledModalProps,
   'onConfirm' | 'open' | 'confirmText' | 'cancelText' | 'confirmVariant' | 'children'
 > & {
   suggestedURL?: string
-  onPreflightSuccess?: (url: string) => void
+  initialDisk?: string
+  showDiskSelector?: boolean
+  moduleKey?: string
+  onPreflightSuccess?: (url: string, targetDisk?: string) => void | Promise<void>
 }
 
 const DownloadURLModal: React.FC<DownloadURLModalProps> = ({
   suggestedURL,
+  initialDisk = '',
+  showDiskSelector = true,
+  moduleKey = 'maps',
   onPreflightSuccess,
   ...modalProps
 }) => {
+  const { data: storageOverview } = useStorageOverview()
   const [url, setUrl] = useState<string>('')
+  const [selectedDisk, setSelectedDisk] = useState<string>(initialDisk)
+  const [detectedBytes, setDetectedBytes] = useState<number>(0)
   const [messages, setMessages] = useState<string[]>([])
   const [loading, setLoading] = useState<boolean>(false)
+
+  const resolvedDisk =
+    selectedDisk ||
+    storageOverview?.moduleLocations?.[moduleKey]?.currentDiskPath ||
+    storageOverview?.preferredDownloadDisk ||
+    storageOverview?.storageRoot ||
+    ''
 
   async function runPreflightCheck(downloadUrl: string) {
     try {
       setLoading(true)
-      setMessages([`Running preflight check for URL: ${downloadUrl}`])
+      setMessages([`Verificando URL de destino: ${downloadUrl}`])
       const res = await api.downloadRemoteMapRegionPreflight(downloadUrl)
       if (!res) {
-        throw new Error('An unknown error occurred during the preflight check.')
+        throw new Error('Erro desconhecido ao verificar o arquivo remoto.')
       }
 
       if ('message' in res) {
         throw new Error(res.message)
       }
 
+      const fileBytes = Number(res.size || 0)
+      setDetectedBytes(fileBytes)
       setMessages((prev) => [
         ...prev,
-        `Preflight check passed. Filename: ${res.filename}, Size: ${(res.size / (1024 * 1024)).toFixed(2)} MB`,
+        `Verificação concluída. Arquivo: ${res.filename}, Tamanho: ${formatBytes(fileBytes, 1)}`,
       ])
 
-      if (onPreflightSuccess) {
-        onPreflightSuccess(downloadUrl)
+      const diskObj = storageOverview?.mountTargets?.find((m) => m.path === resolvedDisk)
+      if (showDiskSelector && diskObj && fileBytes > 0) {
+        const avail = getDiskAvailableBytes(diskObj)
+        if (fileBytes > avail) {
+          throw new Error(
+            `Espaço/cota insuficiente em "${diskObj.label}" (${formatBytes(avail, 1)} livres para ${formatBytes(fileBytes, 1)} necessários). Selecione outro HD.`
+          )
+        }
       }
-    } catch (error) {
+
+      if (onPreflightSuccess) {
+        await onPreflightSuccess(downloadUrl, showDiskSelector ? resolvedDisk : undefined)
+      }
+    } catch (error: any) {
       console.error('Preflight check failed:', error)
-      setMessages((prev) => [...prev, `Preflight check failed: ${error.message}`])
+      setMessages((prev) => [...prev, `Falha na verificação: ${error?.message || 'Erro desconhecido'}`])
     } finally {
       setLoading(false)
     }
@@ -54,37 +85,49 @@ const DownloadURLModal: React.FC<DownloadURLModalProps> = ({
       {...modalProps}
       onConfirm={() => runPreflightCheck(url)}
       open={true}
-      confirmText="Download"
+      confirmText="Baixar"
       confirmIcon="IconDownload"
-      cancelText="Cancel"
+      cancelText="Cancelar"
       confirmVariant="primary"
       confirmLoading={loading}
       cancelLoading={loading}
       large
     >
-      <div className="flex flex-col pb-4">
-        <p className="text-text-secondary mb-8">
-          Enter the URL of the map region file you wish to download. The URL must be publicly
-          reachable and end with .pmtiles. A preflight check will be run to verify the file's
-          availability, type, and approximate size.
+      <div className="flex flex-col pb-2 gap-4">
+        <p className="text-text-secondary text-sm">
+          Informe a URL do arquivo de mapa (.pmtiles) que deseja baixar. O endereço deve estar acessível e terminar com <code className="font-mono">.pmtiles</code>. Faremos uma pré-verificação de disponibilidade e tamanho antes de iniciar.
         </p>
         <Input
           name="download-url"
           label=""
-          placeholder={suggestedURL || 'Enter download URL...'}
-          className="mb-4"
+          placeholder={suggestedURL || 'Informe a URL do download...'}
           value={url}
           onChange={(e) => setUrl(e.target.value)}
         />
-        <div className="min-h-24 max-h-96 overflow-y-auto bg-surface-secondary p-4 rounded border border-border-default text-left">
-          {messages.map((message, idx) => (
-            <p
-              key={idx}
-              className="text-sm text-text-primary font-mono leading-relaxed break-words mb-3"
-            >
-              {message}
+        {showDiskSelector && (
+          <TargetDiskSelector
+            moduleKey={moduleKey}
+            value={resolvedDisk}
+            onChange={setSelectedDisk}
+            requiredBytes={detectedBytes}
+            disabled={loading}
+          />
+        )}
+        <div className="min-h-20 max-h-60 overflow-y-auto bg-surface-secondary p-4 rounded border border-border-default text-left">
+          {messages.length === 0 ? (
+            <p className="text-xs text-text-muted font-mono">
+              Aguardando endereço para verificação...
             </p>
-          ))}
+          ) : (
+            messages.map((message, idx) => (
+              <p
+                key={idx}
+                className="text-sm text-text-primary font-mono leading-relaxed break-words mb-2 last:mb-0"
+              >
+                {message}
+              </p>
+            ))
+          )}
         </div>
       </div>
     </StyledModal>

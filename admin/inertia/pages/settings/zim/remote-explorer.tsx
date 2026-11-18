@@ -5,7 +5,6 @@ import {
   useQuery,
   useQueryClient,
 } from '@tanstack/react-query'
-import axios from 'axios'
 import api from '~/lib/api'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import StyledTable from '~/components/StyledTable'
@@ -38,6 +37,9 @@ import CreatorPacksSection from '~/components/CreatorPacksSection'
 import TierSelectionModal from '~/components/TierSelectionModal'
 import WikipediaSelector from '~/components/WikipediaSelector'
 import StyledSectionHeader from '~/components/StyledSectionHeader'
+import MapDownloadConfirmModal from '~/components/maps/MapDownloadConfirmModal'
+import { TargetDiskSelector } from '~/components/storage/TargetDiskSelector'
+import { getDiskAvailableBytes, useStorageOverview } from '~/hooks/useStorageOverview'
 import type { CategoryWithStatus, SpecTier } from '../../../../types/collections'
 import useDownloads from '~/hooks/useDownloads'
 import ActiveDownloads from '~/components/ActiveDownloads'
@@ -118,23 +120,15 @@ export default function ZimRemoteExplorer() {
   const [breadcrumbs, setBreadcrumbs] = useState<{ name: string; url: string }[]>([])
   const [manageModalOpen, setManageModalOpen] = useState(false)
   const [batchModalOpen, setBatchModalOpen] = useState(false)
+  const [batchMode, setBatchMode] = useState<'all' | 'selected'>('all')
+  const [batchSubmitting, setBatchSubmitting] = useState(false)
+  const [batchError, setBatchError] = useState<string | null>(null)
+  const [selectedUrls, setSelectedUrls] = useState<Set<string>>(new Set())
   const [targetDisk, setTargetDisk] = useState<string>('')
   const [newLibraryName, setNewLibraryName] = useState('')
   const [newLibraryUrl, setNewLibraryUrl] = useState('')
 
-  const { data: storageOverview } = useQuery({
-    queryKey: ['storage-overview'],
-    queryFn: async () => {
-      const res = await axios.get<{
-        storageRoot: string
-        preferredDownloadDisk: string
-        folderUsage: { name: string; label: string; path: string; sizeBytes: number; fileCount: number }[]
-        mountTargets: { label: string; path: string; freeBytes: number; totalBytes: number }[]
-      }>('/api/system/storage/overview')
-      return res.data
-    },
-    staleTime: 60_000,
-  })
+  const { data: storageOverview } = useStorageOverview()
 
   // Catalog sorting and size filtering
   type RemoteSortKey = 'title' | 'author' | 'updated' | 'size_bytes'
@@ -388,19 +382,53 @@ export default function ZimRemoteExplorer() {
     )
   }
 
+  const toggleSelectUrl = (url: string) => {
+    setSelectedUrls((prev) => {
+      const next = new Set(prev)
+      if (next.has(url)) next.delete(url)
+      else next.add(url)
+      return next
+    })
+  }
+
+  const toggleSelectAllVisible = () => {
+    setSelectedUrls((prev) => {
+      const visibleUrls = flatData.map((i) => i.download_url)
+      const allSelected = visibleUrls.length > 0 && visibleUrls.every((u) => prev.has(u))
+      const next = new Set(prev)
+      if (allSelected) {
+        visibleUrls.forEach((u) => next.delete(u))
+      } else {
+        visibleUrls.forEach((u) => next.add(u))
+      }
+      return next
+    })
+  }
+
   const pendingBatchItems = useMemo(() => {
     const activeUrls = new Set(
       zimDownloads.filter((d) => d.status !== 'failed').map((d) => d.url)
     )
-    return flatData.filter((item) => !activeUrls.has(item.download_url))
-  }, [flatData, zimDownloads])
+    const sourceItems =
+      batchMode === 'selected'
+        ? flatData.filter((item) => selectedUrls.has(item.download_url))
+        : flatData
+    return sourceItems.filter((item) => !activeUrls.has(item.download_url))
+  }, [flatData, zimDownloads, batchMode, selectedUrls])
 
   const batchTotalBytes = useMemo(() => {
     return pendingBatchItems.reduce((sum, item) => sum + (item.size_bytes || 0), 0)
   }, [pendingBatchItems])
 
   function confirmDownloadAll() {
-    if (pendingBatchItems.length === 0) {
+    setBatchMode('all')
+    setBatchError(null)
+    if (flatData.length === 0) return
+    const activeUrls = new Set(
+      zimDownloads.filter((d) => d.status !== 'failed').map((d) => d.url)
+    )
+    const candidate = flatData.filter((item) => !activeUrls.has(item.download_url))
+    if (candidate.length === 0) {
       addNotification({
         message: 'Todos os arquivos exibidos já estão na fila ou sendo baixados.',
         type: 'info',
@@ -410,115 +438,132 @@ export default function ZimRemoteExplorer() {
     setBatchModalOpen(true)
   }
 
+  function confirmDownloadSelected() {
+    setBatchMode('selected')
+    setBatchError(null)
+    if (selectedUrls.size === 0) return
+    const activeUrls = new Set(
+      zimDownloads.filter((d) => d.status !== 'failed').map((d) => d.url)
+    )
+    const candidate = flatData.filter(
+      (item) => selectedUrls.has(item.download_url) && !activeUrls.has(item.download_url)
+    )
+    if (candidate.length === 0) {
+      addNotification({
+        message: 'Os itens selecionados já estão na fila ou sendo baixados.',
+        type: 'info',
+      })
+      return
+    }
+    setBatchModalOpen(true)
+  }
+
   async function confirmDownload(record: RemoteZimFileEntry) {
-    const activeDisk = targetDisk || storageOverview?.preferredDownloadDisk || storageOverview?.storageRoot
+    const initialDisk =
+      targetDisk ||
+      storageOverview?.moduleLocations?.['zim']?.currentDiskPath ||
+      storageOverview?.preferredDownloadDisk ||
+      storageOverview?.storageRoot ||
+      ''
     openModal(
-      <StyledModal
-        title="Confirmar Download?"
-        onConfirm={async () => {
-          if (activeDisk && activeDisk !== storageOverview?.storageRoot) {
-            try {
-              await axios.post('/api/system/storage/move', {
-                sourcePath: `${storageOverview?.storageRoot || '/storage'}/zim`,
-                targetDiskPath: activeDisk,
-                createSymlink: true,
-              })
-            } catch (e) {
-              console.warn('Falha ao vincular disco antes do download individual:', e)
-            }
-          }
-          downloadFile(record)
+      <MapDownloadConfirmModal
+        title="Confirmar Download ZIM?"
+        description={`Deseja baixar "${record.title}" (${formatBytes(record.size_bytes || 0)}) para o HD selecionado?`}
+        requiredBytes={record.size_bytes || 0}
+        initialDisk={initialDisk}
+        moduleKey="zim"
+        noteText="O serviço Kiwix reconhecerá o conteúdo automaticamente após a conclusão."
+        onCancel={closeAllModals}
+        onConfirm={async (chosenDisk) => {
+          setTargetDisk(chosenDisk)
+          await downloadFile(record, chosenDisk)
           closeAllModals()
         }}
-        onCancel={closeAllModals}
-        open={true}
-        confirmText="Baixar"
-        cancelText="Cancelar"
-        confirmVariant="primary"
-      >
-        <div className="space-y-3 text-sm text-text-primary">
-          <p>
-            Tem certeza de que deseja baixar{' '}
-            <strong>{record.title}</strong>? ({formatBytes(record.size_bytes || 0)})
-          </p>
-          <div className="p-3 rounded-lg bg-surface-secondary border border-border-default space-y-1 text-xs font-mono">
-            <div className="flex justify-between">
-              <span className="text-text-secondary">Destino de gravação:</span>
-              <span className="font-bold text-text-primary">{activeDisk ? `${activeDisk}/zim` : '/storage/zim'}</span>
-            </div>
-          </div>
-          <p className="text-xs text-text-muted">
-            O serviço Kiwix reconhecerá o conteúdo automaticamente após a conclusão.
-          </p>
-        </div>
-      </StyledModal>,
+      />,
       'confirm-download-file-modal'
     )
   }
 
   async function confirmCustomDownload(file: { name: string; url: string; size_bytes: number | null }) {
+    const initialDisk =
+      targetDisk ||
+      storageOverview?.moduleLocations?.['zim']?.currentDiskPath ||
+      storageOverview?.preferredDownloadDisk ||
+      storageOverview?.storageRoot ||
+      ''
     openModal(
-      <StyledModal
-        title="Confirmar Download?"
-        onConfirm={() => {
-          downloadCustomFile(file)
+      <MapDownloadConfirmModal
+        title="Confirmar Download ZIM?"
+        description={`Deseja baixar "${file.name}"${file.size_bytes ? ` (${formatBytes(file.size_bytes)})` : ''} para o HD selecionado?`}
+        requiredBytes={file.size_bytes || 0}
+        initialDisk={initialDisk}
+        moduleKey="zim"
+        noteText="O serviço Kiwix será atualizado automaticamente após a conclusão."
+        onCancel={closeAllModals}
+        onConfirm={async (chosenDisk) => {
+          setTargetDisk(chosenDisk)
+          await downloadCustomFile(file, chosenDisk)
           closeAllModals()
         }}
-        onCancel={closeAllModals}
-        open={true}
-        confirmText="Baixar"
-        cancelText="Cancelar"
-        confirmVariant="primary"
-      >
-        <p className="text-text-primary">
-          Tem certeza de que deseja baixar{' '}
-          <strong>{file.name}</strong>
-          {file.size_bytes ? ` (${formatBytes(file.size_bytes)})` : ''}? O serviço Kiwix será recarregado automaticamente após a conclusão.
-        </p>
-      </StyledModal>,
+      />,
       'confirm-download-custom-modal'
     )
   }
 
-  async function downloadFile(record: RemoteZimFileEntry) {
+  async function downloadFile(record: RemoteZimFileEntry, chosenDisk?: string) {
     try {
-      await api.downloadRemoteZimFile(record.download_url, {
-        title: record.title,
-        summary: record.summary,
-        author: record.author,
-        size_bytes: record.size_bytes,
-      })
+      await api.downloadRemoteZimFile(
+        record.download_url,
+        {
+          title: record.title,
+          summary: record.summary,
+          author: record.author,
+          size_bytes: record.size_bytes,
+        },
+        chosenDisk
+      )
       addNotification({
         message: `Download de "${record.title}" iniciado com sucesso.`,
         type: 'success',
       })
       invalidateDownloads()
-    } catch (error) {
+      queryClient.invalidateQueries({ queryKey: ['storage-overview'] })
+    } catch (error: any) {
       console.error('Error downloading file:', error)
       addNotification({
-        message: 'Falha ao iniciar o download.',
+        message: error?.message || 'Falha ao iniciar o download.',
         type: 'error',
       })
+      throw error
     }
   }
 
-  async function downloadCustomFile(file: { name: string; url: string; size_bytes: number | null }) {
+  async function downloadCustomFile(
+    file: { name: string; url: string; size_bytes: number | null },
+    chosenDisk?: string
+  ) {
     try {
-      await api.downloadRemoteZimFile(file.url, {
-        title: file.name.replace(/\.zim$/, ''),
-        size_bytes: file.size_bytes ?? undefined,
-      })
+      await api.downloadRemoteZimFile(
+        file.url,
+        {
+          title: file.name.replace(/\.zim$/, ''),
+          size_bytes: file.size_bytes ?? undefined,
+        },
+        chosenDisk
+      )
       addNotification({
         message: `Download de "${file.name}" iniciado com sucesso.`,
         type: 'success',
       })
       invalidateDownloads()
-    } catch (error) {
+      queryClient.invalidateQueries({ queryKey: ['storage-overview'] })
+    } catch (error: any) {
       console.error('Error downloading file:', error)
       addNotification({
-        message: 'Falha ao iniciar o download.',
+        message: error?.message || 'Falha ao iniciar o download.',
         type: 'error',
       })
+      throw error
     }
   }
 
@@ -529,24 +574,28 @@ export default function ZimRemoteExplorer() {
     setTierModalOpen(true)
   }
 
-  const handleTierSelect = async (category: CategoryWithStatus, tier: SpecTier) => {
+  const handleTierSelect = async (
+    category: CategoryWithStatus,
+    tier: SpecTier,
+    chosenDisk?: string
+  ) => {
     try {
-      await api.downloadCategoryTier(category.slug, tier.slug)
+      await api.downloadCategoryTier(category.slug, tier.slug, chosenDisk)
 
       addNotification({
-        message: `Download de "${category.name} - ${tier.name}" iniciado`,
+        message: `Download de "${category.name} - ${tier.name}" enviado para a fila!`,
         type: 'success',
       })
       invalidateDownloads()
-
-      // Refresh categories to update the installed tier display
+      queryClient.invalidateQueries({ queryKey: ['storage-overview'] })
       queryClient.invalidateQueries({ queryKey: [CURATED_CATEGORIES_KEY] })
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error downloading tier resources:', error)
       addNotification({
-        message: 'Ocorreu um erro ao iniciar os downloads.',
+        message: error?.message || 'Ocorreu um erro ao iniciar os downloads.',
         type: 'error',
       })
+      throw error
     }
   }
 
@@ -741,14 +790,26 @@ export default function ZimRemoteExplorer() {
             <StyledSectionHeader title="Explorar Catálogo Kiwix" className="!mb-0" />
             <div className="flex flex-wrap items-center gap-2">
               {selectedSource === 'default' && (
-                <StyledButton
-                  onClick={confirmDownloadAll}
-                  disabled={!isOnline || flatData.length === 0}
-                  variant="primary"
-                  icon="IconDownload"
-                >
-                  Baixar Tudo ({flatData.length})
-                </StyledButton>
+                <>
+                  {selectedUrls.size > 0 && (
+                    <StyledButton
+                      onClick={confirmDownloadSelected}
+                      disabled={!isOnline || selectedUrls.size === 0}
+                      variant="primary"
+                      icon="IconDownload"
+                    >
+                      Baixar Selecionados ({selectedUrls.size})
+                    </StyledButton>
+                  )}
+                  <StyledButton
+                    onClick={confirmDownloadAll}
+                    disabled={!isOnline || flatData.length === 0}
+                    variant={selectedUrls.size > 0 ? 'outline' : 'primary'}
+                    icon="IconDownload"
+                  >
+                    Baixar Tudo ({flatData.length})
+                  </StyledButton>
+                </>
               )}
               <StyledButton
                 onClick={() => setManageModalOpen(true)}
@@ -849,6 +910,32 @@ export default function ZimRemoteExplorer() {
                 loading={isLoading}
                 columns={[
                   {
+                    accessor: 'download_url',
+                    title: (
+                      <input
+                        type="checkbox"
+                        title="Selecionar todos desta lista"
+                        checked={
+                          flatData.length > 0 &&
+                          flatData.every((item) => selectedUrls.has(item.download_url))
+                        }
+                        onChange={toggleSelectAllVisible}
+                        className="rounded border-border-default text-desert-green focus:ring-desert-green cursor-pointer"
+                      />
+                    ),
+                    render(record) {
+                      return (
+                        <input
+                          type="checkbox"
+                          checked={selectedUrls.has(record.download_url)}
+                          onChange={() => toggleSelectUrl(record.download_url)}
+                          onClick={(e) => e.stopPropagation()}
+                          className="rounded border-border-default text-desert-green focus:ring-desert-green cursor-pointer"
+                        />
+                      )
+                    },
+                  },
+                  {
                     accessor: 'title',
                     title: renderSortHeader('Título', 'title'),
                   },
@@ -894,7 +981,7 @@ export default function ZimRemoteExplorer() {
                         const pct = Math.min(100, Math.max(0, Math.round(activeJob.progress || 0)))
                         return (
                           <div className="w-36 space-y-1">
-                            <div className="flex items-center justify-between text-[11px] font-mono">
+                            <div className="flex items-center justify-between text-[0.6875rem] font-mono">
                               <span className="text-desert-orange font-semibold">Baixando</span>
                               <span className="font-bold text-text-primary">{pct}%</span>
                             </div>
@@ -1214,7 +1301,7 @@ export default function ZimRemoteExplorer() {
                         <div className="flex items-start justify-between gap-2">
                           <h4 className="text-sm font-bold text-text-primary">{ch.title}</h4>
                           <span
-                            className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ${
+                            className={`text-[0.625rem] font-bold px-2 py-0.5 rounded-full shrink-0 ${
                               ch.lang === 'por'
                                 ? 'bg-desert-green text-white'
                                 : 'bg-surface-secondary text-text-secondary border border-border-subtle'
@@ -1225,7 +1312,7 @@ export default function ZimRemoteExplorer() {
                         </div>
                         <p className="text-xs text-text-secondary mt-1.5">{ch.description}</p>
                       </div>
-                      <div className="flex flex-wrap items-center justify-between gap-2 pt-2.5 border-t border-border-subtle text-[11px]">
+                      <div className="flex flex-wrap items-center justify-between gap-2 pt-2.5 border-t border-border-subtle text-[0.6875rem]">
                         <span className="font-mono text-text-muted">Tamanho: {ch.size}</span>
                         <div className="flex items-center gap-2">
                           <button
@@ -1267,7 +1354,7 @@ export default function ZimRemoteExplorer() {
             })()}
           </div>
 
-          <ActiveDownloads filetype="zim" withHeader />
+          <ActiveDownloads filetypes={['zim', 'drug-data']} withHeader />
 
           {/* Manage Custom Libraries Modal */}
           <StyledModal
@@ -1347,37 +1434,78 @@ export default function ZimRemoteExplorer() {
 
           {/* Modal de Download em Lote com Seletor de HD de Destino */}
           <StyledModal
-            title="Confirmar Download em Lote (Baixar Tudo)?"
+            title={
+              batchMode === 'selected'
+                ? `Confirmar Download dos Selecionados (${pendingBatchItems.length})?`
+                : 'Confirmar Download em Lote (Baixar Tudo)?'
+            }
             open={batchModalOpen}
-            onCancel={() => setBatchModalOpen(false)}
+            onCancel={() => {
+              if (!batchSubmitting) setBatchModalOpen(false)
+            }}
+            confirmLoading={batchSubmitting}
+            cancelLoading={batchSubmitting}
             onConfirm={async () => {
-              setBatchModalOpen(false)
+              if (batchSubmitting || pendingBatchItems.length === 0) return
               const chosenDisk =
-                targetDisk || storageOverview?.preferredDownloadDisk || storageOverview?.storageRoot
-              if (chosenDisk && chosenDisk !== storageOverview?.storageRoot) {
-                try {
-                  await axios.post('/api/system/storage/move', {
-                    sourcePath: `${storageOverview?.storageRoot || '/storage'}/zim`,
-                    targetDiskPath: chosenDisk,
-                    createSymlink: true,
-                  })
-                  addNotification({
-                    message: `Downloads vinculados ao disco ${chosenDisk}.`,
-                    type: 'info',
-                  })
-                } catch (e: any) {
-                  console.warn('Falha ao vincular pasta ZIM ao disco:', e)
+                targetDisk ||
+                storageOverview?.moduleLocations?.['zim']?.currentDiskPath ||
+                storageOverview?.preferredDownloadDisk ||
+                storageOverview?.storageRoot ||
+                ''
+              const chosenDiskObj = storageOverview?.mountTargets?.find(
+                (m) => m.path === chosenDisk
+              )
+              if (chosenDiskObj && batchTotalBytes > 0) {
+                const availBytes = getDiskAvailableBytes(chosenDiskObj)
+                if (batchTotalBytes > availBytes) {
+                  setBatchError(
+                    `Espaço/cota insuficiente em "${chosenDiskObj.label}" (${formatBytes(availBytes, 1)} livres para ${formatBytes(batchTotalBytes, 1)} necessários). Selecione outro HD ou marque menos arquivos.`
+                  )
+                  return
                 }
               }
-              addNotification({
-                message: `Iniciando download de ${pendingBatchItems.length} arquivo(s) ZIM (${formatBytes(batchTotalBytes)})...`,
-                type: 'info',
-              })
-              for (const item of pendingBatchItems) {
-                await downloadFile(item)
+
+              try {
+                setBatchSubmitting(true)
+                setBatchError(null)
+                const res = await api.downloadBatchZimFiles(
+                  pendingBatchItems.map((item) => ({
+                    url: item.download_url,
+                    metadata: {
+                      title: item.title,
+                      summary: item.summary,
+                      author: item.author,
+                      size_bytes: item.size_bytes,
+                    },
+                  })),
+                  chosenDisk || undefined
+                )
+                setBatchModalOpen(false)
+                if (batchMode === 'selected') {
+                  setSelectedUrls(new Set())
+                }
+                invalidateDownloads()
+                queryClient.invalidateQueries({ queryKey: ['storage-overview'] })
+                addNotification({
+                  message: `${res.queuedCount} arquivo(s) ZIM adicionados à fila de Downloads Ativos${res.skippedCount > 0 ? ` (${res.skippedCount} já estavam na fila)` : ''}.`,
+                  type: 'success',
+                })
+              } catch (err: any) {
+                const msg = err?.message || 'Falha ao iniciar o download em lote.'
+                setBatchError(msg)
+                addNotification({ message: msg, type: 'error' })
+              } finally {
+                setBatchSubmitting(false)
               }
             }}
-            confirmText={`Baixar Tudo (${pendingBatchItems.length})`}
+            confirmText={
+              batchSubmitting
+                ? 'Enviando para a fila...'
+                : batchMode === 'selected'
+                  ? `Baixar Selecionados (${pendingBatchItems.length})`
+                  : `Baixar Tudo (${pendingBatchItems.length})`
+            }
             cancelText="Cancelar"
             confirmVariant="primary"
           >
@@ -1406,61 +1534,34 @@ export default function ZimRemoteExplorer() {
               </div>
 
               {/* Seletor de HD de Destino */}
-              <div className="space-y-2 pt-2 border-t border-border-subtle">
-                <label className="block text-xs font-bold text-text-primary uppercase tracking-wide">
-                  💾 Onde Salvar estes Arquivos (HD de Destino):
-                </label>
-                {storageOverview?.mountTargets && storageOverview.mountTargets.length > 0 ? (
-                  <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
-                    {storageOverview.mountTargets.map((disk) => {
-                      const currentActive =
-                        (targetDisk || storageOverview.preferredDownloadDisk || storageOverview.storageRoot) === disk.path
-                      const hasEnoughSpace = disk.freeBytes >= batchTotalBytes
-                      return (
-                        <div
-                          key={`batch-disk-${disk.path}`}
-                          onClick={() => setTargetDisk(disk.path)}
-                          className={`p-3 rounded-lg border cursor-pointer transition-all flex items-center justify-between ${
-                            currentActive
-                              ? 'border-desert-green bg-desert-green/10 shadow-sm'
-                              : 'border-border-default bg-surface-secondary hover:border-desert-tan'
-                          }`}
-                        >
-                          <div className="min-w-0 mr-2">
-                            <div className="text-xs font-bold text-text-primary flex items-center gap-2">
-                              <span>{disk.label}</span>
-                              {currentActive && (
-                                <span className="text-[10px] bg-desert-green text-white px-1.5 py-0.5 rounded font-mono font-bold">
-                                  DESTINO SELECIONADO
-                                </span>
-                              )}
-                            </div>
-                            <div className="text-[11px] font-mono text-text-secondary mt-0.5">
-                              {disk.path} • Espaço Livre:{' '}
-                              <strong className={hasEnoughSpace ? 'text-desert-green' : 'text-red-400'}>
-                                {formatBytes(disk.freeBytes, 1)}
-                              </strong>{' '}
-                              / {formatBytes(disk.totalBytes, 1)}
-                            </div>
-                          </div>
-                          <div className="text-right shrink-0">
-                            {hasEnoughSpace ? (
-                              <span className="text-[11px] text-desert-green font-semibold">Espaço Suficiente ✓</span>
-                            ) : (
-                              <span className="text-[11px] text-red-400 font-semibold">Espaço Insuficiente ⚠</span>
-                            )}
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
-                ) : (
-                  <p className="text-xs text-text-muted">Disco padrão do sistema (/storage/zim)</p>
-                )}
+              <div className="pt-2 border-t border-border-subtle">
+                <TargetDiskSelector
+                  moduleKey="zim"
+                  value={
+                    targetDisk ||
+                    storageOverview?.moduleLocations?.['zim']?.currentDiskPath ||
+                    storageOverview?.preferredDownloadDisk ||
+                    storageOverview?.storageRoot ||
+                    ''
+                  }
+                  onChange={(disk) => {
+                    setTargetDisk(disk)
+                    setBatchError(null)
+                  }}
+                  requiredBytes={batchTotalBytes}
+                  disabled={batchSubmitting}
+                  title="Onde Salvar estes Arquivos (HD de Destino):"
+                />
               </div>
 
+              {batchError && (
+                <div className="p-3 rounded-lg border border-desert-red/50 bg-desert-red/10 text-xs text-desert-red font-medium">
+                  {batchError}
+                </div>
+              )}
+
               <p className="text-xs text-text-muted">
-                O NOMAD salvará os downloads diretamente no disco selecionado preservando os links do Kiwix automaticamente.
+                Os arquivos serão gravados diretamente no HD selecionado sem congelar a tela e enviados de uma só vez para a fila de <strong>Downloads Ativos</strong>.
               </p>
             </div>
           </StyledModal>

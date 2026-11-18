@@ -916,7 +916,7 @@ function SituationRemedyRow({ remedy }: { remedy: NaturalRemedy }) {
         <div>
           <p className="text-sm font-semibold text-desert-tan-dark">
             {remedy.name}
-            <span className="ml-2 inline-block rounded-full bg-desert-tan/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-desert-tan-dark align-middle">
+            <span className="ml-2 inline-block rounded-full bg-desert-tan/10 px-2 py-0.5 text-[0.625rem] font-medium uppercase tracking-wide text-desert-tan-dark align-middle">
               {remedy.kind === 'self-care' ? 'Autocuidado' : 'Fitoterápico / Erva'}
             </span>
           </p>

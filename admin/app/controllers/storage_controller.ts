@@ -75,6 +75,23 @@ export default class StorageController {
     return response.ok({ success: true, preferredDownloadDisk: path || '' })
   }
 
+  async setQuota({ request, response }: HttpContext) {
+    try {
+      const { path, enabled, limitGb } = request.only(['path', 'enabled', 'limitGb'])
+      if (!path) {
+        return response.badRequest({ error: 'Caminho do disco não informado.' })
+      }
+      const quotas = await this.storageManager.setDiskQuota({
+        path,
+        enabled: Boolean(enabled),
+        limitGb: Number(limitGb) || 1,
+      })
+      return response.ok({ success: true, diskQuotas: quotas })
+    } catch (error: any) {
+      return response.badRequest({ error: error.message || 'Erro ao salvar limite de espaço.' })
+    }
+  }
+
   async sambaStatus({ response }: HttpContext) {
     const status = await this.storageManager.getSambaStatus()
     return response.ok(status)

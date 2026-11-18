@@ -610,12 +610,10 @@ export class PortainerService {
       if (index !== -1) {
         const item = services[index]
         const scheme = /^https:/i.test(item.ui_location || '') ? 'https' : 'http'
-        const rawPort = item.ui_location
-          ? item.ui_location.replace(/^https?:/, '').replace(/^.*?:/, '')
-          : '8090'
-        const defaultPort = rawPort === '8080' ? PortainerService.PORT_REMAPS['8080'] || '8095' : rawPort
+        const defaultPort = this.resolveNumericPort(item.ui_location, undefined, item.service_name)
         const resolvedPort = matchedCont?.publicPort ? String(matchedCont.publicPort) : defaultPort
-        const remoteUrl = `${scheme}://${hostIp}:${resolvedPort}`
+        const remoteUrl =
+          item.service_name === 'nomad_ollama' ? '/chat' : `${scheme}://${hostIp}:${resolvedPort}`
         const realStatus = matchedCont
           ? matchedCont.state === 'running'
             ? 'running'
@@ -819,6 +817,174 @@ export class PortainerService {
     await KVStore.setValue('portainer.deployedServices', JSON.stringify(updated))
   }
 
+  private pendingGpuServices = new Set<string>()
+
+  /**
+   * Resolves a valid numeric host port from ui_location (ignoring internal routes like '/chat')
+   * or from container_config bindings/exposed ports, applying reserved port remaps.
+   */
+  private resolveNumericPort(
+    uiLocation?: string | null,
+    containerConfig?: any,
+    serviceName?: string
+  ): string {
+    let port = ''
+    const loc = (uiLocation || '').trim()
+    if (/^\d+$/.test(loc)) {
+      port = loc
+    } else {
+      const explicitMatch = loc.match(/^(?:https?:)?(?:\/\/[^/:]+)?[:](\d+)$/i)
+      if (explicitMatch?.[1]) {
+        port = explicitMatch[1]
+      }
+    }
+
+    if (!port && containerConfig) {
+      const bindings = containerConfig?.HostConfig?.PortBindings
+      if (bindings && typeof bindings === 'object') {
+        for (const entries of Object.values(bindings)) {
+          if (Array.isArray(entries) && entries[0] && (entries[0] as any).HostPort) {
+            const candidate = String((entries[0] as any).HostPort).trim()
+            if (/^\d+$/.test(candidate)) {
+              port = candidate
+              break
+            }
+          }
+        }
+      }
+      if (!port && containerConfig?.ExposedPorts && typeof containerConfig.ExposedPorts === 'object') {
+        const firstKey = Object.keys(containerConfig.ExposedPorts)[0]
+        const exposedMatch = firstKey?.match(/^(\d+)/)
+        if (exposedMatch?.[1]) {
+          port = exposedMatch[1]
+        }
+      }
+    }
+
+    if (!port && serviceName === 'nomad_ollama') {
+      port = '11434'
+    }
+    if (!port || !/^\d+$/.test(port)) {
+      port = '8090'
+    }
+
+    if (port === '8080') {
+      return PortainerService.PORT_REMAPS['8080'] || '8095'
+    }
+    return port
+  }
+
+  /**
+   * Detects whether the remote Portainer Docker endpoint has GPU container runtime support.
+   */
+  private async endpointSupportsGpuRuntime(
+    client: AxiosInstance,
+    endpointId: number
+  ): Promise<boolean> {
+    try {
+      const res = await client.get(`/api/endpoints/${endpointId}/docker/info`, { timeout: 10000 })
+      const runtimes = res.data?.Runtimes
+      if (runtimes && typeof runtimes === 'object') {
+        return Object.keys(runtimes).some((key) => key.toLowerCase().includes('nvidia'))
+      }
+      return false
+    } catch {
+      return false
+    }
+  }
+
+  /**
+   * Lists container mount points (including CIFS/NFS/host binds) on the active Portainer endpoint.
+   */
+  public async getContainerStorageMounts(): Promise<
+    Array<{
+      containerName: string
+      image: string
+      state: string
+      source: string
+      destination: string
+      type: string
+      networkDevice?: string
+      driver?: string
+    }>
+  > {
+    try {
+      if (!(await this.isEnabled())) return []
+      const { client, baseUrl, apiKey } = await this.getClient()
+      if (!baseUrl || !apiKey) return []
+
+      let endpointId = await this.getEndpointId()
+      const epResp = await client.get('/api/endpoints', { timeout: 4000 }).catch(() => null)
+      const eps: any[] = Array.isArray(epResp?.data)
+        ? epResp.data
+        : Array.isArray(epResp?.data?.values)
+          ? epResp.data.values
+          : []
+      if (eps.length > 0 && !eps.some((e) => Number(e.Id) === endpointId)) {
+        endpointId = Number(eps[0].Id) || endpointId
+      }
+
+      const [containersResp, volumesResp] = await Promise.all([
+        client
+          .get(`/api/endpoints/${endpointId}/docker/containers/json?all=1`, { timeout: 5000 })
+          .catch(() => null),
+        client
+          .get(`/api/endpoints/${endpointId}/docker/volumes`, { timeout: 5000 })
+          .catch(() => null),
+      ])
+
+      const volumeMap = new Map<string, { driver: string; device?: string }>()
+      const vols: any[] = Array.isArray(volumesResp?.data?.Volumes) ? volumesResp.data.Volumes : []
+      for (const v of vols) {
+        if (v?.Name) {
+          volumeMap.set(v.Name, {
+            driver: v.Driver || 'local',
+            device: v.Options?.device ? String(v.Options.device) : undefined,
+          })
+        }
+      }
+
+      const containers: any[] = Array.isArray(containersResp?.data) ? containersResp.data : []
+      const out: Array<{
+        containerName: string
+        image: string
+        state: string
+        source: string
+        destination: string
+        type: string
+        networkDevice?: string
+        driver?: string
+      }> = []
+
+      for (const c of containers) {
+        const name = (Array.isArray(c.Names) && c.Names[0] ? String(c.Names[0]) : c.Id || '')
+          .replace(/^\//, '')
+          .trim()
+        const mounts: any[] = Array.isArray(c.Mounts) ? c.Mounts : []
+        for (const m of mounts) {
+          const dest = String(m?.Destination || '')
+          const src = String(m?.Source || '')
+          if (!dest || dest === '/var/run/docker.sock' || src.startsWith('/var/run/')) continue
+          const volMeta = m?.Name ? volumeMap.get(String(m.Name)) : undefined
+          out.push({
+            containerName: name,
+            image: String(c.Image || ''),
+            state: String(c.State || ''),
+            source: src || String(m?.Name || ''),
+            destination: dest,
+            type: String(m?.Type || 'bind'),
+            networkDevice: volMeta?.device,
+            driver: m?.Driver || volMeta?.driver,
+          })
+        }
+      }
+
+      return out
+    } catch {
+      return []
+    }
+  }
+
   /**
    * Broadcast an installation event to the frontend via SSE
    */
@@ -969,6 +1135,17 @@ export class PortainerService {
             .join('\n')}\n`
         : ''
 
+    const gpuBlock = this.pendingGpuServices.has(serviceName)
+      ? `    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+`
+      : ''
+
     return `version: '3.8'
 
 services:
@@ -976,7 +1153,9 @@ services:
     image: ${image}
     container_name: nomad-${serviceName}
     restart: unless-stopped
-${userLine}    ports:
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+${gpuBlock}${userLine}    ports:
 ${portsBlock}
     volumes:
 ${volumesBlock}
@@ -1403,12 +1582,15 @@ ${cmdBlock}${topLevelVolumesBlock}`
       config = {}
     }
 
-    // Determine target host port, avoiding port 8080 conflicts
-    let hostPort = service.ui_location
-      ? service.ui_location.replace(/^https?:/, '').replace(/^.*?:/, '')
-      : '8090'
-    if (hostPort === '8080') {
-      hostPort = PortainerService.PORT_REMAPS['8080'] || '8095'
+    // Determine target host port, avoiding port 8080 and internal UI routes (e.g. '/chat')
+    let parsedContainerCfg: any = null
+    try {
+      parsedContainerCfg = service.container_config ? JSON.parse(service.container_config) : null
+    } catch {
+      parsedContainerCfg = null
+    }
+    const hostPort = this.resolveNumericPort(service.ui_location, parsedContainerCfg, serviceName)
+    if (service.ui_location === '8080') {
       logger.info(`[PortainerService] Port 8080 is reserved. Remapped ${serviceName} to ${hostPort}.`)
     }
 
@@ -1488,6 +1670,10 @@ ${cmdBlock}${topLevelVolumesBlock}`
     const scheme = /^https:/i.test(service.ui_location || '') ? 'https' : 'http'
     const targetUrl = `${scheme}://${hostIp}:${hostPort}`
     const stackName = `nomad-${serviceName}`
+    this.pendingGpuServices.delete(serviceName)
+    if (serviceName === 'nomad_ollama' && (await this.endpointSupportsGpuRuntime(client, endpointId))) {
+      this.pendingGpuServices.add(serviceName)
+    }
     const extraEnv = preinstall?.extraEnv || []
 
     try {
@@ -1542,13 +1728,49 @@ ${cmdBlock}${topLevelVolumesBlock}`
         'pulling',
         `[2/5] Baixando imagem ${service.container_image} no Portainer...`
       )
-      await client
-        .post(
-          `/api/endpoints/${endpointId}/docker/images/create?fromImage=${encodeURIComponent(service.container_image)}`,
-          null,
-          { timeout: 300000 }
+      let imageAlreadyCached = false
+      try {
+        await client.get(
+          `/api/endpoints/${endpointId}/docker/images/${encodeURIComponent(service.container_image)}/json`,
+          { timeout: 10000 }
         )
-        .catch(() => {})
+        imageAlreadyCached = true
+      } catch {
+        imageAlreadyCached = false
+      }
+
+      if (!imageAlreadyCached) {
+        this.broadcast(
+          serviceName,
+          'pulling',
+          `Baixando imagem ${service.container_image} no servidor Portainer (pode levar alguns minutos)...`
+        )
+        try {
+          const pullRes = await client.post(
+            `/api/endpoints/${endpointId}/docker/images/create?fromImage=${encodeURIComponent(service.container_image)}`,
+            null,
+            { timeout: 900000, responseType: 'text' }
+          )
+          const rawStream = typeof pullRes.data === 'string' ? pullRes.data : ''
+          if (rawStream.includes('"errorDetail"') || rawStream.includes('"error":')) {
+            const errorMatch = rawStream.match(/"error"\s*:\s*"([^"]+)"/)
+            const errMsg = errorMatch?.[1] || 'Falha ao baixar imagem Docker no Portainer.'
+            throw new Error(errMsg)
+          }
+        } catch (pullErr: any) {
+          // Verify whether daemon finished caching the image despite HTTP proxy timeout
+          try {
+            await client.get(
+              `/api/endpoints/${endpointId}/docker/images/${encodeURIComponent(service.container_image)}/json`,
+              { timeout: 10000 }
+            )
+          } catch {
+            throw new Error(
+              `Falha ao baixar a imagem "${service.container_image}" no servidor Portainer: ${pullErr?.message || pullErr}`
+            )
+          }
+        }
+      }
 
       // 5. Detect if Portainer shares the same Docker host as NOMAD; if remote-only, seed named volumes
       this.broadcast(
@@ -1751,11 +1973,26 @@ ${cmdBlock}${topLevelVolumesBlock}`
       }
 
       if (serviceName === 'nomad_filebrowser') {
-        // Garante que o usuário admin / nomad funcione mesmo se .filebrowser.db já existia com senha aleatória
-        for (const cmd of [
-          ['filebrowser', 'users', 'update', 'admin', '--password', 'nomad', '-d', '/db/.filebrowser.db'],
-          ['filebrowser', 'users', 'add', 'admin', 'nomad', '--perm.admin', '-d', '/db/.filebrowser.db'],
-        ]) {
+        // Garante usuário padrão/personalizado no FileBrowser mesmo se .filebrowser.db já existia
+        const autoApply = await KVStore.getValue('portainer.autoApplyCredentials').catch(() => false)
+        const cfgUser = String(
+          (await KVStore.getValue('portainer.defaultUsername').catch(() => '')) || ''
+        ).trim()
+        const cfgPass = String(
+          (await KVStore.getValue('portainer.defaultPassword').catch(() => '')) || ''
+        )
+        const effectivePass = autoApply && cfgPass ? cfgPass : 'nomad'
+        const cmds: string[][] = [
+          ['filebrowser', 'users', 'update', 'admin', '--password', effectivePass, '-d', '/db/.filebrowser.db'],
+          ['filebrowser', 'users', 'add', 'admin', effectivePass, '--perm.admin', '-d', '/db/.filebrowser.db'],
+        ]
+        if (autoApply && cfgUser && cfgUser !== 'admin') {
+          cmds.push(
+            ['filebrowser', 'users', 'add', cfgUser, effectivePass, '--perm.admin', '-d', '/db/.filebrowser.db'],
+            ['filebrowser', 'users', 'update', cfgUser, '--password', effectivePass, '-d', '/db/.filebrowser.db']
+          )
+        }
+        for (const cmd of cmds) {
           try {
             const execCreate = await client.post(
               `/api/endpoints/${endpointId}/docker/containers/${runningCont.Id}/exec`,
@@ -1776,18 +2013,28 @@ ${cmdBlock}${topLevelVolumesBlock}`
       }
 
       // 10. Mark as installed and linked to remote server
+      this.pendingGpuServices.delete(serviceName)
       await this.markAsDeployedRemotely(serviceName)
       service.installed = true
       service.installation_status = 'idle'
-      service.custom_url = targetUrl
+      if (serviceName === 'nomad_ollama') {
+        service.ui_location = '/chat'
+        service.custom_url = null
+        await KVStore.setValue('ai.remoteOllamaUrl', `http://${hostIp}:${hostPort}`).catch(() => {})
+      } else {
+        service.custom_url = targetUrl
+      }
       await service.save()
 
       this.broadcast(
         serviceName,
         'completed',
-        `Aplicação instalada e ativa no Servidor Portainer em ${targetUrl}!`
+        serviceName === 'nomad_ollama'
+          ? `Assistente de IA ativo no Portainer (API em http://${hostIp}:${hostPort}) e conectado ao /chat!`
+          : `Aplicação instalada e ativa no Servidor Portainer em ${targetUrl}!`
       )
     } catch (apiErr: any) {
+      this.pendingGpuServices.delete(serviceName)
       logger.error(`Portainer remote deploy failed for ${serviceName}: ${apiErr.message}`)
       await this.unmarkDeployedRemotely(serviceName)
       service.installed = false

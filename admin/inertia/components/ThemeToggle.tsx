@@ -75,10 +75,10 @@ export default function ThemeToggle({ compact = false, direction = 'up' }: Theme
           } z-50 w-72 rounded-lg border border-border-default bg-surface-primary p-2 shadow-2xl`}
         >
           <div className="px-2 py-1.5 border-b border-border-subtle mb-1 flex items-center justify-between">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-text-secondary">
+            <span className="text-[0.6875rem] font-bold uppercase tracking-wider text-text-secondary">
               Troca Instantânea de Tema
             </span>
-            <span className="text-[10px] text-desert-green font-semibold">Tempo Real</span>
+            <span className="text-[0.625rem] text-desert-green font-semibold">Tempo Real</span>
           </div>
 
           <div className="space-y-1">
@@ -103,7 +103,7 @@ export default function ThemeToggle({ compact = false, direction = 'up' }: Theme
                     <div className="truncate">
                       <div className="truncate leading-tight">{t.shortName}</div>
                       <div
-                        className={`text-[10px] truncate ${
+                        className={`text-[0.625rem] truncate ${
                           isSelected ? 'text-white/80' : 'text-text-muted'
                         }`}
                       >

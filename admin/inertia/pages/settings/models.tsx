@@ -4,14 +4,13 @@ import StyledTable from '~/components/StyledTable'
 import SettingsLayout from '~/layouts/SettingsLayout'
 import { NomadOllamaModel } from '../../../types/ollama'
 import StyledButton from '~/components/StyledButton'
-import useServiceInstalledStatus from '~/hooks/useServiceInstalledStatus'
+import { useAiStatus } from '~/hooks/useAiStatus'
 import Alert from '~/components/Alert'
 import { useNotifications } from '~/context/NotificationContext'
 import api from '~/lib/api'
 import { useModals } from '~/context/ModalContext'
 import StyledModal from '~/components/StyledModal'
 import type { NomadInstalledModel } from '../../../types/ollama'
-import { SERVICE_NAMES } from '../../../constants/service_names'
 import { RAG_MIN_RELEVANCE_PRESETS, RESPONSE_STYLE_PRESETS } from '../../../constants/ollama'
 import Switch from '~/components/inputs/Switch'
 import Select from '~/components/inputs/Select'
@@ -35,7 +34,8 @@ export default function ModelsPage(props: {
   }
 }) {
   const { aiAssistantName } = usePage<{ aiAssistantName: string }>().props
-  const { isInstalled } = useServiceInstalledStatus(SERVICE_NAMES.OLLAMA)
+  const aiStatus = useAiStatus()
+  const isInstalled = aiStatus.engines.some((e) => e.id === 'ollama')
   const { addNotification } = useNotifications()
   const { openModal, closeAllModals } = useModals()
   const { debounce } = useDebounce()
@@ -69,6 +69,8 @@ export default function ModelsPage(props: {
       const res = await api.configureRemoteOllama(remoteOllamaUrl || null)
       if (res?.success) {
         addNotification({ message: res.message, type: 'success' })
+        void queryClient.invalidateQueries({ queryKey: ['installed-services'] })
+        void queryClient.invalidateQueries({ queryKey: ['live-ai-remote-status'] })
         router.reload()
       }
     } catch (error: any) {
@@ -87,6 +89,8 @@ export default function ModelsPage(props: {
       if (res?.success) {
         setRemoteOllamaUrl('')
         addNotification({ message: 'Remote Ollama configuration cleared.', type: 'success' })
+        void queryClient.invalidateQueries({ queryKey: ['installed-services'] })
+        void queryClient.invalidateQueries({ queryKey: ['live-ai-remote-status'] })
         router.reload()
       }
     } catch (error: any) {
@@ -321,9 +325,36 @@ export default function ModelsPage(props: {
             </div>
           </div>
 
-          {!isInstalled && !props.models.settings.remoteOllamaUrl && (
+          {aiStatus.hasAnyAi ? (
+            <div className="mb-6 p-4 rounded-xl border border-emerald-500/30 bg-emerald-500/10 space-y-2">
+              <div className="text-xs font-bold uppercase tracking-wider text-emerald-400">
+                Interfaces &amp; Motores de IA Detectados em Tempo Real:
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {aiStatus.engines.map((eng) => (
+                  <div
+                    key={eng.id}
+                    className="px-3 py-1.5 rounded-lg bg-surface-primary border border-border-default text-xs flex items-center gap-2"
+                  >
+                    <span
+                      className={`w-2 h-2 rounded-full ${
+                        eng.online ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'
+                      }`}
+                    />
+                    <strong>{eng.shortName}</strong>
+                    <span className="text-text-muted">({eng.locationLabel})</span>
+                    {eng.backendNote && (
+                      <span className="text-[0.6875rem] font-mono text-desert-tan">
+                        • {eng.backendNote}
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
             <Alert
-              title="Nenhum servidor de IA conectado ainda. Informe acima a URL do seu Ollama remoto na LAN e clique em 'Salvar e Testar'."
+              title="Nenhum servidor de IA conectado ainda. Instale Ollama ou Open WebUI na Central de Aplicativos ou informe acima a URL do seu Ollama remoto na LAN."
               type="warning"
               variant="solid"
               className="!mt-2 !mb-6"

@@ -44,10 +44,10 @@ export default function LeftDownloadsDrawer() {
             <IconDownload size={16} className="text-desert-green shrink-0" />
           )}
           <div className="text-left leading-tight">
-            <div className="text-[11px] font-bold uppercase tracking-wider">
+            <div className="text-[0.6875rem] font-bold uppercase tracking-wider">
               {hasActive ? `Downloads (${activeList.length})` : 'Downloads'}
             </div>
-            <div className="text-[10px] text-text-muted font-mono">
+            <div className="text-[0.625rem] text-text-muted font-mono">
               {hasActive ? `${maxProgress}% em curso` : 'Nenhum ativo'}
             </div>
           </div>
@@ -64,7 +64,7 @@ export default function LeftDownloadsDrawer() {
                   Downloads Ativos
                 </span>
               </div>
-              <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-surface-primary border border-border-subtle text-text-secondary">
+              <span className="text-[0.6875rem] font-mono px-2 py-0.5 rounded bg-surface-primary border border-border-subtle text-text-secondary">
                 {activeList.length}
               </span>
             </div>
@@ -76,7 +76,7 @@ export default function LeftDownloadsDrawer() {
                   <p className="text-xs font-medium text-text-secondary">
                     Nenhum download em andamento.
                   </p>
-                  <p className="text-[11px] text-text-muted">
+                  <p className="text-[0.6875rem] text-text-muted">
                     Inicie downloads no Explorador ZIM, Mapas ou Modelos IA.
                   </p>
                 </div>
@@ -115,7 +115,7 @@ export default function LeftDownloadsDrawer() {
                         />
                       </div>
 
-                      <div className="flex items-center justify-between text-[10px] font-mono text-text-muted">
+                      <div className="flex items-center justify-between text-[0.625rem] font-mono text-text-muted">
                         <span>
                           {dl.downloadedBytes ? formatBytes(dl.downloadedBytes) : '0 B'}
                           {dl.totalBytes ? ` / ${formatBytes(dl.totalBytes)}` : ''}
@@ -134,7 +134,7 @@ export default function LeftDownloadsDrawer() {
               )}
             </div>
 
-            <div className="px-3.5 py-2 border-t border-border-subtle bg-surface-secondary flex items-center justify-between text-[11px]">
+            <div className="px-3.5 py-2 border-t border-border-subtle bg-surface-secondary flex items-center justify-between text-[0.6875rem]">
               <Link
                 href="/settings/zim/remote-explorer"
                 onClick={() => setExpanded(false)}

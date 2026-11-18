@@ -58,24 +58,27 @@ export class DownloadService {
   }
 
   async listDownloadJobs(filetype?: string): Promise<DownloadJobWithProgress[]> {
+    const safeFetch = (queueName: string) =>
+      this.fetchJobsWithStates(queueName).catch(() => [] as TaggedJob[])
+
     const [fileTagged, extractTagged, modelTagged, drugTagged] = await Promise.all([
-      this.fetchJobsWithStates(RunDownloadJob.queue),
-      this.fetchJobsWithStates(RunExtractPmtilesJob.queue),
-      this.fetchJobsWithStates(DownloadModelJob.queue),
-      this.fetchJobsWithStates(DownloadDrugDataJob.queue),
+      safeFetch(RunDownloadJob.queue),
+      safeFetch(RunExtractPmtilesJob.queue),
+      safeFetch(DownloadModelJob.queue),
+      safeFetch(DownloadDrugDataJob.queue),
     ])
 
     const fileDownloads = fileTagged.map(({ job, state }) => {
       const parsed = this.parseProgress(job.progress)
       return {
-        jobId: job.id!.toString(),
-        url: job.data.url,
+        jobId: String(job.id ?? ''),
+        url: job.data?.url || '',
         progress: parsed.percent,
-        filepath: job.data.filepath ? normalize(job.data.filepath) : '',
-        filetype: job.data.filetype,
-        title: job.data.title || undefined,
+        filepath: job.data?.filepath ? normalize(job.data.filepath) : '',
+        filetype: job.data?.filetype,
+        title: job.data?.title || undefined,
         downloadedBytes: parsed.downloadedBytes,
-        totalBytes: parsed.totalBytes || job.data.totalBytes || undefined,
+        totalBytes: parsed.totalBytes || job.data?.totalBytes || undefined,
         lastProgressTime: parsed.lastProgressTime,
         status: state,
         failedReason: job.failedReason || undefined,
@@ -85,40 +88,33 @@ export class DownloadService {
     const extractDownloads = extractTagged.map(({ job, state }) => {
       const parsed = this.parseProgress(job.progress)
       return {
-        jobId: job.id!.toString(),
-        url: job.data.sourceUrl,
+        jobId: String(job.id ?? ''),
+        url: job.data?.sourceUrl || '',
         progress: parsed.percent,
-        filepath: job.data.outputFilepath ? normalize(job.data.outputFilepath) : '',
-        filetype: job.data.filetype || 'map',
-        title: job.data.title || undefined,
+        filepath: job.data?.outputFilepath ? normalize(job.data.outputFilepath) : '',
+        filetype: job.data?.filetype || 'map',
+        title: job.data?.title || undefined,
         downloadedBytes: parsed.downloadedBytes,
-        totalBytes: parsed.totalBytes || job.data.estimatedBytes || undefined,
+        totalBytes: parsed.totalBytes || job.data?.estimatedBytes || undefined,
         lastProgressTime: parsed.lastProgressTime,
         status: state,
         failedReason: job.failedReason || undefined,
       }
     })
 
-    const modelDownloads = modelTagged.map(({ job }) => ({
-      jobId: job.id!.toString(),
-      url: job.data.modelName || 'Unknown Model',
-      progress: parseInt(job.progress.toString(), 10),
-      filepath: job.data.modelName || 'Unknown Model',
-      filetype: 'model',
-      status: (job.failedReason ? 'failed' : 'active') as 'active' | 'failed',
-      failedReason: job.failedReason || undefined,
-    }))
+    const modelDownloads = modelTagged.map(({ job, state }) => {
+      const parsed = this.parseProgress(job.progress)
+      return {
+        jobId: String(job.id ?? ''),
+        url: job.data?.modelName || 'Unknown Model',
+        progress: parsed.percent,
+        filepath: job.data?.modelName || 'Unknown Model',
+        filetype: 'model',
+        status: (state === 'failed' || job.failedReason ? 'failed' : 'active') as 'active' | 'failed',
+        failedReason: job.failedReason || undefined,
+      }
+    })
 
-    // FDA drug dataset — DOWNLOAD phase only, collapsed to ONE card. The job fans
-    // the manifest's N partitions into continuations under AUTO-GENERATED jobIds
-    // (only part 0 runs under the deterministic jobId), and the queue is
-    // concurrency 1, so at most one part is ever in flight. Filtering to the
-    // deterministic jobId would track only part 0 and then drop the card while
-    // parts 2..N keep downloading. Instead represent the whole download with the
-    // single in-flight job's aggregate progress (the progress emit already spans
-    // all parts), and always report the deterministic jobId so the cancel/remove
-    // button routes to _cancelDrugDownloadJob whichever part is active. The heavy
-    // ingest is EXCLUDED here — it stays on the IngestStatus surface.
     const drugInFlight =
       drugTagged.find(({ state }) => state === 'active') ??
       drugTagged.find(({ state }) => state === 'waiting' || state === 'delayed') ??
@@ -130,7 +126,7 @@ export class DownloadService {
             jobId: DownloadDrugDataJob.jobId,
             url: 'https://api.fda.gov/download.json',
             progress: parsed.percent,
-            filepath: job.data.currentPartName || 'FDA Drug Reference',
+            filepath: job.data?.currentPartName || 'FDA Drug Reference',
             filetype: 'drug-data',
             title: 'FDA Drug Reference',
             downloadedBytes: parsed.downloadedBytes,

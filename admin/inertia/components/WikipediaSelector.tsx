@@ -165,7 +165,7 @@ const WikipediaSelector: React.FC<WikipediaSelectorProps> = ({
 
                 {(isCurrentDownloading || matchingJob) && (
                   <div className="mt-3 pt-2.5 border-t border-border-subtle space-y-1">
-                    <div className="flex items-center justify-between text-[11px] font-mono">
+                    <div className="flex items-center justify-between text-[0.6875rem] font-mono">
                       <span className="text-desert-orange font-semibold">
                         {matchingJob?.status === 'waiting' || matchingJob?.status === 'delayed'
                           ? 'Na fila...'
@@ -179,7 +179,7 @@ const WikipediaSelector: React.FC<WikipediaSelectorProps> = ({
                         style={{ width: `${dlPct}%` }}
                       />
                     </div>
-                    <div className="flex items-center justify-between text-[10px] font-mono text-text-muted">
+                    <div className="flex items-center justify-between text-[0.625rem] font-mono text-text-muted">
                       <span>
                         {matchingJob?.downloadedBytes
                           ? formatBytes(matchingJob.downloadedBytes, 1)

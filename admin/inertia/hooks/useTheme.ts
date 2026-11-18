@@ -3,6 +3,7 @@ import api from '~/lib/api'
 
 export type Theme = 'tactical' | 'light' | 'dark' | 'survival' | 'stealth'
 export type HomeLayoutMode = 'auto' | 'tactical' | 'classic'
+export type UiScaleMode = '130' | '115' | '100'
 
 export interface ThemeDefinition {
   id: Theme
@@ -118,6 +119,16 @@ export const THEME_DEFINITIONS: ThemeDefinition[] = [
 const VALID_THEMES: Theme[] = ['tactical', 'light', 'dark', 'survival', 'stealth']
 const STORAGE_KEY = 'nomad:theme'
 const LAYOUT_STORAGE_KEY = 'nomad:home_layout'
+const SCALE_STORAGE_KEY = 'nomad:ui_scale'
+
+function getInitialUiScale(): UiScaleMode {
+  if (typeof window === 'undefined') return '130'
+  try {
+    const stored = localStorage.getItem(SCALE_STORAGE_KEY) as UiScaleMode | null
+    if (stored === '100' || stored === '115' || stored === '130') return stored
+  } catch {}
+  return '130'
+}
 
 function getInitialTheme(): Theme {
   if (typeof window === 'undefined') return 'tactical'
@@ -140,6 +151,17 @@ function getInitialHomeLayout(): HomeLayoutMode {
 export function useTheme() {
   const [theme, setThemeState] = useState<Theme>(getInitialTheme)
   const [homeLayout, setHomeLayoutState] = useState<HomeLayoutMode>(getInitialHomeLayout)
+  const [uiScale, setUiScaleState] = useState<UiScaleMode>(getInitialUiScale)
+
+  const setUiScale = useCallback((newScale: UiScaleMode) => {
+    setUiScaleState(newScale)
+    if (typeof document !== 'undefined') {
+      document.documentElement.setAttribute('data-ui-scale', newScale)
+    }
+    try {
+      localStorage.setItem(SCALE_STORAGE_KEY, newScale)
+    } catch {}
+  }, [])
 
   const setTheme = useCallback((newTheme: Theme) => {
     setThemeState(newTheme)
@@ -182,6 +204,7 @@ export function useTheme() {
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme)
     document.documentElement.setAttribute('data-home-layout', homeLayout)
+    document.documentElement.setAttribute('data-ui-scale', uiScale)
 
     const onStorage = (e: StorageEvent) => {
       if (e.key === STORAGE_KEY && e.newValue && VALID_THEMES.includes(e.newValue as Theme)) {
@@ -195,17 +218,22 @@ export function useTheme() {
         setHomeLayoutState(e.newValue as HomeLayoutMode)
         document.documentElement.setAttribute('data-home-layout', e.newValue)
       }
+      if (
+        e.key === SCALE_STORAGE_KEY &&
+        (e.newValue === '100' || e.newValue === '115' || e.newValue === '130')
+      ) {
+        setUiScaleState(e.newValue as UiScaleMode)
+        document.documentElement.setAttribute('data-ui-scale', e.newValue)
+      }
     }
     window.addEventListener('storage', onStorage)
     return () => window.removeEventListener('storage', onStorage)
-  }, [theme, homeLayout])
+  }, [theme, homeLayout, uiScale])
 
   const currentThemeDef =
     THEME_DEFINITIONS.find((t) => t.id === theme) || THEME_DEFINITIONS[0]
 
-  const effectiveTacticalHome =
-    homeLayout === 'tactical' ||
-    (homeLayout === 'auto' && currentThemeDef.isTacticalHud)
+  const effectiveTacticalHome = homeLayout !== 'classic'
 
   return {
     theme,
@@ -213,6 +241,8 @@ export function useTheme() {
     toggleTheme,
     homeLayout,
     setHomeLayout,
+    uiScale,
+    setUiScale,
     currentThemeDef,
     effectiveTacticalHome,
   }

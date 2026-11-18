@@ -38,6 +38,10 @@ import { invalidateResponseStyleCache } from '../utils/response_style.js'
 import { KiwixLibraryService } from '#services/kiwix_library_service'
 import { PortainerService } from '#services/portainer_service'
 import { TruenasService } from '#services/truenas_service'
+import {
+  getConfiguredDefaultCredentials,
+  injectDefaultCredentialEnv,
+} from '../utils/default_credentials.js'
 
 @inject()
 export class SystemService {
@@ -373,8 +377,39 @@ export class SystemService {
   }
 
   async deployToPortainer(serviceName: string) {
+    const svcRecord = await Service.findBy('service_name', serviceName)
+    const remoteOllamaUrl =
+      serviceName === SERVICE_NAMES.OPEN_WEBUI
+        ? String((await KVStore.getValue('ai.remoteOllamaUrl').catch(() => '')) || '').trim()
+        : ''
+    if (
+      svcRecord?.depends_on &&
+      svcRecord.depends_on !== serviceName &&
+      !(
+        serviceName === SERVICE_NAMES.OPEN_WEBUI &&
+        svcRecord.depends_on === SERVICE_NAMES.OLLAMA &&
+        Boolean(remoteOllamaUrl)
+      )
+    ) {
+      const depRemote = await this.portainerService.isDeployedRemotely(svcRecord.depends_on)
+      if (!depRemote) {
+        logger.info(
+          `[SystemService] Deploying dependency ${svcRecord.depends_on} to Portainer before ${serviceName}...`
+        )
+        await this.deployToPortainer(svcRecord.depends_on)
+      }
+    }
+
     await this.dockerService._removeServiceContainer(serviceName).catch(() => {})
     const preinstall = await this.dockerService.prepareServicePreinstall(serviceName)
+    const defaultCreds = await getConfiguredDefaultCredentials()
+    preinstall.extraEnv = injectDefaultCredentialEnv(serviceName, preinstall.extraEnv || [], defaultCreds)
+    if (serviceName === SERVICE_NAMES.OPEN_WEBUI && remoteOllamaUrl) {
+      preinstall.extraEnv = [
+        ...preinstall.extraEnv.filter((e: string) => !e.startsWith('OLLAMA_BASE_URL=')),
+        `OLLAMA_BASE_URL=${remoteOllamaUrl.replace(/\/$/, '')}`,
+      ]
+    }
     this.dockerService.invalidateServicesStatusCache()
     return await this.portainerService.deployService(serviceName, preinstall)
   }
@@ -1155,7 +1190,21 @@ export class SystemService {
         .sort((a, b) => b.mount.length - a.mount.length)[0]
 
       if (fs) {
-        const availableDiskMB = Math.floor((fs.size - fs.used) / 1024 / 1024)
+        let availableDiskMB = Math.floor((fs.size - fs.used) / 1024 / 1024)
+        try {
+          const quotasRaw = await KVStore.getValue('storage.diskQuotas')
+          const quotas =
+            typeof quotasRaw === 'string'
+              ? JSON.parse(quotasRaw)
+              : quotasRaw && typeof quotasRaw === 'object'
+                ? quotasRaw
+                : {}
+          const quotaEntry = quotas[fs.mount] || quotas['/app/storage'] || quotas[storagePath]
+          if (quotaEntry?.enabled && Number(quotaEntry.limitBytes) > 0) {
+            const quotaFreeMB = Math.max(0, Math.floor((Number(quotaEntry.limitBytes) - fs.used) / 1024 / 1024))
+            availableDiskMB = Math.min(availableDiskMB, quotaFreeMB)
+          }
+        } catch {}
         if (availableDiskMB < minDiskMB) {
           warnings.push(
             `Low disk space: ${availableDiskMB} MB available on ${fs.mount}, this app recommends at least ${minDiskMB} MB free.`

@@ -1,9 +1,8 @@
 import { Head, Link } from '@inertiajs/react'
 import SettingsLayout from '~/layouts/SettingsLayout'
 import { useThemeContext } from '~/providers/ThemeProvider'
-import { THEME_DEFINITIONS, HomeLayoutMode } from '~/hooks/useTheme'
+import { THEME_DEFINITIONS, HomeLayoutMode, UiScaleMode } from '~/hooks/useTheme'
 import { getThemeIcon } from '~/components/ThemeToggle'
-import StyledButton from '~/components/StyledButton'
 import {
   IconCheck,
   IconPalette,
@@ -22,29 +21,59 @@ const HOME_LAYOUT_OPTIONS: Array<{
 }> = [
   {
     id: 'auto',
-    title: 'Automático (Conforme o Tema)',
-    subtitle: 'Recomendado',
+    title: 'Painel Completo N.O.M.A.D. (Todos os 5 Temas)',
+    subtitle: 'Recomendado • Padrão',
     description:
-      'Ativa o HUD Tático Chanfrado (MIL-STD-810H) nos temas Militar, Sobrevivência e Stealth, e usa a Grade Clássica nos temas Padrão NOMAD Claro e Noturno.',
+      'Exibe o Centro de Comando moderno completo (Armazenamento, CPU, RAM, Log ao Vivo e Centrais de Operação) aplicando a paleta de cores de qualquer um dos 5 temas escolhidos.',
   },
   {
     id: 'tactical',
-    title: 'Sempre HUD Tático de Comando (MIL-STD-810H)',
-    subtitle: 'Painel Militar Completo',
+    title: 'Forçar HUD Completo N.O.M.A.D.',
+    subtitle: 'Sempre Completo',
     description:
-      'Mantém o cabeçalho tático chanfrado em 45°, rebites industriais, telemetria de situação operacional e divisões numeradas em todos os temas.',
+      'Mantém sempre o painel completo com telemetria de discos, processador, memória e navegações em qualquer tema selecionado.',
   },
   {
     id: 'classic',
-    title: 'Sempre Grade Clássica NOMAD',
-    subtitle: 'Layout Original Simplificado',
+    title: 'Grade Simples Clássica (Legado)',
+    subtitle: 'Visual Antigo em Blocos',
     description:
-      'Exibe os cartões tradicionais centralizados do Project NOMAD na tela inicial, aplicando apenas as cores do tema selecionado.',
+      'Exibe apenas os blocos grandes tradicionais originais na tela inicial em vez do painel completo com telemetria.',
+  },
+]
+
+const UI_SCALE_OPTIONS: Array<{
+  id: UiScaleMode
+  title: string
+  subtitle: string
+  description: string
+}> = [
+  {
+    id: '130',
+    title: '130% Amplo (Conforto Visual)',
+    subtitle: 'Recomendado • Padrão',
+    description:
+      'Exibe textos, cards, medidores e botões ampliados em 130% naturalmente em monitores Full HD+, eliminando sobras laterais e melhorando a leitura à distância sem precisar dar zoom no navegador.',
+  },
+  {
+    id: '115',
+    title: '115% Intermediário',
+    subtitle: 'Equilibrado',
+    description:
+      'Aumenta levemente a legibilidade geral em 15% mantendo mais linhas visíveis simultaneamente em listas extensas.',
+  },
+  {
+    id: '100',
+    title: '100% Original Compacto',
+    subtitle: 'Escala Clássica',
+    description:
+      'Usa o tamanho base padrão (16px) de navegador para telas pequenas ou quem prefere elementos menores.',
   },
 ]
 
 export default function ThemesSettingsPage() {
-  const { theme, setTheme, homeLayout, setHomeLayout, currentThemeDef } = useThemeContext()
+  const { theme, setTheme, homeLayout, setHomeLayout, uiScale, setUiScale, currentThemeDef } =
+    useThemeContext()
 
   return (
     <SettingsLayout>
@@ -122,7 +151,7 @@ export default function ThemesSettingsPage() {
                       className="h-6 w-6 rounded border border-white/20 shadow-sm"
                       style={{ backgroundColor: color }}
                     />
-                    <span className="text-[9px] font-mono text-text-muted mt-0.5 uppercase">
+                    <span className="text-[0.5625rem] font-mono text-text-muted mt-0.5 uppercase">
                       {color}
                     </span>
                   </div>
@@ -176,7 +205,7 @@ export default function ThemesSettingsPage() {
                       >
                         <div className="flex items-center justify-between mb-3">
                           <span
-                            className="text-[10px] font-mono font-bold uppercase tracking-wider px-2 py-0.5 rounded"
+                            className="text-[0.625rem] font-mono font-bold uppercase tracking-wider px-2 py-0.5 rounded"
                             style={{
                               backgroundColor: t.swatches.panel,
                               color: t.swatches.accent,
@@ -186,13 +215,13 @@ export default function ThemesSettingsPage() {
                             {t.badge}
                           </span>
                           {isSelected ? (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-desert-orange text-white text-[11px] font-bold">
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-desert-orange text-white text-[0.6875rem] font-bold">
                               <IconCheck className="size-3.5" />
                               ATIVO
                             </span>
                           ) : (
                             <span
-                              className="text-[11px] font-semibold opacity-75 group-hover:opacity-100"
+                              className="text-[0.6875rem] font-semibold opacity-75 group-hover:opacity-100"
                               style={{ color: t.swatches.text }}
                             >
                               Clicar para aplicar
@@ -222,7 +251,7 @@ export default function ThemesSettingsPage() {
                               </span>
                             </div>
                             <span
-                              className="text-[10px] font-mono px-1.5 py-0.5 rounded"
+                              className="text-[0.625rem] font-mono px-1.5 py-0.5 rounded"
                               style={{
                                 backgroundColor: t.swatches.bg,
                                 color: t.swatches.primary,
@@ -233,7 +262,7 @@ export default function ThemesSettingsPage() {
                           </div>
                           <div className="grid grid-cols-3 gap-1.5 mt-2">
                             <div
-                              className="h-7 rounded flex items-center justify-center text-[10px] font-bold"
+                              className="h-7 rounded flex items-center justify-center text-[0.625rem] font-bold"
                               style={{
                                 backgroundColor: t.swatches.bg,
                                 color: t.swatches.accent,
@@ -243,7 +272,7 @@ export default function ThemesSettingsPage() {
                               KIWIX
                             </div>
                             <div
-                              className="h-7 rounded flex items-center justify-center text-[10px] font-bold"
+                              className="h-7 rounded flex items-center justify-center text-[0.625rem] font-bold"
                               style={{
                                 backgroundColor: t.swatches.bg,
                                 color: t.swatches.primary,
@@ -253,7 +282,7 @@ export default function ThemesSettingsPage() {
                               OLLAMA IA
                             </div>
                             <div
-                              className="h-7 rounded flex items-center justify-center text-[10px] font-bold"
+                              className="h-7 rounded flex items-center justify-center text-[0.625rem] font-bold"
                               style={{
                                 backgroundColor: t.swatches.accent,
                                 color: t.swatches.bg,
@@ -351,11 +380,11 @@ export default function ThemesSettingsPage() {
                   >
                     <div>
                       <div className="flex items-center justify-between gap-2 mb-2">
-                        <span className="text-[11px] font-bold uppercase tracking-wider text-desert-green">
+                        <span className="text-[0.6875rem] font-bold uppercase tracking-wider text-desert-green">
                           {opt.subtitle}
                         </span>
                         {active && (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-desert-orange text-white text-[10px] font-bold">
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-desert-orange text-white text-[0.625rem] font-bold">
                             <IconCheck className="size-3" /> ATIVO
                           </span>
                         )}
@@ -378,31 +407,49 @@ export default function ThemesSettingsPage() {
             </div>
           </div>
 
-          {/* Live Component Preview */}
-          <div className="rounded-lg border border-border-default bg-surface-primary p-6">
-            <h3 className="text-lg font-bold text-text-primary mb-1">
-               Amostra ao Vivo dos Elementos do Sistema
-            </h3>
-            <p className="text-xs text-text-secondary mb-4">
-              Todos os botões, modais, barras de progresso e tabelas do sistema usam automaticamente
-              as variáveis do tema selecionado acima:
+          {/* UI Scale Selector */}
+          <div className="mb-10">
+            <h2 className="text-xl font-bold text-text-primary flex items-center gap-2 mb-2">
+              <IconSparkles className="size-5 text-desert-green" />
+              <span>Escala da Interface (Zoom Nativo do N.O.M.A.D.)</span>
+            </h2>
+            <p className="text-sm text-text-secondary mb-4">
+              Controla o tamanho proporcional de todas as telas, fontes, ícones e cartões mesmo com o navegador em 100%.
             </p>
-            <div className="flex flex-wrap items-center gap-3">
-              <StyledButton variant="primary" icon="IconShield">
-                Botão Primário
-              </StyledButton>
-              <StyledButton variant="action" icon="IconBolt">
-                Ação Tática / Destaque
-              </StyledButton>
-              <StyledButton variant="secondary" icon="IconServer">
-                Secundário
-              </StyledButton>
-              <StyledButton variant="outline" icon="IconSettings">
-                Contorno
-              </StyledButton>
-              <StyledButton variant="danger" icon="IconTrash">
-                Alerta / Crítico
-              </StyledButton>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {UI_SCALE_OPTIONS.map((opt) => {
+                const active = uiScale === opt.id
+                return (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() => setUiScale(opt.id)}
+                    className={`text-left rounded-lg border-2 p-4 transition-all cursor-pointer flex flex-col justify-between ${
+                      active
+                        ? 'border-desert-orange bg-surface-primary shadow-lg'
+                        : 'border-border-default bg-surface-secondary hover:border-desert-green'
+                    }`}
+                  >
+                    <div>
+                      <div className="flex items-center justify-between gap-2 mb-2">
+                        <span className="text-[0.6875rem] font-bold uppercase tracking-wider text-desert-green">
+                          {opt.subtitle}
+                        </span>
+                        {active && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-desert-orange text-white text-[0.625rem] font-bold">
+                            <IconCheck className="size-3" /> ATIVO
+                          </span>
+                        )}
+                      </div>
+                      <h3 className="text-base font-bold text-text-primary">{opt.title}</h3>
+                      <p className="text-xs text-text-secondary mt-2 leading-relaxed">
+                        {opt.description}
+                      </p>
+                    </div>
+                  </button>
+                )
+              })}
             </div>
           </div>
         </main>

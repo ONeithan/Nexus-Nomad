@@ -7,6 +7,7 @@ import api from '~/lib/api'
 
 interface ActiveDownloadProps {
   filetype?: useDownloadsProps['filetype']
+  filetypes?: string[]
   withHeader?: boolean
 }
 
@@ -35,8 +36,14 @@ function getDownloadStatus(download: {
   return 'active'
 }
 
-const ActiveDownloads = ({ filetype, withHeader = false }: ActiveDownloadProps) => {
-  const { data: downloads, invalidate } = useDownloads({ filetype })
+const ActiveDownloads = ({ filetype, filetypes, withHeader = false }: ActiveDownloadProps) => {
+  const { data: rawDownloads, invalidate } = useDownloads({
+    filetype: filetypes && filetypes.length > 0 ? undefined : filetype,
+  })
+  const downloads =
+    filetypes && filetypes.length > 0 && rawDownloads
+      ? rawDownloads.filter((d) => d.filetype && filetypes.includes(d.filetype))
+      : rawDownloads
   const [cancellingJobs, setCancellingJobs] = useState<Set<string>>(new Set())
   const [confirmingCancel, setConfirmingCancel] = useState<string | null>(null)
   const [retryingJobs, setRetryingJobs] = useState<Set<string>>(new Set())

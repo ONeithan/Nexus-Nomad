@@ -143,7 +143,7 @@ export default function MapMarkerFormPopup({
                     className={`mt-1 min-h-[64px] max-h-[240px] resize-none overflow-y-auto themed-scrollbar ${inputClass}`}
                 />
 
-                <div className="mt-1 text-[11px] text-gray-400">
+                <div className="mt-1 text-[0.6875rem] text-gray-400">
                     {notes.length}/{MAX_MARKER_NOTES_LENGTH}
                 </div>
 

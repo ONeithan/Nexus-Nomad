@@ -76,9 +76,9 @@ class API {
     })()
   }
 
-  async getRemoteOllamaStatus(): Promise<{ configured: boolean; connected: boolean } | undefined> {
+  async getRemoteOllamaStatus(): Promise<{ configured: boolean; connected: boolean; url?: string | null } | undefined> {
     return catchInternal(async () => {
-      const response = await this.client.get<{ configured: boolean; connected: boolean }>(
+      const response = await this.client.get<{ configured: boolean; connected: boolean; url?: string | null }>(
         '/ollama/remote-status'
       )
       return response.data
@@ -102,29 +102,42 @@ class API {
     })()
   }
 
-  async downloadBaseMapAssets() {
-    return catchInternal(async () => {
-      const response = await this.client.post<{ success: boolean }>('/maps/download-base-assets')
+  private async postWithReadableError<T>(url: string, body?: unknown): Promise<T> {
+    try {
+      const response = await this.client.post<T>(url, body)
       return response.data
-    })()
+    } catch (error) {
+      if (error instanceof AxiosError) {
+        const msg =
+          (error.response?.data as { message?: string; error?: string } | undefined)?.message ||
+          (error.response?.data as { error?: string } | undefined)?.error
+        if (msg) throw new Error(msg)
+      }
+      throw error
+    }
   }
 
-  async setupWorldBasemap() {
-    return catchInternal(async () => {
-      const response = await this.client.post<{ success: boolean }>('/maps/setup-world-basemap')
-      return response.data
-    })()
+  async downloadBaseMapAssets(targetDisk?: string) {
+    return this.postWithReadableError<{ success: boolean }>('/maps/download-base-assets', {
+      targetDisk,
+    })
   }
 
-  async downloadMapCollection(slug: string): Promise<{
+  async setupWorldBasemap(targetDisk?: string) {
+    return this.postWithReadableError<{ success: boolean }>('/maps/setup-world-basemap', {
+      targetDisk,
+    })
+  }
+
+  async downloadMapCollection(
+    slug: string,
+    targetDisk?: string
+  ): Promise<{
     message: string
     slug: string
     resources: string[] | null
   }> {
-    return catchInternal(async () => {
-      const response = await this.client.post('/maps/download-collection', { slug })
-      return response.data
-    })()
+    return this.postWithReadableError('/maps/download-collection', { slug, targetDisk })
   }
 
   async downloadModel(model: string): Promise<{ success: boolean; message: string }> {
@@ -134,26 +147,28 @@ class API {
     })()
   }
 
-  async downloadCategoryTier(categorySlug: string, tierSlug: string): Promise<{
+  async downloadCategoryTier(
+    categorySlug: string,
+    tierSlug: string,
+    targetDisk?: string
+  ): Promise<{
     message: string
     categorySlug: string
     tierSlug: string
     resources: string[] | null
   }> {
-    return catchInternal(async () => {
-      const response = await this.client.post('/zim/download-category-tier', { categorySlug, tierSlug })
-      return response.data
-    })()
+    return this.postWithReadableError('/zim/download-category-tier', {
+      categorySlug,
+      tierSlug,
+      targetDisk: targetDisk || undefined,
+    })
   }
 
-  async downloadRemoteMapRegion(url: string) {
-    return catchInternal(async () => {
-      const response = await this.client.post<{ message: string; filename: string; url: string }>(
-        '/maps/download-remote',
-        { url }
-      )
-      return response.data
-    })()
+  async downloadRemoteMapRegion(url: string, targetDisk?: string) {
+    return this.postWithReadableError<{ message: string; filename: string; url: string }>(
+      '/maps/download-remote',
+      { url, targetDisk }
+    )
   }
 
   async downloadRemoteMapRegionPreflight(url: string) {
@@ -177,15 +192,52 @@ class API {
 
   async downloadRemoteZimFile(
     url: string,
-    metadata?: { title: string; summary?: string; author?: string; size_bytes?: number }
+    metadata?: { title: string; summary?: string | null; author?: string | null; size_bytes?: number | null },
+    targetDisk?: string
   ) {
-    return catchInternal(async () => {
-      const response = await this.client.post<{ message: string; filename: string; url: string }>(
-        '/zim/download-remote',
-        { url, metadata }
-      )
-      return response.data
-    })()
+    const cleanMetadata = metadata
+      ? {
+          title: metadata.title,
+          ...(metadata.summary ? { summary: metadata.summary } : {}),
+          ...(metadata.author ? { author: metadata.author } : {}),
+          ...(typeof metadata.size_bytes === 'number' ? { size_bytes: metadata.size_bytes } : {}),
+        }
+      : undefined
+    return this.postWithReadableError<{ message: string; filename: string; url: string }>(
+      '/zim/download-remote',
+      { url, metadata: cleanMetadata, targetDisk: targetDisk || undefined }
+    )
+  }
+
+  async downloadBatchZimFiles(
+    items: Array<{
+      url: string
+      metadata?: { title: string; summary?: string | null; author?: string | null; size_bytes?: number | null }
+    }>,
+    targetDisk?: string
+  ) {
+    const cleanItems = items.map((item) => ({
+      url: item.url,
+      metadata: item.metadata
+        ? {
+            title: item.metadata.title,
+            ...(item.metadata.summary ? { summary: item.metadata.summary } : {}),
+            ...(item.metadata.author ? { author: item.metadata.author } : {}),
+            ...(typeof item.metadata.size_bytes === 'number' ? { size_bytes: item.metadata.size_bytes } : {}),
+          }
+        : undefined,
+    }))
+    return this.postWithReadableError<{
+      message: string
+      queuedCount: number
+      skippedCount: number
+      failedCount: number
+      filenames: string[]
+      diskLabel: string
+    }>('/zim/download-batch', {
+      items: cleanItems,
+      targetDisk: targetDisk || undefined,
+    })
   }
 
   async fetchLatestMapCollections(): Promise<{ success: boolean } | undefined> {
@@ -794,15 +846,12 @@ class API {
     })()
   }
 
-  async downloadGlobalMap() {
-    return catchInternal(async () => {
-      const response = await this.client.post<{
-        message: string
-        filename: string
-        jobId?: string
-      }>('/maps/download-global-map')
-      return response.data
-    })()
+  async downloadGlobalMap(targetDisk?: string) {
+    return this.postWithReadableError<{
+      message: string
+      filename: string
+      jobId?: string
+    }>('/maps/download-global-map', { targetDisk })
   }
 
   async listCountries() {
@@ -834,15 +883,13 @@ class API {
     maxzoom?: number
     label?: string
     estimatedBytes?: number
+    targetDisk?: string
   }) {
-    return catchInternal(async () => {
-      const response = await this.client.post<{
-        message: string
-        filename: string
-        jobId?: string
-      }>('/maps/extract', params)
-      return response.data
-    })()
+    return this.postWithReadableError<{
+      message: string
+      filename: string
+      jobId?: string
+    }>('/maps/extract', params)
   }
 
   async listCuratedMapCollections() {

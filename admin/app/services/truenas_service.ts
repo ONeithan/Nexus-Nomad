@@ -94,6 +94,92 @@ export class TruenasService {
     }
   }
 
+  /**
+   * Lists SMB and NFS shares exposed by the configured TrueNAS server.
+   */
+  public async getSharedFolders(): Promise<
+    Array<{
+      protocol: 'SMB' | 'NFS'
+      name: string
+      path: string
+      networkUri: string
+      host: string
+      enabled: boolean
+    }>
+  > {
+    const enabled = await this.isEnabled()
+    const storedUrl = String((await KVStore.getValue('truenas.url')) || '').trim()
+    const apiKey = String((await KVStore.getValue('truenas.apiKey')) || '').trim()
+    if (!enabled || !storedUrl || !apiKey) return []
+
+    const rawUrl =
+      storedUrl.startsWith('http://') || storedUrl.startsWith('https://')
+        ? storedUrl
+        : `https://${storedUrl}`
+
+    try {
+      const parsed = new URL(rawUrl)
+      const cleanUrl = rawUrl.replace(/\/+$/, '')
+      const headers = {
+        Accept: 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      }
+
+      const [smbResp, nfsResp] = await Promise.all([
+        this.fetchJson(`${cleanUrl}/api/v2.0/sharing/smb`, headers),
+        this.fetchJson(`${cleanUrl}/api/v2.0/sharing/nfs`, headers),
+      ])
+
+      const shares: Array<{
+        protocol: 'SMB' | 'NFS'
+        name: string
+        path: string
+        networkUri: string
+        host: string
+        enabled: boolean
+      }> = []
+
+      if (smbResp.ok && Array.isArray(smbResp.data)) {
+        for (const s of smbResp.data) {
+          if (!s?.name) continue
+          shares.push({
+            protocol: 'SMB',
+            name: String(s.name),
+            path: String(s.path || ''),
+            networkUri: `\\\\${parsed.hostname}\\${s.name}`,
+            host: parsed.hostname,
+            enabled: s.enabled !== false,
+          })
+        }
+      }
+
+      if (nfsResp.ok && Array.isArray(nfsResp.data)) {
+        for (const n of nfsResp.data) {
+          const paths: string[] = Array.isArray(n?.paths)
+            ? n.paths
+            : n?.path
+              ? [n.path]
+              : []
+          for (const p of paths) {
+            if (!p) continue
+            shares.push({
+              protocol: 'NFS',
+              name: p.split('/').filter(Boolean).pop() || p,
+              path: String(p),
+              networkUri: `${parsed.hostname}:${p}`,
+              host: parsed.hostname,
+              enabled: n.enabled !== false,
+            })
+          }
+        }
+      }
+
+      return shares
+    } catch {
+      return []
+    }
+  }
+
   private fetchJson(
     urlStr: string,
     headers: Record<string, string>

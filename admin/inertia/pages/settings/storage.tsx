@@ -35,6 +35,10 @@ interface FolderUsageItem {
   path: string
   sizeBytes: number
   fileCount: number
+  isSymlink?: boolean
+  realPath?: string
+  targetDiskLabel?: string
+  targetDiskPath?: string
 }
 
 interface MountTarget {
@@ -42,6 +46,13 @@ interface MountTarget {
   path: string
   freeBytes: number
   totalBytes: number
+  usedBytes?: number
+  realHostPath?: string
+  diskType?: string
+  quotaEnabled?: boolean
+  quotaLimitBytes?: number | null
+  reserveSystemBytes?: number
+  effectiveFreeBytes?: number
 }
 
 interface StorageFileEntry {
@@ -51,6 +62,8 @@ interface StorageFileEntry {
   isSymlink: boolean
   sizeBytes: number
   modifiedAt: string
+  resolvedTarget?: string
+  targetDiskLabel?: string
 }
 
 interface ConfirmMoveModalState {
@@ -60,6 +73,33 @@ interface ConfirmMoveModalState {
   moduleKey?: string
   moduleName?: string
   sourcePath?: string
+}
+
+interface ExternalMountItem {
+  sourceType: 'jellyfin' | 'container' | 'network' | 'truenas'
+  label: string
+  containerName?: string
+  containerDest?: string
+  hostOrNetworkPath: string
+  moduleKey?: string
+  state?: string
+  originLabel?: string
+  totalBytes?: number
+  freeBytes?: number
+}
+
+interface ModuleLocationStatus {
+  key: string
+  containerPath: string
+  exists: boolean
+  isSymlink: boolean
+  realPath: string
+  realHostPath: string
+  currentDiskPath: string
+  currentDiskLabel: string
+  sizeBytes: number
+  fileCount: number
+  externalSources: ExternalMountItem[]
 }
 
 export default function SettingsStorage() {
@@ -97,6 +137,8 @@ export default function SettingsStorage() {
         folderUsage: FolderUsageItem[]
         mountTargets: MountTarget[]
         unmountedDisks?: Array<{ name: string; size: string; model: string; vendor: string }>
+        externalMounts?: ExternalMountItem[]
+        moduleLocations?: Record<string, ModuleLocationStatus>
       }>('/api/system/storage/overview')
       return res.data
     },
@@ -111,6 +153,8 @@ export default function SettingsStorage() {
         shareName: string
         username: string
         hostPath: string
+        resolvedHostPath?: string
+        diskLabel?: string
       }>('/api/system/samba/status')
       return res.data
     },
@@ -141,6 +185,8 @@ export default function SettingsStorage() {
       const res = await axios.get<{
         currentPath: string
         parentPath: string | null
+        currentDiskLabel?: string
+        currentRealHostPath?: string
         entries: StorageFileEntry[]
       }>('/api/system/storage/browse', {
         params: browsePath ? { path: browsePath } : undefined,
@@ -149,6 +195,53 @@ export default function SettingsStorage() {
     },
     enabled: Boolean(browsePath || overview?.storageRoot),
   })
+
+  const GIB = 1024 * 1024 * 1024
+  const [quotaDrafts, setQuotaDrafts] = useState<Record<string, { enabled: boolean; limitGb: number }>>({})
+  const [quotaSavingPath, setQuotaSavingPath] = useState<string | null>(null)
+
+  const getQuotaMeta = (disk: MountTarget) => {
+    const totalGb = Math.max(1, Math.floor(disk.totalBytes / GIB))
+    const usedBytes = disk.usedBytes ?? Math.max(0, disk.totalBytes - disk.freeBytes)
+    const usedGb = Math.ceil(usedBytes / GIB)
+    const reserveGb = Math.round((disk.reserveSystemBytes ?? 0) / GIB)
+    const minGb = Math.min(totalGb, Math.max(usedGb + 2, 10))
+    const maxGb = Math.max(minGb, totalGb - reserveGb)
+    const savedLimitGb =
+      disk.quotaLimitBytes && disk.quotaLimitBytes > 0
+        ? Math.min(maxGb, Math.max(minGb, Math.round(disk.quotaLimitBytes / GIB)))
+        : Math.max(minGb, Math.floor(maxGb * 0.8))
+    const draft = quotaDrafts[disk.path] ?? {
+      enabled: Boolean(disk.quotaEnabled),
+      limitGb: savedLimitGb,
+    }
+    return { totalGb, usedGb, reserveGb, minGb, maxGb, draft }
+  }
+
+  const handleSaveQuota = async (disk: MountTarget, enabled: boolean, limitGb: number) => {
+    setQuotaSavingPath(disk.path)
+    try {
+      await axios.post('/api/system/storage/quota', {
+        path: disk.path,
+        enabled,
+        limitBytes: enabled ? Math.round(limitGb * GIB) : 0,
+      })
+      queryClient.invalidateQueries({ queryKey: ['storage-overview'] })
+      addNotification({
+        message: enabled
+          ? `Limite seguro de ${limitGb} GB aplicado em "${disk.label}".`
+          : `Limite seguro removido de "${disk.label}".`,
+        type: 'success',
+      })
+    } catch (err: any) {
+      addNotification({
+        message: err?.response?.data?.error || 'Erro ao salvar limite de espaço do disco.',
+        type: 'error',
+      })
+    } finally {
+      setQuotaSavingPath(null)
+    }
+  }
 
   const handleSetPreferredDisk = async (path: string) => {
     try {
@@ -347,38 +440,130 @@ export default function SettingsStorage() {
                   <h3 className="text-sm font-bold uppercase tracking-wider text-text-primary">
                     Discos Disponíveis para Armazenamento
                   </h3>
-                  <div className="space-y-2.5">
+                  <div className="space-y-3">
                     {overview?.mountTargets.map((disk) => {
                       const isPreferred = overview.preferredDownloadDisk === disk.path
+                      const q = getQuotaMeta(disk)
+                      const isSavingQuota = quotaSavingPath === disk.path
                       return (
                         <div
                           key={disk.path}
-                          className={`p-3 rounded-lg border flex items-center justify-between gap-3 ${
+                          className={`p-3.5 rounded-lg border space-y-3 ${
                             isPreferred
                               ? 'border-desert-green bg-desert-green/10'
                               : 'border-border-subtle bg-surface-secondary'
                           }`}
                         >
-                          <div className="min-w-0">
-                            <div className="text-sm font-bold text-text-primary truncate">
-                              {disk.label}
+                          <div className="flex flex-wrap items-center justify-between gap-3">
+                            <div className="min-w-0 flex-1">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className="text-sm font-bold text-text-primary truncate">
+                                  {disk.label}
+                                </span>
+                                {disk.diskType && (
+                                  <span className="px-1.5 py-0.5 rounded text-[0.625rem] font-mono uppercase bg-surface-primary border border-border-default text-text-secondary">
+                                    {disk.diskType}
+                                  </span>
+                                )}
+                                {disk.quotaEnabled && (
+                                  <span className="px-1.5 py-0.5 rounded text-[0.625rem] font-mono font-bold bg-desert-orange/15 text-desert-orange border border-desert-orange/30">
+                                    Cota Segura: {q.draft.limitGb} GB
+                                  </span>
+                                )}
+                              </div>
+                              <div className="text-xs font-mono text-text-muted truncate mt-0.5">
+                                Ponto: {disk.path}
+                                {disk.realHostPath && disk.realHostPath !== disk.path
+                                  ? ` (Host: ${disk.realHostPath})`
+                                  : ''}{' '}
+                                • Livre Real: {formatBytes(disk.freeBytes, 1)} /{' '}
+                                {formatBytes(disk.totalBytes, 1)}
+                                {disk.quotaEnabled && typeof disk.effectiveFreeBytes === 'number'
+                                  ? ` • Disp. na Cota: ${formatBytes(disk.effectiveFreeBytes, 1)}`
+                                  : ''}
+                              </div>
                             </div>
-                            <div className="text-xs font-mono text-text-muted truncate">
-                              {disk.path} • Livre: {formatBytes(disk.freeBytes, 1)} /{' '}
-                              {formatBytes(disk.totalBytes, 1)}
-                            </div>
+                            <button
+                              type="button"
+                              onClick={() => handleSetPreferredDisk(disk.path)}
+                              className={`px-3 py-1.5 rounded-md text-xs font-semibold shrink-0 cursor-pointer ${
+                                isPreferred
+                                  ? 'bg-desert-green text-white'
+                                  : 'border border-border-default bg-surface-primary text-text-primary hover:border-desert-orange'
+                              }`}
+                            >
+                              {isPreferred ? 'Padrão Ativo' : 'Usar como Padrão'}
+                            </button>
                           </div>
-                          <button
-                            type="button"
-                            onClick={() => handleSetPreferredDisk(disk.path)}
-                            className={`px-3 py-1.5 rounded-md text-xs font-semibold shrink-0 cursor-pointer ${
-                              isPreferred
-                                ? 'bg-desert-green text-white'
-                                : 'border border-border-default bg-surface-primary text-text-primary hover:border-desert-orange'
-                            }`}
-                          >
-                            {isPreferred ? 'Padrão Ativo' : 'Usar como Padrão'}
-                          </button>
+
+                          {/* Limite Seguro de Espaço (Cota N.O.M.A.D. sem particionar) */}
+                          <div className="pt-2.5 border-t border-border-subtle/70 space-y-2">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <label className="inline-flex items-center gap-2 text-xs font-semibold text-text-primary cursor-pointer select-none">
+                                <input
+                                  type="checkbox"
+                                  checked={q.draft.enabled}
+                                  onChange={(e) => {
+                                    const nextEnabled = e.target.checked
+                                    setQuotaDrafts((prev) => ({
+                                      ...prev,
+                                      [disk.path]: { enabled: nextEnabled, limitGb: q.draft.limitGb },
+                                    }))
+                                    if (!nextEnabled && disk.quotaEnabled) {
+                                      void handleSaveQuota(disk, false, 0)
+                                    }
+                                  }}
+                                  className="rounded border-border-default text-desert-orange focus:ring-desert-orange"
+                                />
+                                <span>Definir Limite Seguro de Espaço (sem particionar)</span>
+                              </label>
+                              <span className="text-[0.6875rem] font-mono text-text-muted">
+                                Margem segura p/ SO: mín. {q.reserveGb} GB • Usado agora: {q.usedGb} GB
+                              </span>
+                            </div>
+
+                            {q.draft.enabled && (
+                              <div className="flex flex-col sm:flex-row sm:items-center gap-3 pt-1">
+                                <div className="flex-1 space-y-1">
+                                  <input
+                                    type="range"
+                                    min={q.minGb}
+                                    max={q.maxGb}
+                                    step={1}
+                                    value={q.draft.limitGb}
+                                    onChange={(e) => {
+                                      const val = Number(e.target.value)
+                                      setQuotaDrafts((prev) => ({
+                                        ...prev,
+                                        [disk.path]: { enabled: true, limitGb: val },
+                                      }))
+                                    }}
+                                    className="w-full accent-desert-orange cursor-pointer"
+                                  />
+                                  <div className="flex justify-between text-[0.6875rem] font-mono text-text-secondary">
+                                    <span>
+                                      Máx. N.O.M.A.D.:{' '}
+                                      <strong className="text-desert-orange">{q.draft.limitGb} GB</strong>
+                                    </span>
+                                    <span>
+                                      Reservado p/ Sistema &amp; Outros:{' '}
+                                      <strong className="text-desert-green">
+                                        {Math.max(0, q.totalGb - q.draft.limitGb)} GB
+                                      </strong>
+                                    </span>
+                                  </div>
+                                </div>
+                                <button
+                                  type="button"
+                                  disabled={isSavingQuota}
+                                  onClick={() => handleSaveQuota(disk, true, q.draft.limitGb)}
+                                  className="px-3 py-1.5 rounded-md bg-desert-orange text-white hover:opacity-90 text-xs font-bold shrink-0 cursor-pointer disabled:opacity-50"
+                                >
+                                  {isSavingQuota ? 'Salvando...' : 'Aplicar Limite'}
+                                </button>
+                              </div>
+                            )}
+                          </div>
                         </div>
                       )
                     })}
@@ -393,7 +578,7 @@ export default function SettingsStorage() {
                       {overview.unmountedDisks.map((ud) => (
                         <div key={ud.name} className="text-text-secondary pl-5">
                           • <strong className="text-text-primary">/dev/{ud.name}</strong> ({ud.size}) - {ud.vendor} {ud.model}
-                          <span className="block text-[11px] text-text-muted mt-0.5">
+                          <span className="block text-[0.6875rem] text-text-muted mt-0.5">
                             Para usar este disco para downloads e dados, formate e monte-o no Linux do host (ex: <code className="text-desert-orange font-bold">/mnt/hd2</code>). Ele aparecerá como destino selecionável imediatamente.
                           </span>
                         </div>
@@ -416,11 +601,21 @@ export default function SettingsStorage() {
                         className="w-full text-left p-2.5 rounded-lg border border-border-subtle bg-surface-secondary hover:border-desert-tan flex items-center justify-between gap-2 cursor-pointer"
                       >
                         <div className="min-w-0">
-                          <div className="text-xs font-bold text-text-primary truncate">
-                            {f.label}
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <span className="text-xs font-bold text-text-primary truncate">
+                              {f.label}
+                            </span>
+                            {f.isSymlink && (
+                              <span className="inline-flex items-center gap-1 text-[0.625rem] font-mono px-1.5 py-0.5 rounded bg-desert-green/15 text-desert-green border border-desert-green/30">
+                                <IconLink size={10} /> Link Disco
+                              </span>
+                            )}
                           </div>
-                          <div className="text-[11px] font-mono text-text-muted">
-                            /{f.name} • {f.fileCount} arquivo(s)
+                          <div className="text-[0.6875rem] font-mono text-text-muted truncate">
+                            /{f.name} • {f.fileCount} arquivo(s) •{' '}
+                            <span className="text-text-secondary">
+                              {f.targetDiskLabel || 'Disco Principal'}
+                            </span>
                           </div>
                         </div>
                         <span className="text-xs font-mono font-bold text-desert-orange shrink-0">
@@ -493,58 +688,179 @@ export default function SettingsStorage() {
                   { key: 'kb_uploads', name: 'Base de Conhecimento RAG', icon: '📄', desc: 'Documentos e PDFs indexados' },
                 ].map((mod) => {
                   const currentFolder = overview.folderUsage.find((f) => f.name === mod.key)
+                  const modLoc = overview.moduleLocations?.[mod.key]
                   const isMovingThis = movingItem === mod.key || Boolean(movingItem?.startsWith('all-'))
+                  const sizeBytes = modLoc?.sizeBytes ?? currentFolder?.sizeBytes ?? 0
+                  const fileCount = modLoc?.fileCount ?? currentFolder?.fileCount ?? 0
+                  const isSymlink = Boolean(modLoc?.isSymlink ?? currentFolder?.isSymlink)
+                  const currentDiskPath =
+                    modLoc?.currentDiskPath || currentFolder?.targetDiskPath || overview.storageRoot
+                  const currentDiskLabel =
+                    modLoc?.currentDiskLabel ||
+                    currentFolder?.targetDiskLabel ||
+                    overview.mountTargets[0]?.label ||
+                    'Armazenamento Interno NOMAD'
+                  const realDisplayPath =
+                    modLoc?.realHostPath ||
+                    modLoc?.realPath ||
+                    currentFolder?.realPath ||
+                    `${overview.storageRoot}/${mod.key}`
+                  const externalSources = modLoc?.externalSources || []
+
                   return (
                     <div
                       key={`module-card-${mod.key}`}
                       className="p-4 rounded-xl border border-border-default bg-surface-secondary/70 flex flex-col justify-between space-y-3"
                     >
-                      <div>
+                      <div className="space-y-2">
                         <div className="flex items-center justify-between gap-2">
-                          <span className="text-base">{mod.icon}</span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-base">{mod.icon}</span>
+                            <span
+                              className={`text-[0.625rem] font-mono font-bold px-1.5 py-0.5 rounded border ${
+                                isSymlink
+                                  ? 'bg-desert-green/15 text-desert-green border-desert-green/40'
+                                  : 'bg-surface-primary text-text-muted border-border-subtle'
+                              }`}
+                            >
+                              {isSymlink ? '✓ Link Disco' : 'Interno'}
+                            </span>
+                          </div>
                           <span className="text-xs font-mono font-bold text-desert-orange">
-                            {currentFolder ? formatBytes(currentFolder.sizeBytes, 1) : '0 B'}
+                            {formatBytes(sizeBytes, 1)}
                           </span>
                         </div>
-                        <h4 className="text-xs font-bold text-text-primary mt-1">{mod.name}</h4>
-                        <p className="text-[11px] text-text-muted mt-0.5">{mod.desc}</p>
-                        <div className="text-[10px] font-mono text-text-secondary mt-1 truncate">
-                          Pasta: /{mod.key} {currentFolder?.fileCount ? `(${currentFolder.fileCount} arq.)` : ''}
+
+                        <div>
+                          <h4 className="text-xs font-bold text-text-primary">{mod.name}</h4>
+                          <p className="text-[0.6875rem] text-text-muted mt-0.5">{mod.desc}</p>
                         </div>
+
+                        {/* Configurado atualmente em */}
+                        <div className="p-2 rounded-lg bg-surface-primary border border-border-subtle space-y-0.5 text-[0.625rem]">
+                          <div className="text-text-muted uppercase font-semibold">
+                            Configurado agora em:
+                          </div>
+                          <div className="font-bold text-desert-green truncate" title={currentDiskLabel}>
+                            {currentDiskLabel}
+                          </div>
+                          <div
+                            className="font-mono text-text-secondary truncate"
+                            title={realDisplayPath}
+                          >
+                            {realDisplayPath}
+                            {fileCount > 0 ? ` (${fileCount} arq.)` : ''}
+                          </div>
+                        </div>
+
+                        {/* Caminhos detectados nos contêineres / rede / TrueNAS */}
+                        {externalSources.length > 0 && (
+                          <div className="p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/30 space-y-1 text-[0.625rem]">
+                            <div className="font-bold text-emerald-400 uppercase flex items-center gap-1">
+                              <span>🔌 Visto no Contêiner / Rede:</span>
+                            </div>
+                            {externalSources.slice(0, 3).map((es, idx) => (
+                              <div
+                                key={`${mod.key}-ext-${idx}`}
+                                className="font-mono text-text-primary truncate"
+                                title={`${es.originLabel || ''}: ${es.hostOrNetworkPath} → ${es.containerDest || ''}`}
+                              >
+                                <span className="text-emerald-300 font-semibold">
+                                  {es.originLabel || es.sourceType}:
+                                </span>{' '}
+                                {es.hostOrNetworkPath}
+                                {es.containerDest ? ` → ${es.containerDest}` : ''}
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
 
                       <div className="pt-2 border-t border-border-subtle/50">
-                        <div className="text-[10px] font-semibold text-text-secondary mb-1.5 uppercase">
+                        <div className="text-[0.625rem] font-semibold text-text-secondary mb-1.5 uppercase">
                           Mapear para disco:
                         </div>
                         <div className="flex flex-wrap gap-1.5">
-                          {overview.mountTargets.map((m) => (
-                            <button
-                              key={`btn-${mod.key}-${m.path}`}
-                              type="button"
-                              disabled={Boolean(movingItem)}
-                              onClick={() => {
-                                const targetFolder = currentFolder || { path: `${overview.storageRoot}/${mod.key}` }
-                                setConfirmMoveModal({
-                                  isOpen: true,
-                                  type: 'single',
-                                  targetDisk: m,
-                                  moduleKey: mod.key,
-                                  moduleName: mod.name,
-                                  sourcePath: targetFolder.path,
-                                })
-                              }}
-                              className="px-2.5 py-1 rounded border border-border-default bg-surface-primary hover:border-desert-tan text-[11px] font-medium text-text-primary cursor-pointer disabled:opacity-50"
-                            >
-                              {isMovingThis ? 'Mapeando...' : `→ ${m.label}`}
-                            </button>
-                          ))}
+                          {overview.mountTargets.map((m) => {
+                            const isCurrentActive = m.path === currentDiskPath
+                            return (
+                              <button
+                                key={`btn-${mod.key}-${m.path}`}
+                                type="button"
+                                disabled={Boolean(movingItem) || isCurrentActive}
+                                onClick={() => {
+                                  const targetFolder = currentFolder || { path: `${overview.storageRoot}/${mod.key}` }
+                                  setConfirmMoveModal({
+                                    isOpen: true,
+                                    type: 'single',
+                                    targetDisk: m,
+                                    moduleKey: mod.key,
+                                    moduleName: mod.name,
+                                    sourcePath: targetFolder.path,
+                                  })
+                                }}
+                                className={`px-2.5 py-1 rounded border text-[0.6875rem] font-medium transition-colors ${
+                                  isCurrentActive
+                                    ? 'border-desert-green bg-desert-green text-white font-bold cursor-default'
+                                    : 'border-border-default bg-surface-primary hover:border-desert-tan text-text-primary cursor-pointer disabled:opacity-50'
+                                }`}
+                              >
+                                {isMovingThis
+                                  ? 'Mapeando...'
+                                  : isCurrentActive
+                                    ? `✓ Ativo: ${m.label}`
+                                    : `→ ${m.label}`}
+                              </button>
+                            )
+                          })}
                         </div>
                       </div>
                     </div>
                   )
                 })}
               </div>
+
+              {/* Montagens de Rede, Contêineres (ex.: Jellyfin) & Compartilhamentos Externos Detectados */}
+              {overview.externalMounts && overview.externalMounts.length > 0 && (
+                <div className="p-4 rounded-xl border border-emerald-500/30 bg-emerald-500/5 space-y-2.5">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
+                      <span>🌐 Pastas em Contêineres, Rede &amp; Servidor NAS / TrueNAS Detectadas</span>
+                    </h4>
+                    <span className="text-[0.625rem] font-mono text-text-muted">
+                      Descoberta automática via Docker Local, Portainer, Rede SMB/NFS e Jellyfin
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                    {overview.externalMounts.map((em, i) => (
+                      <div
+                        key={`ext-mount-${i}`}
+                        className="p-2.5 rounded-lg bg-surface-primary border border-border-default text-xs flex flex-col gap-0.5"
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="font-bold text-text-primary truncate">{em.label}</span>
+                          {em.originLabel && (
+                            <span className="px-1.5 py-0.5 rounded text-[0.625rem] font-mono bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 shrink-0">
+                              {em.originLabel}
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-[0.6875rem] font-mono text-text-secondary truncate" title={em.hostOrNetworkPath}>
+                          Origem: {em.hostOrNetworkPath}
+                        </div>
+                        {em.containerDest && (
+                          <div className="text-[0.625rem] font-mono text-text-muted truncate">
+                            Destino: {em.containerDest}
+                            {em.totalBytes
+                              ? ` • Livre: ${formatBytes(em.freeBytes || 0, 1)} / ${formatBytes(em.totalBytes, 1)}`
+                              : ''}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </section>
           )}
 
@@ -564,20 +880,33 @@ export default function SettingsStorage() {
                       <span>Subir</span>
                     </button>
                   )}
-                  <span className="text-xs font-mono text-text-primary bg-surface-primary px-2.5 py-1 rounded border border-border-subtle">
-                    {browseData?.currentPath || browsePath}
-                  </span>
+                  <div className="flex flex-col gap-1">
+                    <span className="text-xs font-bold text-desert-green">
+                      HD Atual: {browseData?.currentDiskLabel || 'Armazenamento Local'}
+                    </span>
+                    <span className="text-[0.6875rem] font-mono text-text-primary bg-surface-primary px-2.5 py-1 rounded border border-border-subtle">
+                      {browseData?.currentPath || browsePath}
+                      {browseData?.currentRealHostPath &&
+                      browseData.currentRealHostPath !== (browseData?.currentPath || browsePath)
+                        ? ` → Host real: ${browseData.currentRealHostPath}`
+                        : ''}
+                    </span>
+                  </div>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   {overview?.mountTargets.map((m) => (
                     <button
                       key={m.path}
                       type="button"
                       onClick={() => setBrowsePath(m.path)}
-                      className="px-2.5 py-1 rounded text-[11px] font-mono border border-border-default bg-surface-primary hover:border-desert-green text-text-secondary hover:text-text-primary cursor-pointer"
+                      className={`px-2.5 py-1 rounded text-[0.6875rem] font-semibold border cursor-pointer ${
+                        browsePath.startsWith(m.path)
+                          ? 'border-desert-green bg-desert-green/15 text-desert-green'
+                          : 'border-border-default bg-surface-primary hover:border-desert-green text-text-secondary hover:text-text-primary'
+                      }`}
                     >
-                      {m.path.includes('/mnt/') ? m.path : 'storage/'}
+                      {m.label}
                     </button>
                   ))}
                   <button
@@ -641,10 +970,11 @@ export default function SettingsStorage() {
                         </span>
                         {entry.isSymlink && (
                           <span
-                            title="Link simbólico para outro disco (Kiwix/Kolibri lê normalmente)"
-                            className="inline-flex items-center gap-1 text-[10px] font-mono px-1.5 py-0.5 rounded bg-desert-green/15 text-desert-green border border-desert-green/30 shrink-0"
+                            title={`Link simbólico para ${entry.targetDiskLabel || entry.resolvedTarget || 'outro disco'} (Kiwix/Kolibri/Samba lê normalmente)`}
+                            className="inline-flex items-center gap-1 text-[0.625rem] font-mono px-1.5 py-0.5 rounded bg-desert-green/15 text-desert-green border border-desert-green/30 shrink-0"
                           >
-                            <IconLink size={11} /> Link Disco
+                            <IconLink size={11} />{' '}
+                            {entry.targetDiskLabel ? `Link → ${entry.targetDiskLabel}` : 'Link Disco'}
                           </span>
                         )}
                       </button>
@@ -700,15 +1030,28 @@ export default function SettingsStorage() {
                     <div className="text-sm font-bold text-text-primary">
                       Servidor Samba N.O.M.A.D. (`nomad_samba`)
                     </div>
-                    <div className="text-xs text-text-muted">
-                      Status:{' '}
-                      <strong
-                        className={
-                          sambaStatus?.containerRunning ? 'text-desert-green' : 'text-desert-orange'
-                        }
-                      >
-                        {sambaStatus?.containerRunning ? 'ONLINE (Portas 139/445)' : 'INATIVO'}
-                      </strong>
+                    <div className="text-xs text-text-muted space-y-0.5">
+                      <div>
+                        Status:{' '}
+                        <strong
+                          className={
+                            sambaStatus?.containerRunning ? 'text-desert-green' : 'text-desert-orange'
+                          }
+                        >
+                          {sambaStatus?.containerRunning ? 'ONLINE (Portas 139/445)' : 'INATIVO'}
+                        </strong>
+                        {sambaStatus?.diskLabel && (
+                          <>
+                            {' '}• Disco compartilhado:{' '}
+                            <strong className="text-text-primary">{sambaStatus.diskLabel}</strong>
+                          </>
+                        )}
+                      </div>
+                      {sambaStatus?.resolvedHostPath && (
+                        <div className="font-mono text-[0.6875rem] text-text-secondary">
+                          Montagem real no host: {sambaStatus.resolvedHostPath}
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -738,15 +1081,36 @@ export default function SettingsStorage() {
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-text-secondary mb-1">
-                    Caminho no Host a Compartilhar
+                    Qual HD / Pasta Compartilhar na Rede Windows
                   </label>
+                  {overview?.mountTargets && overview.mountTargets.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 mb-2">
+                      {overview.mountTargets.map((m) => (
+                        <button
+                          key={`smb-disk-${m.path}`}
+                          type="button"
+                          onClick={() => setSambaHostPath(m.path)}
+                          className={`px-2 py-1 rounded text-[0.6875rem] font-semibold border cursor-pointer transition-colors ${
+                            sambaHostPath === m.path || sambaHostPath === m.realHostPath
+                              ? 'border-desert-green bg-desert-green/15 text-desert-green'
+                              : 'border-border-default bg-surface-secondary text-text-secondary hover:border-desert-tan'
+                          }`}
+                        >
+                          {m.label} ({formatBytes(m.freeBytes, 0)} livre)
+                        </button>
+                      ))}
+                    </div>
+                  )}
                   <input
                     type="text"
                     value={sambaHostPath}
                     onChange={(e) => setSambaHostPath(e.target.value)}
-                    placeholder="/mnt/nomad_storage ou /storage"
+                    placeholder="/mnt/nomad_storage ou /app/storage"
                     className="w-full px-3 py-2 rounded-md border border-border-default bg-surface-secondary text-sm font-mono text-text-primary"
                   />
+                  <p className="text-[0.6875rem] text-text-muted mt-1">
+                    Todos os discos conectados são montados no Samba com suporte a links simbólicos entre discos.
+                  </p>
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-text-secondary mb-1">
@@ -832,7 +1196,7 @@ export default function SettingsStorage() {
                       key={m.path}
                       type="button"
                       onClick={() => setMoveDestDir(`${m.path}/zim`)}
-                      className="px-2 py-1 rounded text-[11px] font-mono border border-border-default bg-surface-secondary hover:border-desert-orange cursor-pointer"
+                      className="px-2 py-1 rounded text-[0.6875rem] font-mono border border-border-default bg-surface-secondary hover:border-desert-orange cursor-pointer"
                     >
                       <IconArrowRight size={11} className="inline mr-1" />
                       {m.path}/zim
@@ -905,7 +1269,7 @@ export default function SettingsStorage() {
                 </div>
 
                 <div className="p-3.5 rounded-xl bg-surface-secondary border border-border-default space-y-2">
-                  <div className="text-[11px] font-semibold text-text-secondary uppercase tracking-wider">
+                  <div className="text-[0.6875rem] font-semibold text-text-secondary uppercase tracking-wider">
                     Disco de Destino:
                   </div>
                   <div className="flex items-center gap-2 text-sm font-bold text-text-primary">
@@ -980,7 +1344,7 @@ export default function SettingsStorage() {
                   <p className="text-xs text-text-secondary leading-relaxed mb-4">
                     Esta ação reinicia <strong>apenas o contêiner do Nexus N.O.M.A.D.</strong>. Suas aplicações ativas no Portainer/Docker (Kiwix, Ollama, Jellyfin, etc.) <strong>NÃO</strong> serão interrompidas.
                   </p>
-                  <div className="p-3 rounded-lg bg-surface-secondary border border-border-subtle text-[11px] text-text-muted mb-5 space-y-1">
+                  <div className="p-3 rounded-lg bg-surface-secondary border border-border-subtle text-[0.6875rem] text-text-muted mb-5 space-y-1">
                     <div>• O sistema exibirá a tela de inicialização do N.O.M.A.D. enquanto o contêiner reinicia.</div>
                     <div>• Ao finalizar, reconectará automaticamente ao Centro de Comando.</div>
                   </div>

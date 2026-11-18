@@ -205,6 +205,23 @@ export class RunDownloadJob {
             }
 
             if (filetype === 'zim') {
+              try {
+                const { realpath, symlink } = await import('node:fs/promises')
+                const { dirname } = await import('node:path')
+                const zimRoot = resolve(join(process.cwd(), ZIM_STORAGE_PATH))
+                const linkPath = join(zimRoot, basename(filepath))
+                const [fileDirReal, rootReal] = await Promise.all([
+                  realpath(dirname(filepath)).catch(() => resolve(dirname(filepath))),
+                  realpath(zimRoot).catch(() => zimRoot),
+                ])
+                if (fileDirReal !== rootReal) {
+                  const { existsSync } = await import('node:fs')
+                  if (!existsSync(linkPath)) {
+                    await symlink(filepath, linkPath).catch(() => {})
+                  }
+                }
+              } catch {}
+
               const dockerService = new DockerService()
               const zimService = new ZimService(dockerService)
               await zimService.downloadRemoteSuccessCallback([url], true)

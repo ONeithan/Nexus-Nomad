@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Head } from '@inertiajs/react'
 import SettingsLayout from '~/layouts/SettingsLayout'
 import StyledButton from '~/components/StyledButton'
@@ -14,6 +14,7 @@ import {
   IconInfoCircle,
   IconKey,
   IconServer,
+  IconShieldLock,
 } from '@tabler/icons-react'
 
 export interface PortainerContainerInfo {
@@ -62,6 +63,47 @@ export default function ServersSettingsPage({ portainer: initialPortainer, truen
   const [testingPortainer, setTestingPortainer] = useState(false)
   const [savingPortainer, setSavingPortainer] = useState(false)
   const [showPortainerKey, setShowPortainerKey] = useState(false)
+
+  // ── Credenciais Padrão dos Serviços (Login em Lote) ──────────────────────────
+  const [defaultUsername, setDefaultUsername] = useState('administrador')
+  const [defaultPassword, setDefaultPassword] = useState('')
+  const [autoApplyCredentials, setAutoApplyCredentials] = useState(false)
+  const [showDefaultPassword, setShowDefaultPassword] = useState(false)
+  const [savingCredentials, setSavingCredentials] = useState(false)
+
+  useEffect(() => {
+    Promise.all([
+      api.getSetting('portainer.defaultUsername'),
+      api.getSetting('portainer.defaultPassword'),
+      api.getSetting('portainer.autoApplyCredentials'),
+    ])
+      .then(([u, p, a]) => {
+        if (u?.value) setDefaultUsername(String(u.value))
+        if (p?.value) setDefaultPassword(String(p.value))
+        if (typeof a?.value === 'boolean') setAutoApplyCredentials(a.value)
+      })
+      .catch(() => {})
+  }, [])
+
+  async function handleSaveDefaultCredentials() {
+    setSavingCredentials(true)
+    try {
+      await api.updateSetting('portainer.defaultUsername', defaultUsername.trim() || 'admin')
+      await api.updateSetting('portainer.defaultPassword', defaultPassword)
+      await api.updateSetting('portainer.autoApplyCredentials', autoApplyCredentials)
+      addNotification({
+        type: 'success',
+        message: 'Credenciais padrão salvas com sucesso para próximas instalações!',
+      })
+    } catch {
+      addNotification({
+        type: 'error',
+        message: 'Erro ao salvar credenciais padrão do servidor.',
+      })
+    } finally {
+      setSavingCredentials(false)
+    }
+  }
 
   const isPortainerConfigured = Boolean(portainerStatus?.url && portainerStatus?.enabled)
   const [isEditingPortainer, setIsEditingPortainer] = useState(!initialPortainer?.enabled || !initialPortainer?.url)
@@ -468,12 +510,12 @@ export default function ServersSettingsPage({ portainer: initialPortainer, truen
                                       />
                                       {c.name}
                                     </td>
-                                    <td className="px-4 py-2.5 font-mono text-desert-stone text-[11px] truncate max-w-[200px]" title={c.image}>
+                                    <td className="px-4 py-2.5 font-mono text-desert-stone text-[0.6875rem] truncate max-w-[200px]" title={c.image}>
                                       {c.image}
                                     </td>
                                     <td className="px-4 py-2.5">
                                       <span
-                                        className={`inline-block px-2 py-0.5 rounded text-[10px] font-semibold uppercase ${
+                                        className={`inline-block px-2 py-0.5 rounded text-[0.625rem] font-semibold uppercase ${
                                           isRunning
                                             ? 'bg-emerald-500/10 text-emerald-700'
                                             : 'bg-gray-100 text-gray-600'
@@ -482,7 +524,7 @@ export default function ServersSettingsPage({ portainer: initialPortainer, truen
                                         {isRunning ? 'Em execução' : c.state || 'Parado'}
                                       </span>
                                     </td>
-                                    <td className="px-4 py-2.5 font-mono text-[11px] text-desert-stone-dark">
+                                    <td className="px-4 py-2.5 font-mono text-[0.6875rem] text-desert-stone-dark">
                                       {c.ports && c.ports.length > 0 ? c.ports.join(', ') : '—'}
                                     </td>
                                   </tr>
@@ -717,6 +759,102 @@ export default function ServersSettingsPage({ portainer: initialPortainer, truen
                   </p>
                 </div>
               </div>
+
+            {/* CARD: CREDENCIAIS PADRÃO DOS SERVIÇOS (LOGIN EM LOTE) */}
+            <div className="bg-desert-white rounded-xl p-6 border border-desert-stone-lighter/60 shadow-sm space-y-5">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-desert-stone-lighter/50">
+                <div className="flex items-center gap-3">
+                  <div className="w-11 h-11 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-500 shrink-0">
+                    <IconShieldLock size={24} />
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-bold text-desert-green-darker">
+                      Credenciais Padrão dos Serviços (Login em Lote)
+                    </h2>
+                    <p className="text-xs text-desert-stone">
+                      Salve usuário e senha únicos para aplicar automaticamente nas novas instalações (Portainer e Local) que aceitam configuração inicial automática.
+                    </p>
+                  </div>
+                </div>
+                <label className="inline-flex items-center gap-2 cursor-pointer select-none px-3 py-1.5 rounded-lg border border-desert-stone-lighter/70 bg-surface-secondary">
+                  <input
+                    type="checkbox"
+                    checked={autoApplyCredentials}
+                    onChange={(e) => setAutoApplyCredentials(e.target.checked)}
+                    className="rounded border-border-default text-desert-green focus:ring-desert-green"
+                  />
+                  <span className="text-xs font-bold text-text-primary">
+                    {autoApplyCredentials ? 'Aplicação Automática ATIVA' : 'Desativado'}
+                  </span>
+                </label>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <Input
+                    name="default-service-username"
+                    label="Usuário Padrão de Administrador"
+                    placeholder="administrador"
+                    value={defaultUsername}
+                    onChange={(e) => setDefaultUsername(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <div className="flex items-end gap-2">
+                    <div className="flex-1">
+                      <Input
+                        name="default-service-password"
+                        label="Senha Padrão Única"
+                        placeholder="Defina uma senha única para seus serviços"
+                        type={showDefaultPassword ? 'text' : 'password'}
+                        value={defaultPassword}
+                        onChange={(e) => setDefaultPassword(e.target.value)}
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowDefaultPassword(!showDefaultPassword)}
+                      className="p-2.5 rounded-md border border-desert-stone-lighter/70 hover:border-desert-green text-desert-stone hover:text-desert-green transition-colors cursor-pointer"
+                      title={showDefaultPassword ? 'Ocultar Senha' : 'Mostrar Senha'}
+                    >
+                      {showDefaultPassword ? <IconEyeOff size={18} /> : <IconEye size={18} />}
+                    </button>
+                    {defaultPassword && (
+                      <button
+                        type="button"
+                        onClick={() => copyToClipboard(defaultPassword, 'Senha Padrão')}
+                        className="p-2.5 rounded-md border border-desert-stone-lighter/70 hover:border-desert-green text-desert-stone hover:text-desert-green transition-colors cursor-pointer"
+                        title="Copiar Senha Padrão"
+                      >
+                        <IconCopy size={18} />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-3.5 rounded-lg bg-surface-secondary border border-border-subtle text-xs text-text-secondary space-y-1.5">
+                <p className="font-semibold text-text-primary">Como funciona por aplicativo:</p>
+                <p>
+                  • <strong>Recebem usuário/senha automaticamente ao instalar:</strong> FileBrowser, Paperless-ngx, Pi-hole, Duplicati, Vaultwarden (token <code>/admin</code>), Directus e TubeArchivist.
+                </p>
+                <p>
+                  • <strong>Cadastro próprio no 1º acesso web:</strong> Open WebUI, Jellyfin, Audiobookshelf, Home Assistant e apps com assistente próprio exigem criação de conta na primeira vez que você abre a página do app (e salvam a sessão no banco persistente deles).
+                </p>
+              </div>
+
+              <div className="flex justify-end">
+                <StyledButton
+                  onClick={handleSaveDefaultCredentials}
+                  loading={savingCredentials}
+                  variant="primary"
+                  size="sm"
+                  icon="IconCheck"
+                >
+                  Salvar Credenciais Padrão
+                </StyledButton>
+              </div>
+            </div>
             </div>
           )}
 
@@ -844,7 +982,7 @@ export default function ServersSettingsPage({ portainer: initialPortainer, truen
                           >
                             <IconDatabase size={16} className="text-desert-olive" />
                             <strong className="text-desert-green-darker font-mono">{pool}</strong>
-                            <span className="px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-700 text-[10px] font-semibold">
+                            <span className="px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-700 text-[0.625rem] font-semibold">
                               ONLINE
                             </span>
                           </div>

@@ -73,6 +73,62 @@ body {
   text-rendering: optimizeLegibility;
 }
 
+/* ============================================================================
+   ESCALA NATIVA DA INTERFACE (Equivalente a 130% por padrão em monitores HD+)
+   Escala toda a interface via rem + ícones sem quebrar modais/mapas/scroll.
+   ============================================================================ */
+html {
+  font-size: 16px;
+}
+
+@media (min-width: 1024px) {
+  html[data-ui-scale="130"],
+  html:not([data-ui-scale]) {
+    font-size: 18px;
+  }
+  html[data-ui-scale="115"] {
+    font-size: 17px;
+  }
+}
+
+@media (min-width: 1280px) {
+  html[data-ui-scale="130"],
+  html:not([data-ui-scale]) {
+    font-size: 19.2px;
+  }
+  html[data-ui-scale="115"] {
+    font-size: 18.4px;
+  }
+  html[data-ui-scale="130"] svg.tabler-icon,
+  html:not([data-ui-scale]) svg.tabler-icon {
+    zoom: 1.2;
+  }
+  html[data-ui-scale="115"] svg.tabler-icon {
+    zoom: 1.15;
+  }
+}
+
+@media (min-width: 1536px) {
+  html[data-ui-scale="130"],
+  html:not([data-ui-scale]) {
+    font-size: 20.8px;
+  }
+  html[data-ui-scale="130"] svg.tabler-icon,
+  html:not([data-ui-scale]) svg.tabler-icon {
+    zoom: 1.28;
+  }
+  html[data-ui-scale="130"] #nomad-boot-gate-root .terminal-container,
+  html[data-ui-scale="130"] #nomad-boot-gate-root .boot-box-panel,
+  html:not([data-ui-scale]) #nomad-boot-gate-root .terminal-container,
+  html:not([data-ui-scale]) #nomad-boot-gate-root .boot-box-panel {
+    zoom: 1.24;
+  }
+}
+
+html[data-ui-scale="100"] {
+  font-size: 16px;
+}
+
 body {
   background-color: var(--color-desert-sand);
   color: var(--color-text-primary);
@@ -359,9 +415,47 @@ body {
 }
 
 /* ============================================================================
+   TEMA 5: MODO CLARO (Areia do Deserto + Alto Contraste Diurno)
+   ============================================================================ */
+[data-theme="light"] {
+  --color-desert-sand: #f4ecdc;
+  --color-desert-white: #ffffff;
+  --color-surface-primary: #ffffff;
+  --color-surface-secondary: #f7f3e8;
+  --color-surface-elevated: #ffffff;
+  --color-text-primary: #111827;
+  --color-text-secondary: #4b5563;
+  --color-text-muted: #6b7280;
+  --color-border-default: #d6cbb5;
+  --color-border-subtle: #e7dfd0;
+  --tactical-bg: #f4ecdc;
+  --tactical-panel: #ffffff;
+  --tactical-panel-inner: #f7f3e8;
+  --tactical-border: #d6cbb5;
+  --tactical-accent: #8a3d0f;
+  --tactical-secondary: #424420;
+  --tactical-text: #111827;
+  --tactical-muted: #4b5563;
+  color-scheme: light;
+}
+
+[data-theme="light"] .text-emerald-400,
+[data-theme="light"] .text-emerald-300 {
+  color: #047857 !important;
+}
+[data-theme="light"] .text-cyan-400 {
+  color: #0369a1 !important;
+}
+[data-theme="light"] .text-amber-400,
+[data-theme="light"] .text-amber-300 {
+  color: #b45309 !important;
+}
+
+/* ============================================================================
    REGRAS GLOBAIS DE CONTRASTE E TEXTURAS PARA TODOS OS TEMAS ESCUROS / TÁTICOS
    ============================================================================ */
 [data-theme="tactical"] body,
+[data-theme="dark"] body,
 [data-theme="survival"] body,
 [data-theme="stealth"] body {
   background-image:

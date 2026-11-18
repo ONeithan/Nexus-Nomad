@@ -112,6 +112,7 @@ export default class SettingsController {
         baseAssetsExist: baseAssetsCheck,
         worldBasemapExists,
         regionFiles: regionFiles.files,
+        storage: regionFiles.storage,
       },
     })
   }

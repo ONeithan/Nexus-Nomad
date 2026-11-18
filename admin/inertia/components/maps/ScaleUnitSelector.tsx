@@ -13,7 +13,7 @@ export default function ScaleUnitSelector({
                                         }: ScaleUnitSelectorProps) {
   return (
     <div className="absolute bottom-[30px] left-[10px] z-[2]" onMouseEnter={onMouseEnter}>
-      <div className="inline-flex overflow-hidden rounded text-[11px] font-semibold leading-none shadow-[0_0_0_2px_rgba(0,0,0,0.1)]">
+      <div className="inline-flex overflow-hidden rounded text-[0.6875rem] font-semibold leading-none shadow-[0_0_0_2px_rgba(0,0,0,0.1)]">
 
         {/* Metric */}
         <button

@@ -38,6 +38,7 @@ import {
   filenameParamValidator,
   downloadCollectionValidator,
   downloadCategoryTierValidator,
+  downloadBatchZimValidator,
   selectWikipediaValidator,
   applyContentUpdateValidator,
   applyAllContentUpdatesValidator,
@@ -742,6 +743,7 @@ router
     router.post('/storage/delete', [StorageController, 'delete'])
     router.post('/storage/mkdir', [StorageController, 'mkdir'])
     router.post('/storage/preferred-disk', [StorageController, 'setPreferredDisk'])
+    router.post('/storage/quota', [StorageController, 'setQuota'])
     router.get('/samba/status', [StorageController, 'sambaStatus'])
     router.post('/samba/configure', [StorageController, 'configureSamba'])
   })
@@ -770,6 +772,11 @@ router
       summary: 'Queue a remote ZIM download',
       tags: ['zim'],
       request: remoteDownloadWithMetadataValidator,
+    })
+    documented(router.post('/download-batch', [ZimController, 'downloadBatch']), {
+      summary: 'Queue multiple remote ZIM downloads in batch',
+      tags: ['zim'],
+      request: downloadBatchZimValidator,
     })
     documented(router.post('/download-category-tier', [ZimController, 'downloadCategoryTier']), {
       summary: 'Download a ZIM category tier',

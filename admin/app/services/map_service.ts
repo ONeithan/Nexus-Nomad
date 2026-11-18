@@ -22,8 +22,18 @@ import { assertNotPrivateUrl } from '#validators/common'
 import InstalledResource from '#models/installed_resource'
 import { CollectionManifestService } from './collection_manifest_service.js'
 import { decideSupersededDeletion } from '../utils/superseded_resource.js'
-import type { CollectionWithStatus, MapsSpec } from '../../types/collections.js'
-import type { Country, CountryCode, CountryGroup, MapExtractPreflight } from '../../types/maps.js'
+import type {
+  CollectionWithStatus,
+  MapsSpec,
+} from '../../types/collections.js'
+import type {
+  Country,
+  CountryCode,
+  CountryGroup,
+  MapExtractPreflight,
+  MapFileWithStorage,
+  MapLibraryStorageSummary,
+} from '../../types/maps.js'
 import {
   EXTRACT_DEFAULT_MAX_ZOOM,
   EXTRACT_MAX_ZOOM,
@@ -81,20 +91,41 @@ export class MapService implements IMapService {
   private worldBasemapReady = false
   private worldBasemapInFlight: Promise<void> | null = null
 
-  async listRegions() {
-    const files = (await this.listAllMapStorageItems()).filter(
-      (item) =>
+  private async prepareMapsDiskTarget(targetDisk?: string, requiredBytes?: number): Promise<void> {
+    if (!targetDisk && (!requiredBytes || requiredBytes <= 0)) return
+    const { StorageManagerService } = await import('#services/storage_manager_service')
+    await new StorageManagerService().prepareModuleTargetDisk('maps', targetDisk, requiredBytes)
+  }
+
+  async listRegions(): Promise<{
+    files: MapFileWithStorage[]
+    storage?: MapLibraryStorageSummary
+  }> {
+    const rawFiles = (await this.listAllMapStorageItems()).filter(
+      (item): item is Extract<FileEntry, { type: 'file' }> =>
         item.type === 'file' &&
         item.name.endsWith('.pmtiles') &&
         item.name !== WORLD_BASEMAP_FILENAME
     )
 
-    return {
-      files,
+    try {
+      const { StorageManagerService } = await import('#services/storage_manager_service')
+      return await new StorageManagerService().annotateModuleFilesStorage({
+        moduleRootPath: resolve(this.baseDirPath),
+        activeDirPath: resolve(join(this.baseDirPath, 'pmtiles')),
+        relativeSubpathFromDisk: join('maps', 'pmtiles'),
+        activeEntries: rawFiles,
+        filenameFilter: (name) => name.endsWith('.pmtiles') && name !== WORLD_BASEMAP_FILENAME,
+      })
+    } catch {
+      return {
+        files: rawFiles,
+      }
     }
   }
 
-  async downloadBaseAssets(url?: string) {
+  async downloadBaseAssets(url?: string, targetDisk?: string) {
+    await this.prepareMapsDiskTarget(targetDisk)
     const tempTarPath = join(this.baseDirPath, this.baseAssetsTarFile)
 
     const defaultTarFileURL = new URL(
@@ -132,7 +163,7 @@ export class MapService implements IMapService {
     return true
   }
 
-  async downloadCollection(slug: string): Promise<string[] | null> {
+  async downloadCollection(slug: string, targetDisk?: string): Promise<string[] | null> {
     const manifestService = new CollectionManifestService()
     const spec = await manifestService.getSpecWithFallback<MapsSpec>('maps')
     if (!spec) return null
@@ -146,6 +177,19 @@ export class MapService implements IMapService {
     const toDownload = collection.resources.filter((r) => !installedIds.has(r.id))
 
     if (toDownload.length === 0) return null
+
+    const estimatedBytes = toDownload.reduce(
+      (sum, r) =>
+        sum +
+        Number(
+          (r as any).size_bytes ||
+            ((r as any).size_mb ? Number((r as any).size_mb) * 1024 * 1024 : 0) ||
+            (r as any).size ||
+            0
+        ),
+      0
+    )
+    await this.prepareMapsDiskTarget(targetDisk, estimatedBytes)
 
     const downloadFilenames: string[] = []
 
@@ -255,7 +299,7 @@ export class MapService implements IMapService {
     }
   }
 
-  async downloadRemote(url: string): Promise<{ filename: string; jobId?: string }> {
+  async downloadRemote(url: string, targetDisk?: string): Promise<{ filename: string; jobId?: string }> {
     const parsed = new URL(url)
     if (!parsed.pathname.endsWith('.pmtiles')) {
       throw new Error(`Invalid PMTiles file URL: ${url}. URL must end with .pmtiles`)
@@ -270,6 +314,8 @@ export class MapService implements IMapService {
     if (!filename) {
       throw new Error('Could not determine filename from URL')
     }
+
+    await this.prepareMapsDiskTarget(targetDisk)
 
     const filepath = join(process.cwd(), this.mapStoragePath, 'pmtiles', filename)
 
@@ -421,7 +467,8 @@ export class MapService implements IMapService {
    * the basemap if it isn't present yet. Requires internet — surfaced to the user as a "download the
    * base map" action so the one network dependency can be satisfied deliberately while online (#1030).
    */
-  async provisionWorldBasemap(): Promise<boolean> {
+  async provisionWorldBasemap(targetDisk?: string): Promise<boolean> {
+    await this.prepareMapsDiskTarget(targetDisk, 20 * 1024 * 1024)
     // Skip ensureBaseAssets(): it runs its own swallowed ensureWorldBasemap(), so a failure there
     // would clear the in-flight promise and the call below would launch a second extract.
     if (!(await this.ensureBaseAssetFiles())) return false
@@ -559,8 +606,9 @@ export class MapService implements IMapService {
     // linger when a newer curated version installs (#634), so guard against it here so the style
     // stays valid even if cleanup hasn't run. A dated build beats an undated legacy file; between
     // two dated builds the later YYYY-MM wins (lexicographic compare is correct for that format).
-    const bestByRegion = new Map<string, { region: FileEntry; version: string | null }>()
-    for (const region of regions) {
+    const bestByRegion = new Map<string, { region: MapFileWithStorage; version: string | null }>()
+    for (const region of regions as MapFileWithStorage[]) {
+      if (region.inActiveLibrary === false) continue
       if (region.type === 'file' && region.name.endsWith('.pmtiles')) {
         const parsed = CollectionManifestService.parseMapFilename(region.name)
         const regionName = parsed ? parsed.resource_id : region.name.replace('.pmtiles', '')
@@ -652,13 +700,15 @@ export class MapService implements IMapService {
     }
   }
 
-  async downloadGlobalMap(): Promise<{ filename: string; jobId?: string }> {
+  async downloadGlobalMap(targetDisk?: string): Promise<{ filename: string; jobId?: string }> {
     const info = await this.getGlobalMapInfo()
 
     const existing = await RunDownloadJob.getByUrl(info.url)
     if (existing) {
       throw new Error(`Download already in progress for URL ${info.url}`)
     }
+
+    await this.prepareMapsDiskTarget(targetDisk, info.size)
 
     const basePath = resolve(join(this.baseDirPath, 'pmtiles'))
     const filepath = resolve(join(basePath, info.key))
@@ -760,8 +810,10 @@ export class MapService implements IMapService {
     maxzoom?: number
     label?: string
     estimatedBytes?: number
+    targetDisk?: string
   }): Promise<{ filename: string; jobId?: string }> {
     this.validateMaxzoom(params.maxzoom)
+    await this.prepareMapsDiskTarget(params.targetDisk, params.estimatedBytes)
     const countriesService = CountriesService.getInstance()
     const countries = await countriesService.resolveCodes(params.countries)
     const regionFilepath = await countriesService.writeRegionFile(countries)
@@ -796,6 +848,9 @@ export class MapService implements IMapService {
         estimatedBytes = preflight.bytes
       } catch (err) {
         logger.warn(`[MapService] extractRegion preflight failed, proceeding without estimate: ${err}`)
+      }
+      if (estimatedBytes > 0) {
+        await this.prepareMapsDiskTarget(params.targetDisk, estimatedBytes)
       }
     }
 

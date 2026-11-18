@@ -3,6 +3,8 @@ import { useQuery } from '@tanstack/react-query'
 import { IconCheck, IconSearch, IconX } from '@tabler/icons-react'
 import StyledModal, { StyledModalProps } from './StyledModal'
 import LoadingSpinner from './LoadingSpinner'
+import { TargetDiskSelector } from './storage/TargetDiskSelector'
+import { getDiskAvailableBytes, useStorageOverview } from '~/hooks/useStorageOverview'
 import api from '~/lib/api'
 import { formatBytes } from '~/lib/util'
 import classNames from '~/lib/classNames'
@@ -32,6 +34,7 @@ export type CountryPickerModalProps = Omit<
   onDownloadStart?: () => void
   /** Filenames of pmtiles already on disk; used to badge already-installed countries. */
   installedFilenames?: string[]
+  initialDisk?: string
 }
 
 // Single-country extracts use the slug `{iso2 lowercase}_{dateSlug}_z{maxzoom}.pmtiles`,
@@ -84,16 +87,26 @@ const GROUP_LABELS: Record<string, string> = {
 const CountryPickerModal: React.FC<CountryPickerModalProps> = ({
   onDownloadStart,
   installedFilenames = [],
+  initialDisk = '',
   ...modalProps
 }) => {
+  const { data: storageOverview } = useStorageOverview()
   const [selected, setSelected] = useState<Set<CountryCode>>(new Set())
   const [search, setSearch] = useState('')
   const [maxzoom, setMaxzoom] = useState<number>(EXTRACT_DEFAULT_MAX_ZOOM)
+  const [selectedDisk, setSelectedDisk] = useState<string>(initialDisk)
   const [preflight, setPreflight] = useState<MapExtractPreflight | null>(null)
   const [loading, setLoading] = useState(false)
   const [downloading, setDownloading] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const preflightRequestIdRef = useRef(0)
+
+  const resolvedDisk =
+    selectedDisk ||
+    storageOverview?.moduleLocations?.['maps']?.currentDiskPath ||
+    storageOverview?.preferredDownloadDisk ||
+    storageOverview?.storageRoot ||
+    ''
 
   const { data: countries = [], isLoading: countriesLoading } = useQuery({
     queryKey: ['maps-countries'],
@@ -210,6 +223,16 @@ const CountryPickerModal: React.FC<CountryPickerModalProps> = ({
       setErrorMessage('Ainda estimando o tamanho — aguarde um momento.')
       return
     }
+    const targetDiskObj = storageOverview?.mountTargets?.find((m) => m.path === resolvedDisk)
+    if (targetDiskObj && preflight?.bytes > 0) {
+      const availBytes = getDiskAvailableBytes(targetDiskObj)
+      if (preflight.bytes > availBytes) {
+        setErrorMessage(
+          `Espaço/cota insuficiente em "${targetDiskObj.label}" (${formatBytes(availBytes, 1)} livres para ${formatBytes(preflight.bytes, 1)} estimados). Escolha outro HD.`
+        )
+        return
+      }
+    }
     try {
       setDownloading(true)
       setErrorMessage(null)
@@ -217,6 +240,7 @@ const CountryPickerModal: React.FC<CountryPickerModalProps> = ({
         countries: [...selected],
         maxzoom,
         estimatedBytes: preflight?.bytes,
+        targetDisk: resolvedDisk || undefined,
       })
       onDownloadStart?.()
     } catch (err: any) {
@@ -340,7 +364,7 @@ const CountryPickerModal: React.FC<CountryPickerModalProps> = ({
                           <span className="flex-1 text-text-primary">{country.name}</span>
                           {isInstalled && (
                             <span
-                              className="text-[10px] uppercase tracking-wide font-semibold px-1.5 py-0.5 rounded bg-desert-green/15 text-desert-green border border-desert-green/30"
+                              className="text-[0.625rem] uppercase tracking-wide font-semibold px-1.5 py-0.5 rounded bg-desert-green/15 text-desert-green border border-desert-green/30"
                               title="Já baixado — selecione novamente para atualizar com um zoom diferente"
                             >
                               Instalado
@@ -416,6 +440,19 @@ const CountryPickerModal: React.FC<CountryPickerModalProps> = ({
             loading={loading}
             preflight={preflight}
             hasSelection={selected.size > 0}
+          />
+        </div>
+
+        <div className="pt-2 border-t border-border-subtle">
+          <TargetDiskSelector
+            moduleKey="maps"
+            value={resolvedDisk}
+            onChange={(disk) => {
+              setSelectedDisk(disk)
+              setErrorMessage(null)
+            }}
+            requiredBytes={preflight?.bytes || 0}
+            disabled={downloading}
           />
         </div>
 

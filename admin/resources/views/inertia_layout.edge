@@ -24,6 +24,10 @@
         document.documentElement.setAttribute('data-theme', theme);
         var layout = localStorage.getItem('nomad:home_layout') || 'auto';
         document.documentElement.setAttribute('data-home-layout', layout);
+        var validScales = ['100', '115', '130'];
+        var uiScale = localStorage.getItem('nomad:ui_scale') || '130';
+        if (validScales.indexOf(uiScale) === -1) uiScale = '130';
+        document.documentElement.setAttribute('data-ui-scale', uiScale);
       } catch(e) {}
     })();
   </script>
@@ -34,7 +38,7 @@
   @vite(['inertia/app/app.tsx', `inertia/pages/${page.component}.tsx`])
 </head>
 
-<body class="min-h-screen w-screen font-sans">
+<body class="min-h-screen w-full font-sans overflow-x-hidden">
   @inertia()
 </body>
 

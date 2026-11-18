@@ -119,7 +119,13 @@ type Modal =
 
 export default function SupplyDepotPage(props: {
   system: { services: ServiceSlim[] }
-  portainer?: { enabled: boolean; online: boolean; url?: string }
+  portainer?: {
+    enabled: boolean
+    online: boolean
+    url?: string
+    deployTarget?: 'local' | 'portainer'
+    autoUseDefaultTarget?: boolean
+  }
 }) {
   const { showError } = useErrorNotification()
   const { addNotification } = useNotifications()
@@ -150,7 +156,15 @@ export default function SupplyDepotPage(props: {
   const [customAppOpen, setCustomAppOpen] = useState(false)
   const [portainerModalOpen, setPortainerModalOpen] = useState(false)
   const [editApp, setEditApp] = useState<CustomAppInitial | null>(null)
-  const [installTarget, setInstallTarget] = useState<'local' | 'portainer'>('local')
+  const [defaultTarget, setDefaultTarget] = useState<'local' | 'portainer'>(
+    props.portainer?.deployTarget === 'portainer' && props.portainer?.enabled ? 'portainer' : 'local'
+  )
+  const [autoUseDefaultTarget, setAutoUseDefaultTarget] = useState<boolean>(
+    Boolean(props.portainer?.autoUseDefaultTarget)
+  )
+  const [installTarget, setInstallTarget] = useState<'local' | 'portainer'>(
+    props.portainer?.deployTarget === 'portainer' && props.portainer?.enabled ? 'portainer' : 'local'
+  )
   // App whose custom launch URL is being configured (null while the modal is closed).
   const [urlApp, setUrlApp] = useState<ServiceSlim | null>(null)
   const [removeImage, setRemoveImage] = useState(false)
@@ -160,6 +174,90 @@ export default function SupplyDepotPage(props: {
   const [isBulkMode, setIsBulkMode] = useState(false)
   const [selectedForBulk, setSelectedForBulk] = useState<Set<string>>(new Set())
   const [bulkModalOpen, setBulkModalOpen] = useState(false)
+
+  const handleSaveDefaultTarget = async (nextTarget: 'local' | 'portainer') => {
+    setDefaultTarget(nextTarget)
+    try {
+      await api.updateSetting('portainer.deployTarget', nextTarget)
+      addNotification({
+        type: 'success',
+        message: `Destino padrão definido para: ${nextTarget === 'portainer' ? 'Servidor Portainer' : 'Instalação Local'}.`,
+      })
+    } catch {}
+  }
+
+  const handleToggleAutoUseDefault = async (enabled: boolean) => {
+    setAutoUseDefaultTarget(enabled)
+    try {
+      await api.updateSetting('portainer.autoUseDefaultTarget', enabled)
+      addNotification({
+        type: 'info',
+        message: enabled
+          ? 'Instalação rápida em 1 clique ativada (pula confirmação quando não houver alertas).'
+          : 'Confirmação antes de instalar reativada.',
+      })
+    } catch {}
+  }
+
+  const openInstallModalOrDirect = async (service: ServiceSlim) => {
+    const preferred: 'local' | 'portainer' = isPortainerConfigured ? defaultTarget : 'local'
+    setInstallTarget(preferred)
+    setForceInstall(false)
+
+    if (autoUseDefaultTarget) {
+      setLoading(true)
+      try {
+        const check = await api.preflightCheck(service.service_name)
+        const hasWarnings =
+          (check?.portConflicts?.length ?? 0) > 0 || (check?.resourceWarnings?.length ?? 0) > 0
+        if (!hasWarnings) {
+          const result = await api.installService(service.service_name, preferred)
+          setLoading(false)
+          if (!result?.success) {
+            showError(result?.message || 'Falha ao iniciar a instalação.')
+          } else {
+            setServices((prev) =>
+              prev.map((s) =>
+                s.service_name === service.service_name
+                  ? { ...s, installation_status: 'installing' }
+                  : s
+              )
+            )
+            addNotification({
+              message:
+                result.message ||
+                `Instalação de ${service.friendly_name} iniciada (${preferred === 'portainer' ? 'Portainer' : 'Local'})!`,
+              type: 'success',
+            })
+          }
+          return
+        }
+      } catch {
+        // Fallback to confirmation modal on preflight error
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    setModal({ type: 'install', service })
+  }
+
+  const toggleCategoryForBulk = (catId: string) => {
+    const catServices = availableServices
+      .filter((s) => s.category === catId)
+      .map((s) => s.service_name)
+    if (catServices.length === 0) return
+    setSelectedForBulk((prev) => {
+      const next = new Set(prev)
+      const allInCatSelected = catServices.every((name) => next.has(name))
+      if (allInCatSelected) {
+        catServices.forEach((name) => next.delete(name))
+      } else {
+        catServices.forEach((name) => next.add(name))
+      }
+      return next
+    })
+  }
 
   const toggleSelectService = (serviceName: string) => {
     setSelectedForBulk((prev) => {
@@ -635,10 +733,25 @@ export default function SupplyDepotPage(props: {
                   setIsBulkMode(next)
                   if (!next) setSelectedForBulk(new Set())
                 }}
-                title="Ativar modo de seleção múltipla para instalar vários ou todos os aplicativos em lote"
+                title="Ativar modo de seleção múltipla para instalar por categorias ou todos os aplicativos de uma vez"
               >
                 {isBulkMode ? `Modo Massa (${selectedForBulk.size})` : 'Instalação em Massa'}
               </StyledButton>
+              {isPortainerConfigured && (
+                <button
+                  type="button"
+                  onClick={() => handleToggleAutoUseDefault(!autoUseDefaultTarget)}
+                  title="Alternar instalação direta em 1 clique usando o destino padrão"
+                  className={`px-2.5 py-1.5 rounded-md border text-xs font-semibold cursor-pointer transition-colors ${
+                    autoUseDefaultTarget
+                      ? 'border-emerald-500/60 bg-emerald-500/15 text-emerald-400'
+                      : 'border-border-default bg-surface-secondary text-text-secondary hover:border-desert-tan'
+                  }`}
+                >
+                  Padrão: {defaultTarget === 'portainer' ? 'Portainer' : 'Local'}
+                  {autoUseDefaultTarget ? ' (1-Clique ✓)' : ''}
+                </button>
+              )}
             </div>
 
             {/* Category filters */}
@@ -684,63 +797,100 @@ export default function SupplyDepotPage(props: {
 
             {/* Tactical Bulk Selection Bar */}
             {isBulkMode && (
-              <div className="p-3.5 rounded-xl bg-desert-orange/10 border border-desert-orange/30 flex flex-wrap items-center justify-between gap-3 shadow-sm">
-                <div className="flex flex-wrap items-center gap-2 text-xs">
-                  <span className="font-bold text-desert-orange flex items-center gap-1.5 uppercase font-mono-mil">
-                    <IconBolt size={16} />
-                    <span>Seleção em Massa:</span>
-                  </span>
-                  <span className="font-mono bg-surface-primary px-2 py-0.5 rounded border border-border-subtle font-bold">
-                    {selectedForBulk.size} de {availableServices.length} selecionados
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedForBulk(new Set(availableServices.map((s) => s.service_name)))}
-                    className="px-2.5 py-1 rounded bg-surface-primary hover:bg-surface-secondary text-text-primary border border-border-subtle cursor-pointer font-medium"
-                  >
-                    Selecionar Todos ({availableServices.length})
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const inCat = availableServices.filter((s) => activeCategory === 'all' || s.category === activeCategory)
-                      setSelectedForBulk(new Set(inCat.map((s) => s.service_name)))
-                    }}
-                    className="px-2.5 py-1 rounded bg-surface-primary hover:bg-surface-secondary text-text-primary border border-border-subtle cursor-pointer font-medium"
-                  >
-                    Selecionar Categoria
-                  </button>
-                  {selectedForBulk.size > 0 && (
+              <div className="p-3.5 rounded-xl bg-desert-orange/10 border border-desert-orange/30 space-y-3 shadow-sm">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex flex-wrap items-center gap-2 text-xs">
+                    <span className="font-bold text-desert-orange flex items-center gap-1.5 uppercase font-mono-mil">
+                      <IconBolt size={16} />
+                      <span>Download / Instalação Geral:</span>
+                    </span>
+                    <span className="font-mono bg-surface-primary px-2 py-0.5 rounded border border-border-subtle font-bold">
+                      {selectedForBulk.size} de {availableServices.length} selecionados
+                    </span>
                     <button
                       type="button"
-                      onClick={() => setSelectedForBulk(new Set())}
-                      className="px-2.5 py-1 rounded bg-surface-primary hover:bg-surface-secondary text-text-muted hover:text-text-primary border border-border-subtle cursor-pointer"
+                      onClick={() => setSelectedForBulk(new Set(availableServices.map((s) => s.service_name)))}
+                      className="px-2.5 py-1 rounded bg-surface-primary hover:bg-surface-secondary text-text-primary border border-border-subtle cursor-pointer font-medium"
                     >
-                      Desmarcar
+                      Selecionar Todos ({availableServices.length})
                     </button>
-                  )}
+                    <button
+                      type="button"
+                      disabled={availableServices.length === 0}
+                      onClick={() => {
+                        setSelectedForBulk(new Set(availableServices.map((s) => s.service_name)))
+                        setBulkModalOpen(true)
+                      }}
+                      className="px-2.5 py-1 rounded bg-desert-orange text-white hover:opacity-90 border border-desert-orange cursor-pointer font-bold disabled:opacity-50"
+                    >
+                      Instalar Todos Agora
+                    </button>
+                    {selectedForBulk.size > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setSelectedForBulk(new Set())}
+                        className="px-2.5 py-1 rounded bg-surface-primary hover:bg-surface-secondary text-text-muted hover:text-text-primary border border-border-subtle cursor-pointer"
+                      >
+                        Desmarcar
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <StyledButton
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        setIsBulkMode(false)
+                        setSelectedForBulk(new Set())
+                      }}
+                    >
+                      Cancelar
+                    </StyledButton>
+                    <StyledButton
+                      size="sm"
+                      variant="primary"
+                      icon="IconBolt"
+                      disabled={selectedForBulk.size === 0}
+                      onClick={() => setBulkModalOpen(true)}
+                    >
+                      Instalar Selecionados ({selectedForBulk.size})
+                    </StyledButton>
+                  </div>
                 </div>
 
-                <div className="flex items-center gap-2">
-                  <StyledButton
-                    size="sm"
-                    variant="outline"
-                    onClick={() => {
-                      setIsBulkMode(false)
-                      setSelectedForBulk(new Set())
-                    }}
-                  >
-                    Cancelar
-                  </StyledButton>
-                  <StyledButton
-                    size="sm"
-                    variant="primary"
-                    icon="IconBolt"
-                    disabled={selectedForBulk.size === 0}
-                    onClick={() => setBulkModalOpen(true)}
-                  >
-                    Instalar Selecionados ({selectedForBulk.size})
-                  </StyledButton>
+                {/* Seleção rápida por Categoria */}
+                <div className="flex flex-wrap items-center gap-1.5 pt-2 border-t border-desert-orange/20">
+                  <span className="text-[0.6875rem] font-semibold text-text-secondary mr-1">
+                    Por Categoria:
+                  </span>
+                  {CATEGORIES.filter(
+                    (c) =>
+                      c.id !== 'all' &&
+                      c.id !== 'installed' &&
+                      c.id !== 'remote-server' &&
+                      availableServices.some((s) => s.category === c.id)
+                  ).map((cat) => {
+                    const catList = availableServices.filter((s) => s.category === cat.id)
+                    const selectedCount = catList.filter((s) => selectedForBulk.has(s.service_name)).length
+                    const allSelected = selectedCount > 0 && selectedCount === catList.length
+                    return (
+                      <button
+                        key={`bulk-cat-${cat.id}`}
+                        type="button"
+                        onClick={() => toggleCategoryForBulk(cat.id)}
+                        className={`px-2 py-0.5 rounded-full text-[0.6875rem] font-semibold border cursor-pointer transition-colors ${
+                          allSelected
+                            ? 'bg-desert-orange text-white border-desert-orange'
+                            : selectedCount > 0
+                              ? 'bg-desert-orange/20 text-desert-orange border-desert-orange/50'
+                              : 'bg-surface-primary text-text-secondary border-border-subtle hover:border-desert-orange'
+                        }`}
+                      >
+                        {cat.label} ({selectedCount}/{catList.length})
+                      </button>
+                    )
+                  })}
                 </div>
               </div>
             )}
@@ -769,7 +919,7 @@ export default function SupplyDepotPage(props: {
                       openDropdown={openDropdown}
                       dropdownRef={dropdownRef}
                       onOpenDropdown={setOpenDropdown}
-                      onInstall={() => setModal({ type: 'install', service })}
+                      onInstall={() => openInstallModalOrDirect(service)}
                       onStart={() => setModal({ type: 'start', service })}
                       onStop={() => setModal({ type: 'stop', service })}
                       onRestart={() => setModal({ type: 'restart', service })}
@@ -808,7 +958,7 @@ export default function SupplyDepotPage(props: {
                       openDropdown={openDropdown}
                       dropdownRef={dropdownRef}
                       onOpenDropdown={setOpenDropdown}
-                      onInstall={() => setModal({ type: 'install', service })}
+                      onInstall={() => openInstallModalOrDirect(service)}
                       onStart={() => setModal({ type: 'start', service })}
                       onStop={() => setModal({ type: 'stop', service })}
                       onRestart={() => setModal({ type: 'restart', service })}
@@ -871,7 +1021,7 @@ export default function SupplyDepotPage(props: {
                     <IconDeviceDesktop className={`w-5 h-5 mt-0.5 flex-shrink-0 ${installTarget === 'local' ? 'text-desert-green-darker' : 'text-text-muted'}`} />
                     <div>
                       <strong className="block text-xs font-bold text-text-primary">Instalação Local</strong>
-                      <span className="text-[11px] text-text-muted leading-tight block mt-0.5">
+                      <span className="text-[0.6875rem] text-text-muted leading-tight block mt-0.5">
                         Executa no dispositivo NOMAD atual
                       </span>
                     </div>
@@ -889,11 +1039,40 @@ export default function SupplyDepotPage(props: {
                     <IconBrandDocker className={`w-5 h-5 mt-0.5 flex-shrink-0 ${installTarget === 'portainer' ? 'text-emerald-600' : 'text-text-muted'}`} />
                     <div>
                       <strong className="block text-xs font-bold text-text-primary">Servidor Portainer</strong>
-                      <span className="text-[11px] text-text-muted leading-tight block mt-0.5">
+                      <span className="text-[0.6875rem] text-text-muted leading-tight block mt-0.5">
                         Executa no servidor remoto ({props.portainer?.url ? new URL(props.portainer.url).hostname : 'remoto'})
                       </span>
                     </div>
                   </button>
+                </div>
+                <div className="flex flex-col gap-1.5 pt-2 border-t border-border-subtle">
+                  <label className="inline-flex items-center gap-2 text-xs text-text-primary cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={defaultTarget === installTarget}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          void handleSaveDefaultTarget(installTarget)
+                        } else {
+                          const other = installTarget === 'portainer' ? 'local' : 'portainer'
+                          void handleSaveDefaultTarget(other)
+                        }
+                      }}
+                      className="rounded border-border-default text-emerald-500 focus:ring-emerald-500"
+                    />
+                    <span>
+                      Definir <strong>{installTarget === 'portainer' ? 'Servidor Portainer' : 'Instalação Local'}</strong> como destino padrão
+                    </span>
+                  </label>
+                  <label className="inline-flex items-center gap-2 text-xs text-text-secondary cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={autoUseDefaultTarget}
+                      onChange={(e) => void handleToggleAutoUseDefault(e.target.checked)}
+                      className="rounded border-border-default text-desert-orange focus:ring-desert-orange"
+                    />
+                    <span>Instalar direto em 1 clique nas próximas vezes (pular modal quando não houver alertas)</span>
+                  </label>
                 </div>
               </div>
             )}
@@ -915,7 +1094,7 @@ export default function SupplyDepotPage(props: {
                       <IconAlertTriangle className="w-4 h-4 shrink-0" />
                       Acesso às Pastas Locais (Samba SMB)
                     </div>
-                    <p className="text-text-secondary text-[11px] leading-relaxed">
+                    <p className="text-text-secondary text-[0.6875rem] leading-relaxed">
                       Como o Portainer está em outro servidor, apps que leem arquivos locais (Kiwix, Calibre-Web, Jellyfin, Stirling PDF) precisam do compartilhamento <strong>Samba</strong> configurado para enxergar a biblioteca deste N.O.M.A.D. (exceto se o N.O.M.A.D. já rodar no mesmo host Portainer).{' '}
                       <a href="/settings/storage" className="text-desert-orange underline font-semibold">
                         Configurar Samba em Armazenamento
@@ -1201,7 +1380,7 @@ export default function SupplyDepotPage(props: {
         onClose={() => setBulkModalOpen(false)}
         selectedServices={availableServices.filter((s) => selectedForBulk.has(s.service_name))}
         isPortainerConfigured={isPortainerConfigured}
-        defaultTarget={(props.portainer as any)?.deployTarget || 'local'}
+        defaultTarget={defaultTarget}
         installActivity={installActivity}
         onCompletedAll={() => {
           setBulkModalOpen(false)
@@ -1436,7 +1615,7 @@ function AppCard({
 
       {(service.service_name === SERVICE_NAMES.FILEBROWSER ||
         service.service_name === SERVICE_NAMES.CALIBREWEB) && (
-        <div className="mb-3 px-2.5 py-1.5 rounded-md bg-surface-secondary border border-border-subtle text-[11px] font-mono text-text-secondary flex items-center justify-between gap-2">
+        <div className="mb-3 px-2.5 py-1.5 rounded-md bg-surface-secondary border border-border-subtle text-[0.6875rem] font-mono text-text-secondary flex items-center justify-between gap-2">
           <span>Login padrão:</span>
           <span className="font-bold text-text-primary">
             {service.service_name === SERVICE_NAMES.FILEBROWSER
@@ -1529,7 +1708,7 @@ function AppCard({
           }
         }
         return (
-          <div className="mb-3 rounded-lg bg-desert-orange/10 border border-desert-orange/30 px-3 py-2 text-[11px] text-text-primary space-y-1.5">
+          <div className="mb-3 rounded-lg bg-desert-orange/10 border border-desert-orange/30 px-3 py-2 text-[0.6875rem] text-text-primary space-y-1.5">
             <div className="flex items-center justify-between gap-2 font-medium text-desert-orange">
               <div className="flex items-center gap-2 min-w-0">
                 <span className="animate-spin inline-block w-3 h-3 border-2 border-desert-orange border-t-transparent rounded-full flex-shrink-0" />
@@ -1725,7 +1904,7 @@ function AppCard({
           >
             <div className="flex items-start justify-between gap-3">
               <div>
-                <span className="text-[11px] font-mono uppercase tracking-wider text-desert-orange">
+                <span className="text-[0.6875rem] font-mono uppercase tracking-wider text-desert-orange">
                   Primeiro Acesso // N.O.M.A.D.
                 </span>
                 <h3 className="text-lg font-bold text-text-primary mt-0.5">

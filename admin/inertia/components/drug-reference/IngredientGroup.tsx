@@ -48,12 +48,12 @@ export default function IngredientGroup({
         />
         <span className="font-semibold text-sm text-desert-green-darker truncate">{group.label}</span>
         {anyOtc && (
-          <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-desert-olive/10 text-desert-olive-dark border border-desert-olive/30 flex-shrink-0">
+          <span className="px-1.5 py-0.5 rounded text-[0.625rem] font-semibold bg-desert-olive/10 text-desert-olive-dark border border-desert-olive/30 flex-shrink-0">
             OTC
           </span>
         )}
         {anyRx && (
-          <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-desert-orange/10 text-desert-orange-dark border border-desert-orange/30 flex-shrink-0">
+          <span className="px-1.5 py-0.5 rounded text-[0.625rem] font-semibold bg-desert-orange/10 text-desert-orange-dark border border-desert-orange/30 flex-shrink-0">
             Rx
           </span>
         )}

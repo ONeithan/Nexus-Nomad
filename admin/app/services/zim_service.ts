@@ -1,9 +1,12 @@
 import { existsSync, readFileSync } from 'node:fs'
+import { lstat, readdir, realpath } from 'node:fs/promises'
 import {
   CatalogLanguage,
   ListRemoteZimFilesResponse,
   RawRemoteZimFileEntry,
   RemoteZimFileEntry,
+  ZimFileWithMetadata,
+  ZimLibraryStorageSummary,
 } from '../../types/zim.js'
 import axios from 'axios'
 import * as cheerio from 'cheerio'
@@ -51,29 +54,178 @@ const WIKIPEDIA_OPTIONS_URL = 'https://raw.githubusercontent.com/ONeithan/Nexus-
 export class ZimService {
   constructor(private dockerService: DockerService) { }
 
-  async list() {
+  async list(): Promise<{
+    files: ZimFileWithMetadata[]
+    storage: ZimLibraryStorageSummary
+  }> {
     const dirPath = join(process.cwd(), ZIM_STORAGE_PATH)
     await ensureDirectoryExists(dirPath)
+
+    let storageSvc: InstanceType<typeof import('#services/storage_manager_service').StorageManagerService> | null =
+      null
+    let mountTargets: Array<{
+      label: string
+      path: string
+      isPrimary?: boolean
+      diskType?: string
+      realHostPath?: string
+    }> = []
+
+    try {
+      const { StorageManagerService } = await import('#services/storage_manager_service')
+      storageSvc = new StorageManagerService()
+      const overview = await storageSvc.getStorageOverview()
+      mountTargets = overview.mountTargets || []
+    } catch {
+      storageSvc = null
+      mountTargets = []
+    }
+
+    const dirLst = await lstat(dirPath).catch(() => null)
+    const dirIsSymlink = Boolean(dirLst?.isSymbolicLink())
+    const dirRealPath = await realpath(dirPath).catch(() => resolve(dirPath))
+    const dirRealHostPath = storageSvc
+      ? await storageSvc.resolveRealHostPath(dirRealPath).catch(() => dirRealPath)
+      : dirRealPath
+
+    const defaultPrimaryDisk = mountTargets[0] || {
+      label: 'Armazenamento Interno NOMAD',
+      path: resolve(process.cwd(), 'storage'),
+      isPrimary: true,
+      diskType: 'Sistema',
+    }
+    const activeDirDisk =
+      (storageSvc &&
+        (storageSvc.findDiskForResolvedPath(dirRealPath, mountTargets) ||
+          storageSvc.findDiskForResolvedPath(dirRealHostPath, mountTargets))) ||
+      defaultPrimaryDisk
+
+    const resolveEntryStorageMeta = async (
+      filePath: string,
+      parentIsSymlink: boolean,
+      inActiveLibrary: boolean,
+      fallbackDisk: typeof defaultPrimaryDisk
+    ) => {
+      const [stats, entryLst, fileRealPath] = await Promise.all([
+        getFileStatsIfExists(filePath),
+        lstat(filePath).catch(() => null),
+        realpath(filePath).catch(() => resolve(filePath)),
+      ])
+      const realHostPath = storageSvc
+        ? await storageSvc.resolveRealHostPath(fileRealPath).catch(() => fileRealPath)
+        : fileRealPath
+      const matchedDisk =
+        (storageSvc &&
+          (storageSvc.findDiskForResolvedPath(fileRealPath, mountTargets) ||
+            storageSvc.findDiskForResolvedPath(realHostPath, mountTargets))) ||
+        fallbackDisk
+
+      return {
+        size_bytes: stats ? Number(stats.size) : null,
+        diskLabel: matchedDisk.label,
+        diskPath: matchedDisk.path,
+        diskType: matchedDisk.diskType,
+        isPrimaryDisk: Boolean(matchedDisk.isPrimary),
+        realPath: fileRealPath,
+        realHostPath,
+        isSymlink: parentIsSymlink || Boolean(entryLst?.isSymbolicLink()),
+        inActiveLibrary,
+      }
+    }
 
     const all = await listDirectoryContents(dirPath)
     const zimEntries = all.filter((item) => item.name.endsWith('.zim'))
 
-    const files = await Promise.all(
+    const activeFiles: ZimFileWithMetadata[] = await Promise.all(
       zimEntries.map(async (entry) => {
         const filePath = entry.type === 'file' ? entry.key : join(dirPath, entry.name)
-        const stats = await getFileStatsIfExists(filePath)
+        const meta = await resolveEntryStorageMeta(filePath, dirIsSymlink, true, activeDirDisk)
         return {
           ...entry,
           title: null,
           summary: null,
           author: null,
-          size_bytes: stats ? Number(stats.size) : null,
+          ...meta,
         }
       })
     )
 
+    const seenKeys = new Set<string>()
+    for (const f of activeFiles) {
+      if (f.realPath) seenKeys.add(f.realPath)
+      if (f.realHostPath) seenKeys.add(f.realHostPath)
+    }
+
+    // Also scan secondary disk /zim folders so files saved on other mounted HDs remain visible
+    const extraFiles: ZimFileWithMetadata[] = []
+    for (const mt of mountTargets) {
+      const candidateZimDir = join(mt.path, 'zim')
+      if (!existsSync(candidateZimDir)) continue
+      const candidateRealDir = await realpath(candidateZimDir).catch(() => resolve(candidateZimDir))
+      if (candidateRealDir === dirRealPath) continue
+
+      try {
+        const dirItems = await readdir(candidateZimDir, { withFileTypes: true })
+        for (const item of dirItems) {
+          if (!(item.isFile() || item.isSymbolicLink()) || !item.name.endsWith('.zim')) continue
+          const fullPath = join(candidateZimDir, item.name)
+          const meta = await resolveEntryStorageMeta(fullPath, false, false, mt)
+          if (seenKeys.has(meta.realPath) || seenKeys.has(meta.realHostPath)) continue
+          seenKeys.add(meta.realPath)
+          seenKeys.add(meta.realHostPath)
+          extraFiles.push({
+            type: 'file',
+            key: fullPath,
+            name: item.name,
+            title: null,
+            summary: null,
+            author: null,
+            ...meta,
+          })
+        }
+      } catch {
+        // Ignore unreadable secondary folders
+      }
+    }
+
+    const files = [...activeFiles, ...extraFiles]
+
+    const diskMap = new Map<
+      string,
+      {
+        diskLabel: string
+        diskPath: string
+        isPrimaryDisk: boolean
+        count: number
+        totalBytes: number
+      }
+    >()
+    for (const f of files) {
+      const key = f.diskPath || f.diskLabel || activeDirDisk.path
+      const current = diskMap.get(key) || {
+        diskLabel: f.diskLabel || activeDirDisk.label,
+        diskPath: f.diskPath || activeDirDisk.path,
+        isPrimaryDisk: Boolean(f.isPrimaryDisk),
+        count: 0,
+        totalBytes: 0,
+      }
+      current.count += 1
+      current.totalBytes += f.size_bytes || 0
+      diskMap.set(key, current)
+    }
+
     return {
       files,
+      storage: {
+        currentDiskLabel: activeDirDisk.label,
+        currentDiskPath: activeDirDisk.path,
+        isPrimaryDisk: Boolean(activeDirDisk.isPrimary),
+        diskType: activeDirDisk.diskType,
+        realPath: dirRealPath,
+        realHostPath: dirRealHostPath,
+        isSymlink: dirIsSymlink,
+        disksSummary: Array.from(diskMap.values()),
+      },
     }
   }
 
@@ -260,7 +412,41 @@ export class ZimService {
     }
   }
 
-  async downloadRemote(url: string, metadata?: { title?: string; summary?: string; author?: string; size_bytes?: number }): Promise<{ filename: string; jobId?: string }> {
+  private async resolveZimTargetDir(targetDisk?: string, requiredBytes?: number): Promise<{
+    targetDir: string
+    diskLabel: string
+  }> {
+    const { StorageManagerService } = await import('#services/storage_manager_service')
+    const svc = new StorageManagerService()
+    if (!targetDisk?.trim() && (!requiredBytes || requiredBytes <= 0)) {
+      return { targetDir: join(process.cwd(), ZIM_STORAGE_PATH), diskLabel: '' }
+    }
+    try {
+      const res = await svc.prepareDownloadTargetDir('zim', targetDisk, requiredBytes)
+      return { targetDir: res.targetDir, diskLabel: res.diskLabel }
+    } catch (err: any) {
+      if (
+        err?.message?.includes('Limite de espaço configurado') ||
+        err?.message?.includes('Espaço livre insuficiente')
+      ) {
+        throw err
+      }
+      logger.warn(`[ZimService] Fallback para diretório padrão ZIM: ${err?.message || err}`)
+      return { targetDir: join(process.cwd(), ZIM_STORAGE_PATH), diskLabel: '' }
+    }
+  }
+
+  async downloadRemote(
+    url: string,
+    metadata?: {
+      title?: string
+      summary?: string | null
+      author?: string | null
+      size_bytes?: number | null
+    },
+    targetDisk?: string,
+    resolvedTargetDir?: string
+  ): Promise<{ filename: string; jobId?: string }> {
     const parsed = new URL(url)
     if (!parsed.pathname.endsWith('.zim')) {
       throw new Error(`Invalid ZIM file URL: ${url}. URL must end with .zim`)
@@ -268,16 +454,20 @@ export class ZimService {
 
     const existing = await RunDownloadJob.getActiveByUrl(url)
     if (existing) {
-      throw new Error('A download for this URL is already in progress')
+      throw new Error('Já existe um download em andamento para esta URL')
     }
 
-    // Extract the filename from the URL
     const filename = url.split('/').pop()
     if (!filename) {
       throw new Error('Could not determine filename from URL')
     }
 
-    const filepath = join(process.cwd(), ZIM_STORAGE_PATH, filename)
+    let dirToWrite = resolvedTargetDir
+    if (!dirToWrite) {
+      const resolved = await this.resolveZimTargetDir(targetDisk, metadata?.size_bytes ?? undefined)
+      dirToWrite = resolved.targetDir
+    }
+    const filepath = join(dirToWrite, filename)
 
     // Parse resource metadata for the download job
     const parsedFilename = CollectionManifestService.parseZimFilename(filename)
@@ -293,15 +483,15 @@ export class ZimService {
       allowedMimeTypes: ZIM_MIME_TYPES,
       filetype: 'zim',
       title: metadata?.title,
-      totalBytes: metadata?.size_bytes,
+      totalBytes: metadata?.size_bytes ?? undefined,
       resourceMetadata,
     })
 
     if (!result || !result.job) {
-      throw new Error('Failed to dispatch download job')
+      throw new Error('Falha ao enfileirar trabalho de download.')
     }
 
-    logger.info(`[ZimService] Dispatched background download job for ZIM file: ${filename}`)
+    logger.info(`[ZimService] Dispatched background download job for ZIM file: ${filename} -> ${filepath}`)
 
     return {
       filename,
@@ -309,63 +499,123 @@ export class ZimService {
     }
   }
 
+  async downloadBatch(
+    items: Array<{
+      url: string
+      metadata?: {
+        title?: string
+        summary?: string | null
+        author?: string | null
+        size_bytes?: number | null
+      }
+    }>,
+    targetDisk?: string
+  ): Promise<{
+    queuedCount: number
+    skippedCount: number
+    failedCount: number
+    filenames: string[]
+    diskLabel: string
+  }> {
+    const totalRequiredBytes = items.reduce(
+      (sum, item) => sum + (Number(item.metadata?.size_bytes) || 0),
+      0
+    )
+    const { targetDir, diskLabel } = await this.resolveZimTargetDir(targetDisk, totalRequiredBytes)
+
+    let queuedCount = 0
+    let skippedCount = 0
+    let failedCount = 0
+    const filenames: string[] = []
+
+    const CHUNK_SIZE = 10
+    for (let i = 0; i < items.length; i += CHUNK_SIZE) {
+      const slice = items.slice(i, i + CHUNK_SIZE)
+      const results = await Promise.allSettled(
+        slice.map((item) => this.downloadRemote(item.url, item.metadata, targetDisk, targetDir))
+      )
+      for (const r of results) {
+        if (r.status === 'fulfilled') {
+          queuedCount++
+          filenames.push(r.value.filename)
+        } else if (r.reason?.message?.includes('já existe') || r.reason?.message?.includes('already in progress')) {
+          skippedCount++
+        } else {
+          failedCount++
+          logger.warn(`[ZimService] downloadBatch item failed: ${r.reason?.message || r.reason}`)
+        }
+      }
+    }
+
+    if (queuedCount === 0 && skippedCount === 0 && items.length > 0) {
+      throw new Error('Não foi possível enfileirar nenhum arquivo ZIM neste lote. Verifique os logs ou a conexão.')
+    }
+
+    return { queuedCount, skippedCount, failedCount, filenames, diskLabel }
+  }
+
   async listCuratedCategories(): Promise<CategoryWithStatus[]> {
     const manifestService = new CollectionManifestService()
     return manifestService.getCategoriesWithStatus()
   }
 
-  async downloadCategoryTier(categorySlug: string, tierSlug: string): Promise<string[] | null> {
+  async downloadCategoryTier(
+    categorySlug: string,
+    tierSlug: string,
+    targetDisk?: string
+  ): Promise<string[] | null> {
     const manifestService = new CollectionManifestService()
     const spec = await manifestService.getSpecWithFallback<import('../../types/collections.js').ZimCategoriesSpec>('zim_categories')
     if (!spec) {
-      throw new Error('Could not load ZIM categories spec')
+      throw new Error('Não foi possível carregar as especificações de categorias ZIM.')
     }
 
     const category = spec.categories.find((c) => c.slug === categorySlug)
     if (!category) {
-      throw new Error(`Category not found: ${categorySlug}`)
+      throw new Error(`Categoria não encontrada: ${categorySlug}`)
     }
 
     const tier = category.tiers.find((t) => t.slug === tierSlug)
     if (!tier) {
-      throw new Error(`Tier not found: ${tierSlug}`)
+      throw new Error(`Nível não encontrado: ${tierSlug}`)
     }
 
     const allResources = CollectionManifestService.resolveTierResources(tier, category.tiers)
-
-    // Filter out already installed. Includes 'dataset' rows (the FDA drug labels)
-    // alongside 'zim' so an installed dataset is filtered out here — without it,
-    // a re-select of an installed Medicine tier would re-dispatch the ~1.7 GB drug
-    // download every time (the dataset branch's own getIngestStatus guard is a
-    // second line of defence, but this keeps the filter symmetric with the row-
-    // driven tier-status math).
     const installed = await InstalledResource.query().whereIn('resource_type', ['zim', 'dataset'])
     const installedIds = new Set(installed.map((r) => r.resource_id))
     const toDownload = allResources.filter((r) => !installedIds.has(r.id))
 
     if (toDownload.length === 0) return null
 
-    const latestByResource = await new KiwixCatalogService().getLatestForResources(
-      toDownload.map((resource) => ({ resource_id: resource.id, resource_type: 'zim' }))
+    const totalRequiredBytes = toDownload.reduce(
+      (sum, r) => sum + Math.round((Number(r.size_mb) || 0) * 1024 * 1024),
+      0
     )
+    const { targetDir } = await this.resolveZimTargetDir(targetDisk, totalRequiredBytes)
+
+    // Guard against slow external Kiwix OPDS mirrors so category queueing stays snappy
+    const latestByResource = await Promise.race([
+      new KiwixCatalogService()
+        .getLatestForResources(
+          toDownload
+            .filter((resource) => resource.type !== 'dataset')
+            .map((resource) => ({ resource_id: resource.id, resource_type: 'zim' }))
+        )
+        .catch(() => new Map()),
+      new Promise<Map<string, any>>((resolveTimeout) =>
+        setTimeout(() => resolveTimeout(new Map()), 8000)
+      ),
+    ])
+
     const downloadFilenames: string[] = []
+    let dispatchedDataset = false
 
     for (const resource of toDownload) {
-      // A `dataset` resource (e.g. the FDA drug labels) is DB-ingested, not a
-      // ZIM file — route it to the drug download+ingest pipeline instead of
-      // RunDownloadJob. The install-state row written on ingest 'ready' (below,
-      // via resourceMeta) is what the installed-filter above and the tier-status
-      // math key off; until that row exists the getIngestStatus guard prevents
-      // re-dispatching the ~1.7 GB download on every tier select.
       if (resource.type === 'dataset') {
         const drugReferenceService = new DrugReferenceService()
         const status = await drugReferenceService.getIngestStatus()
         if (status.phase === 'ready' || status.rowCount > 0) {
           logger.info('[ZimService] Drug dataset already ingested, skipping dispatch.')
-          // Reaching here means no 'dataset' row exists (the installed filter
-          // above would have dropped the resource). A finished ingest that lost
-          // its row write (1.34.0's narrow enum, or a manual ingest) gets one now,
-          // so re-selecting the tier resolves it without waiting for a reboot.
           if (status.phase === 'ready' && status.lastUpdated) {
             try {
               await drugReferenceService.recordInstalledRow({
@@ -373,27 +623,22 @@ export class ZimService {
                 collectionRef: categorySlug,
                 fileSizeBytes: null,
               })
-              logger.info('[ZimService] Backfilled installed_resources row for the drug dataset.')
-            } catch (err) {
-              logger.error(
-                `[ZimService] Failed to backfill drug dataset row: ${
-                  err instanceof Error ? err.message : String(err)
-                }`
-              )
-            }
+            } catch {}
           }
           continue
         }
-        // DownloadDrugDataJob.dispatch() is idempotent on its deterministic
-        // jobId — a concurrent in-flight download returns "already running"
-        // without re-adding, so this is safe to call repeatedly. The resourceMeta
-        // is threaded through download → ingest so the final ingest pass writes
-        // the `installed_resources` 'dataset' row, making the tier read installed.
+        if (targetDisk?.trim()) {
+          try {
+            const { StorageManagerService } = await import('#services/storage_manager_service')
+            await new StorageManagerService().prepareDownloadTargetDir('drug-data', targetDisk)
+          } catch {}
+        }
         await DownloadDrugDataJob.dispatch(true, {
           resourceId: resource.id,
           version: resource.version,
           collectionRef: categorySlug,
         })
+        dispatchedDataset = true
         logger.info('[ZimService] Dispatched drug data download for dataset resource.')
         continue
       }
@@ -405,6 +650,7 @@ export class ZimService {
       const existingJob = await RunDownloadJob.getActiveByUrl(resolved.url)
       if (existingJob) {
         logger.warn(`[ZimService] Download already in progress for ${resolved.url}, skipping.`)
+        downloadFilenames.push(resolved.url.split('/').pop() || resource.id)
         continue
       }
 
@@ -412,7 +658,7 @@ export class ZimService {
       if (!filename) continue
 
       downloadFilenames.push(filename)
-      const filepath = join(process.cwd(), ZIM_STORAGE_PATH, filename)
+      const filepath = join(targetDir, filename)
 
       await RunDownloadJob.dispatch({
         url: resolved.url,
@@ -422,7 +668,6 @@ export class ZimService {
         filetype: 'zim',
         title: (resource as any).title || undefined,
         totalBytes: resolved.sizeBytes,
-        // Undefined for every ungated resource, so the existing flow is untouched.
         requestHeaders: getHostedContentHeaders(resource),
         resourceMetadata: {
           resource_id: resource.id,
@@ -432,7 +677,11 @@ export class ZimService {
       })
     }
 
-    return downloadFilenames.length > 0 ? downloadFilenames : null
+    if (downloadFilenames.length === 0 && !dispatchedDataset) {
+      return null
+    }
+
+    return downloadFilenames.length > 0 ? downloadFilenames : ['openfda-drug-labels']
   }
 
   async downloadRemoteSuccessCallback(urls: string[], restart = true) {
@@ -746,7 +995,22 @@ export class ZimService {
       throw new Error('not_found')
     }
 
+    const lst = await lstat(fullPath).catch(() => null)
+    const linkedRealTarget = lst?.isSymbolicLink()
+      ? await realpath(fullPath).catch(() => null)
+      : null
+
     await deleteFileIfExists(fullPath)
+    if (
+      linkedRealTarget &&
+      linkedRealTarget !== fullPath &&
+      (linkedRealTarget.startsWith('/mnt/') ||
+        linkedRealTarget.startsWith('/media/') ||
+        linkedRealTarget.startsWith('/run/media/') ||
+        linkedRealTarget.startsWith('/storage/'))
+    ) {
+      await deleteFileIfExists(linkedRealTarget).catch(() => {})
+    }
 
     // Purge this file's Qdrant points and KbIngestState row directly so a
     // deleted ZIM stops surfacing as a stale search citation immediately,

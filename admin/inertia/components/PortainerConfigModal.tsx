@@ -272,7 +272,7 @@ export default function PortainerConfigModal({ isOpen, onClose }: PortainerConfi
           </button>
           <Link
             href="/settings/servers"
-            className="ml-auto flex items-center gap-1 text-[11px] text-desert-green hover:underline px-2 py-1"
+            className="ml-auto flex items-center gap-1 text-[0.6875rem] text-desert-green hover:underline px-2 py-1"
           >
             <IconSettings size={14} />
             Página Completa
@@ -290,7 +290,7 @@ export default function PortainerConfigModal({ isOpen, onClose }: PortainerConfi
                     Servidor Docker Remoto (Portainer)
                   </p>
                   <span
-                    className={`text-[10px] uppercase tracking-wide font-bold px-1.5 py-0.5 rounded ${
+                    className={`text-[0.625rem] uppercase tracking-wide font-bold px-1.5 py-0.5 rounded ${
                       portainerStatus?.enabled
                         ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
                         : 'bg-surface-primary text-text-muted border border-border-subtle'
@@ -395,7 +395,7 @@ export default function PortainerConfigModal({ isOpen, onClose }: PortainerConfi
                     Servidor de Armazenamento TrueNAS
                   </p>
                   <span
-                    className={`text-[10px] uppercase tracking-wide font-bold px-1.5 py-0.5 rounded ${
+                    className={`text-[0.625rem] uppercase tracking-wide font-bold px-1.5 py-0.5 rounded ${
                       truenasStatus?.enabled
                         ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
                         : 'bg-surface-primary text-text-muted border border-border-subtle'

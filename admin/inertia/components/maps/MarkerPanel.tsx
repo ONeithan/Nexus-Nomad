@@ -221,7 +221,7 @@ export default function MarkerPanel({
                 onDelete(marker.id)
                 setPendingDeleteId(null)
               }}
-              className="rounded bg-desert-red px-1.5 py-0.5 text-[11px] font-medium text-white transition-colors hover:brightness-110"
+              className="rounded bg-desert-red px-1.5 py-0.5 text-[0.6875rem] font-medium text-white transition-colors hover:brightness-110"
             >
               Delete
             </button>
@@ -229,7 +229,7 @@ export default function MarkerPanel({
             <button
               type="button"
               onClick={() => setPendingDeleteId(null)}
-              className="rounded border border-border-default px-1.5 py-0.5 text-[11px] text-text-secondary transition-colors hover:bg-surface-secondary"
+              className="rounded border border-border-default px-1.5 py-0.5 text-[0.6875rem] text-text-secondary transition-colors hover:bg-surface-secondary"
             >
               Cancel
             </button>
@@ -267,7 +267,7 @@ export default function MarkerPanel({
         <span className="text-sm font-medium text-text-primary">Pins</span>
 
         {markers.length > 0 && (
-          <span className="ml-0.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-desert-orange px-1 text-[11px] font-bold text-white">
+          <span className="ml-0.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-desert-orange px-1 text-[0.6875rem] font-bold text-white">
             {markers.length}
           </span>
         )}
@@ -300,7 +300,7 @@ export default function MarkerPanel({
           <span className="text-sm font-semibold text-text-primary">Saved Locations</span>
 
           {markers.length > 0 && (
-            <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-desert-orange px-1 text-[11px] font-bold text-white">
+            <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-desert-orange px-1 text-[0.6875rem] font-bold text-white">
               {markers.length}
             </span>
           )}

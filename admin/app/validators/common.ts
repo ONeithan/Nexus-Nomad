@@ -116,6 +116,7 @@ export const remoteDownloadValidator = vine.compile(
       .string()
       .url({ require_tld: false }) // Allow LAN URLs (e.g. http://my-nas:8080/file.zim)
       .trim(),
+    targetDisk: vine.string().trim().optional(),
   })
 )
 
@@ -125,14 +126,37 @@ export const remoteDownloadWithMetadataValidator = vine.compile(
       .string()
       .url({ require_tld: false }) // Allow LAN URLs
       .trim(),
+    targetDisk: vine.string().trim().optional(),
     metadata: vine
       .object({
         title: vine.string().trim().minLength(1),
-        summary: vine.string().trim().optional(),
-        author: vine.string().trim().optional(),
-        size_bytes: vine.number().optional(),
+        summary: vine.string().trim().nullable().optional(),
+        author: vine.string().trim().nullable().optional(),
+        size_bytes: vine.number().nullable().optional(),
       })
       .optional(),
+  })
+)
+
+export const downloadBatchZimValidator = vine.compile(
+  vine.object({
+    items: vine
+      .array(
+        vine.object({
+          url: vine.string().url({ require_tld: false }).trim(),
+          metadata: vine
+            .object({
+              title: vine.string().trim().minLength(1),
+              summary: vine.string().trim().nullable().optional(),
+              author: vine.string().trim().nullable().optional(),
+              size_bytes: vine.number().nullable().optional(),
+            })
+            .optional(),
+        })
+      )
+      .minLength(1)
+      .maxLength(500),
+    targetDisk: vine.string().trim().optional(),
   })
 )
 
@@ -143,6 +167,7 @@ export const remoteDownloadValidatorOptional = vine.compile(
       .url({ require_tld: false }) // Allow LAN URLs
       .trim()
       .optional(),
+    targetDisk: vine.string().trim().optional(),
   })
 )
 
@@ -157,6 +182,13 @@ export const filenameParamValidator = vine.compile(
 export const downloadCollectionValidator = vine.compile(
   vine.object({
     slug: vine.string(),
+    targetDisk: vine.string().trim().optional(),
+  })
+)
+
+export const optionalTargetDiskValidator = vine.compile(
+  vine.object({
+    targetDisk: vine.string().trim().optional(),
   })
 )
 
@@ -164,6 +196,7 @@ export const downloadCategoryTierValidator = vine.compile(
   vine.object({
     categorySlug: vine.string().trim().minLength(1),
     tierSlug: vine.string().trim().minLength(1),
+    targetDisk: vine.string().trim().optional(),
   })
 )
 
@@ -217,5 +250,6 @@ export const mapExtractValidator = vine.compile(
     maxzoom: vine.number().min(0).max(15).optional(),
     label: vine.string().trim().minLength(1).maxLength(64).optional(),
     estimatedBytes: vine.number().min(0).optional(),
+    targetDisk: vine.string().trim().optional(),
   })
 )

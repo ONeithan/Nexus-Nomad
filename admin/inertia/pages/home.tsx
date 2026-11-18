@@ -58,6 +58,8 @@ import { APP_CATALOG } from '../../constants/app_catalog_data'
 import { linkTileColor } from '../../constants/link_tile_colors'
 import { useThemeContext } from '~/providers/ThemeProvider'
 import { getActiveOperator } from '~/components/TacticalBootGate'
+import { useAiStatus } from '~/hooks/useAiStatus'
+import AiChooserModal from '~/components/chat/AiChooserModal'
 
 export interface DashboardConfig {
   pools: boolean
@@ -132,8 +134,11 @@ function CircularGauge({
   const offset = circumference - (validPercent / 100) * circumference
 
   return (
-    <div className="relative inline-flex items-center justify-center shrink-0" style={{ width: size, height: size }}>
-      <svg width={size} height={size} className="transform -rotate-90">
+    <div
+      className="relative inline-flex items-center justify-center shrink-0"
+      style={{ width: `${size / 16}rem`, height: `${size / 16}rem` }}
+    >
+      <svg viewBox={`0 0 ${size} ${size}`} className="w-full h-full transform -rotate-90">
         <circle
           cx={size / 2}
           cy={size / 2}
@@ -160,7 +165,7 @@ function CircularGauge({
           {label ?? `${Math.round(validPercent)}%`}
         </span>
         {sublabel && (
-          <span className="text-[10px] font-semibold text-text-muted uppercase leading-tight mt-0.5">
+          <span className="text-[0.625rem] font-semibold text-text-muted uppercase leading-tight mt-0.5">
             {sublabel}
           </span>
         )}
@@ -299,12 +304,17 @@ export default function Home(props: {
   }
   drugReferenceInstalled: boolean
 }) {
-  const systemServices = props.system?.services || []
+  const aiStatus = useAiStatus(props.system?.services || [])
+  const systemServices = aiStatus.liveServices
   const items: DashboardItem[] = []
+  const [aiChooserOpen, setAiChooserOpen] = useState(false)
   const updateInfo = useUpdateAvailable()
   const rerunBanner = useBenchmarkRerunBanner()
   const queryClient = useQueryClient()
-  const { aiAssistantName } = usePage<{ aiAssistantName: string }>().props
+  const { aiAssistantName, tacticalAuth } = usePage<{
+    aiAssistantName: string
+    tacticalAuth?: string | null
+  }>().props
   const { effectiveTacticalHome, currentThemeDef } = useThemeContext()
 
   const [pinnedServices, setPinnedServices] = useState<string[]>(() => {
@@ -356,10 +366,9 @@ export default function Home(props: {
     }
     return { order: [], hidden: [] }
   })
-  const [activeOperator, setActiveOperator] = useState<{ username: string; level: string }>({
-    username: 'ADMINISTRADOR',
-    level: 'NÍVEL 05 // COMANDO-GERAL',
-  })
+  const [activeOperator, setActiveOperator] = useState<{ username: string; level: string }>(() =>
+    getActiveOperator(tacticalAuth)
+  )
 
   // TrueNAS Dashboard Customization state
   const [dashboardConfig, setDashboardConfig] = useState<DashboardConfig>(() => {
@@ -539,29 +548,36 @@ export default function Home(props: {
         : currentActiveJob.url) || 'Pacote de Dados'
   : null
   const activeDownloadPercent = currentActiveJob ? Math.round(currentActiveJob.progress || 0) : 0
-  const { data: remoteAiSetting } = useSystemSetting({ key: 'ai.remoteOllamaUrl' })
-  const ollamaInstalled = systemServices.some(
-    (s) => s.service_name === SERVICE_NAMES.OLLAMA && s.installed
-  )
-  const aiConfigured = ollamaInstalled || Boolean(remoteAiSetting?.value)
+
+  const handleOpenAiHub = () => {
+    if (!aiStatus.hasAnyAi) {
+      router.visit('/settings/models')
+      return
+    }
+    if (aiStatus.hasMultiple) {
+      setAiChooserOpen(true)
+      return
+    }
+    const targetEngine = aiStatus.primaryEngine
+    if (targetEngine?.isInternal) {
+      router.visit(targetEngine.href)
+    } else if (targetEngine?.href) {
+      window.open(targetEngine.href, '_blank', 'noopener,noreferrer')
+    }
+  }
 
   useEffect(() => {
     const syncOp = () => {
-      const op = getActiveOperator()
-      const rawUser = op?.username || ''
-      const cleanUsername =
-        rawUser && !rawUser.toLowerCase().includes('nathan') && !rawUser.toLowerCase().includes('oneithan')
-          ? rawUser
-          : 'ADMINISTRADOR'
+      const op = getActiveOperator(tacticalAuth)
       setActiveOperator({
-        username: cleanUsername,
+        username: op?.username?.trim() || 'OPERADOR',
         level: op?.level || 'NÍVEL 05 // COMANDO-GERAL',
       })
     }
     syncOp()
     window.addEventListener('nomad:operator-updated', syncOp)
     return () => window.removeEventListener('nomad:operator-updated', syncOp)
-  }, [])
+  }, [tacticalAuth])
 
   const refreshServices = () => router.reload({ only: ['system'] })
 
@@ -679,7 +695,7 @@ export default function Home(props: {
     <AppLayout>
       <Head title="Centro de Comando" />
       {updateInfo?.updateAvailable && (
-        <div className="flex justify-center items-center px-4 sm:px-6 pt-4 w-full max-w-[1360px] mx-auto">
+        <div className="flex justify-center items-center px-4 sm:px-6 pt-4 w-full max-w-[85rem] mx-auto">
           <Alert
             title="Uma nova atualização está disponível!"
             type="info-inverted"
@@ -696,7 +712,7 @@ export default function Home(props: {
       )}
       <WhatsNewBanner />
       {rerunBanner?.show && (
-        <div className="flex justify-center items-center px-4 sm:px-6 pt-4 w-full max-w-[1360px] mx-auto">
+        <div className="flex justify-center items-center px-4 sm:px-6 pt-4 w-full max-w-[85rem] mx-auto">
           <Alert
             title="Seu benchmark pode ser recalculado com o Score v2"
             message="O sistema de pontuação de hardware foi atualizado. Execute novamente quando desejar."
@@ -719,7 +735,7 @@ export default function Home(props: {
         /* ====================================================================
            PAINEL DE CONTROLE N.O.M.A.D. (PROPORÇÃO EQUILIBRADA & TEMPO REAL)
            ==================================================================== */
-        <div className="max-w-[1360px] w-full mx-auto px-4 sm:px-6 py-5 space-y-5">
+        <div className="max-w-[85rem] w-full mx-auto px-4 sm:px-6 py-5 space-y-5">
           {/* 1. BARRA OPERACIONAL COMPACTA */}
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 px-4 py-2.5 rounded-xl border border-border-default bg-surface-primary shadow-sm">
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-text-secondary">
@@ -1091,7 +1107,7 @@ export default function Home(props: {
                           <span className="text-xs font-bold uppercase tracking-wider text-text-primary">
                             Processador (CPU)
                           </span>
-                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-400 text-[11px] font-mono font-semibold">
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-400 text-[0.6875rem] font-mono font-semibold">
                             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
                             AO VIVO
                           </span>
@@ -1350,9 +1366,35 @@ export default function Home(props: {
                       <div className="rounded-lg border border-border-subtle bg-surface-secondary/70 p-3 text-xs space-y-2 text-text-secondary flex-1 flex flex-col justify-center">
                         <div className="flex items-center justify-between gap-2">
                           <span>Serviços Ativos:</span>
-                          <strong className="font-mono text-text-primary">
-                            {installedAppCount} ativos • {aiConfigured ? 'IA Online' : 'IA Pendente'}
+                          <strong className="font-mono text-text-primary flex items-center gap-1.5">
+                            <span>{installedAppCount} ativos •</span>
+                            <span
+                              className={
+                                aiStatus.isLiveOnline
+                                  ? 'text-emerald-400'
+                                  : aiStatus.hasAnyAi
+                                    ? 'text-amber-400'
+                                    : 'text-desert-orange'
+                              }
+                            >
+                              {aiStatus.logStatusShort}
+                            </span>
                           </strong>
+                        </div>
+
+                        <div className="flex items-center gap-2 pt-1 border-t border-border-subtle text-[0.6875rem]">
+                          <span
+                            className={`w-2 h-2 rounded-full shrink-0 ${
+                              aiStatus.isLiveOnline
+                                ? 'bg-emerald-400 animate-pulse'
+                                : aiStatus.hasAnyAi
+                                  ? 'bg-amber-400'
+                                  : 'bg-text-muted'
+                            }`}
+                          />
+                          <span className="truncate font-mono text-text-secondary" title={aiStatus.logConnectionDetail}>
+                            {aiStatus.logConnectionDetail}
+                          </span>
                         </div>
 
                         {runningDownloads.length > 0 && currentActiveJob ? (
@@ -1562,20 +1604,23 @@ export default function Home(props: {
                 </Link>
 
                 {/* 6. Assistente de IA Local */}
-                <Link
-                  href={aiConfigured ? '/chat' : '/settings/models'}
-                  className="rounded-xl border border-border-default bg-surface-primary p-4 flex flex-col justify-between hover:border-desert-olive transition-all group shadow-sm"
+                <button
+                  type="button"
+                  onClick={handleOpenAiHub}
+                  className="text-left rounded-xl border border-border-default bg-surface-primary p-4 flex flex-col justify-between hover:border-desert-olive transition-all group shadow-sm cursor-pointer"
                 >
                   <div>
                     <div className="flex items-center justify-between mb-2.5">
                       <span
                         className={`text-xs px-2 py-0.5 rounded font-semibold border ${
-                          aiConfigured
+                          aiStatus.isLiveOnline
                             ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
-                            : 'bg-desert-orange/15 text-desert-orange border-desert-orange/30'
+                            : aiStatus.hasAnyAi
+                              ? 'bg-amber-500/15 text-amber-400 border-amber-500/30'
+                              : 'bg-desert-orange/15 text-desert-orange border-desert-orange/30'
                         }`}
                       >
-                        {aiConfigured ? 'Ollama & RAG Online' : 'Configuração Pendente'}
+                        {aiStatus.cardBadgeText}
                       </span>
                       <IconBrain size={20} className="text-desert-olive group-hover:scale-110 transition-transform" />
                     </div>
@@ -1583,14 +1628,14 @@ export default function Home(props: {
                       Assistente de IA Local
                     </h3>
                     <p className="text-xs text-text-secondary mt-1 leading-relaxed">
-                      Modelos locais e consulta em documentos indexados totalmente off-grid.
+                      {aiStatus.cardDescription}
                     </p>
                   </div>
                   <div className="mt-3 pt-2.5 border-t border-border-subtle flex items-center justify-between text-xs font-semibold text-desert-olive">
-                    <span>{aiConfigured ? 'Abrir Chat IA' : 'Configurar IA'}</span>
+                    <span>{aiStatus.cardActionLabel}</span>
                     <IconArrowRight size={15} />
                   </div>
-                </Link>
+                </button>
 
                 {/* 7. Gerenciador de Downloads */}
                 <Link
@@ -2036,7 +2081,7 @@ export default function Home(props: {
       )}
 
       {linkError && (
-        <div className="px-4 sm:px-6 pb-4 max-w-[1360px] w-full mx-auto">
+        <div className="px-4 sm:px-6 pb-4 max-w-[85rem] w-full mx-auto">
           <Alert title={linkError} type="error" variant="solid" className="w-full" />
         </div>
       )}
@@ -2267,7 +2312,7 @@ export default function Home(props: {
                   >
                     <div className="min-w-0">
                       <div className="text-xs font-bold text-text-primary">{item.label}</div>
-                      <div className="text-[11px] text-text-muted mt-0.5">{item.desc}</div>
+                      <div className="text-[0.6875rem] text-text-muted mt-0.5">{item.desc}</div>
                     </div>
                     <button
                       type="button"
@@ -2315,6 +2360,12 @@ export default function Home(props: {
         onClose={() => setCatalogModalOpen(false)}
         initialAppId={catalogAppId}
         installedServiceNames={new Set(systemServices.filter((s) => s.installed).map((s) => s.service_name))}
+      />
+
+      <AiChooserModal
+        open={aiChooserOpen}
+        onClose={() => setAiChooserOpen(false)}
+        engines={aiStatus.engines}
       />
     </AppLayout>
   )

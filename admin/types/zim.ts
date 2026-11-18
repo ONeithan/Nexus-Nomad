@@ -5,10 +5,36 @@ export type ZimFileWithMetadata = FileEntry & {
   summary: string | null
   author: string | null
   size_bytes: number | null
+  diskLabel?: string
+  diskPath?: string
+  diskType?: string
+  isPrimaryDisk?: boolean
+  realPath?: string
+  realHostPath?: string
+  isSymlink?: boolean
+  inActiveLibrary?: boolean
+}
+
+export type ZimLibraryStorageSummary = {
+  currentDiskLabel: string
+  currentDiskPath: string
+  isPrimaryDisk: boolean
+  diskType?: string
+  realPath: string
+  realHostPath: string
+  isSymlink: boolean
+  disksSummary: Array<{
+    diskLabel: string
+    diskPath: string
+    isPrimaryDisk: boolean
+    count: number
+    totalBytes: number
+  }>
 }
 
 export type ListZimFilesResponse = {
   files: ZimFileWithMetadata[]
+  storage?: ZimLibraryStorageSummary
   next?: string
 }
 

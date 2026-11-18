@@ -1,6 +1,7 @@
 import { ZimService } from '#services/zim_service'
 import {
   assertNotPrivateUrl,
+  downloadBatchZimValidator,
   downloadCategoryTierValidator,
   filenameParamValidator,
   remoteDownloadWithMetadataValidator,
@@ -33,16 +34,44 @@ export default class ZimController {
     return { languages: await this.zimService.listCatalogLanguages() }
   }
 
-  async downloadRemote({ request }: HttpContext) {
+  async downloadRemote({ request, response }: HttpContext) {
     const payload = await request.validateUsing(remoteDownloadWithMetadataValidator)
     assertNotPrivateUrl(payload.url)
-    const { filename, jobId } = await this.zimService.downloadRemote(payload.url, payload.metadata)
+    try {
+      const { filename, jobId } = await this.zimService.downloadRemote(
+        payload.url,
+        payload.metadata,
+        payload.targetDisk
+      )
 
-    return {
-      message: 'Download started successfully',
-      filename,
-      jobId,
-      url: payload.url,
+      return {
+        message: 'Download started successfully',
+        filename,
+        jobId,
+        url: payload.url,
+      }
+    } catch (error: any) {
+      return response.badRequest({
+        message: error?.message || 'Falha ao iniciar o download do arquivo ZIM.',
+      })
+    }
+  }
+
+  async downloadBatch({ request, response }: HttpContext) {
+    const payload = await request.validateUsing(downloadBatchZimValidator)
+    for (const item of payload.items) {
+      assertNotPrivateUrl(item.url)
+    }
+    try {
+      const result = await this.zimService.downloadBatch(payload.items, payload.targetDisk)
+      return {
+        message: 'Batch download queued',
+        ...result,
+      }
+    } catch (error: any) {
+      return response.badRequest({
+        message: error?.message || 'Falha ao iniciar o download em lote.',
+      })
     }
   }
 
@@ -50,18 +79,25 @@ export default class ZimController {
     return await this.zimService.listCuratedCategories()
   }
 
-  async downloadCategoryTier({ request }: HttpContext) {
+  async downloadCategoryTier({ request, response }: HttpContext) {
     const payload = await request.validateUsing(downloadCategoryTierValidator)
-    const resources = await this.zimService.downloadCategoryTier(
-      payload.categorySlug,
-      payload.tierSlug
-    )
+    try {
+      const resources = await this.zimService.downloadCategoryTier(
+        payload.categorySlug,
+        payload.tierSlug,
+        payload.targetDisk
+      )
 
-    return {
-      message: 'Download started successfully',
-      categorySlug: payload.categorySlug,
-      tierSlug: payload.tierSlug,
-      resources,
+      return {
+        message: 'Download started successfully',
+        categorySlug: payload.categorySlug,
+        tierSlug: payload.tierSlug,
+        resources,
+      }
+    } catch (error: any) {
+      return response.badRequest({
+        message: error?.message || 'Falha ao iniciar download da categoria.',
+      })
     }
   }
 

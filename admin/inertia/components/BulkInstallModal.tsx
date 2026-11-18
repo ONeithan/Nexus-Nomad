@@ -47,6 +47,12 @@ export default function BulkInstallModal({
   const [currentIndex, setCurrentIndex] = useState<number>(-1)
   const [statuses, setStatuses] = useState<Record<string, ItemStatus>>({})
 
+  useEffect(() => {
+    if (isOpen && !isRunning) {
+      setTarget(isPortainerConfigured ? defaultTarget : 'local')
+    }
+  }, [isOpen, isRunning, defaultTarget, isPortainerConfigured])
+
   const cancelRequestedRef = useRef(false)
   const installActivityRef = useRef(installActivity)
 
@@ -320,7 +326,7 @@ export default function BulkInstallModal({
                   <div className="font-semibold text-xs text-text-primary">
                     Local (NOMAD)
                   </div>
-                  <div className="text-[10px] text-text-muted">
+                  <div className="text-[0.625rem] text-text-muted">
                     Executar no contêiner local deste dispositivo
                   </div>
                 </div>
@@ -340,7 +346,7 @@ export default function BulkInstallModal({
                   <div className="font-semibold text-xs text-text-primary">
                     Servidor Remoto (Portainer)
                   </div>
-                  <div className="text-[10px] text-text-muted">
+                  <div className="text-[0.625rem] text-text-muted">
                     Implantar como Stacks no servidor dedicado
                   </div>
                 </div>
@@ -404,7 +410,7 @@ export default function BulkInstallModal({
                     <div className="font-semibold text-xs text-text-primary truncate">
                       {svc.friendly_name || svc.service_name}
                     </div>
-                    <div className="text-[11px] text-text-muted truncate mt-0.5">
+                    <div className="text-[0.6875rem] text-text-muted truncate mt-0.5">
                       {st.message}
                     </div>
                   </div>
@@ -430,7 +436,7 @@ export default function BulkInstallModal({
                     </span>
                   )}
                   {st.state === 'pending' && (
-                    <span className="text-[11px] font-mono text-text-muted px-2 py-0.5 rounded bg-surface-secondary">
+                    <span className="text-[0.6875rem] font-mono text-text-muted px-2 py-0.5 rounded bg-surface-secondary">
                       Na fila
                     </span>
                   )}

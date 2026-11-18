@@ -6,6 +6,7 @@ import {
   filenameParamValidator,
   mapExtractPreflightValidator,
   mapExtractValidator,
+  optionalTargetDiskValidator,
   remoteDownloadValidator,
   remoteDownloadValidatorOptional,
 } from '#validators/common'
@@ -28,20 +29,26 @@ export default class MapsController {
         baseAssetsExist: baseAssetsCheck,
         worldBasemapExists,
         regionFiles: regionFiles.files,
+        storage: regionFiles.storage,
       },
     })
   }
 
-  async downloadBaseAssets({ request }: HttpContext) {
+  async downloadBaseAssets({ request, response }: HttpContext) {
     const payload = await request.validateUsing(remoteDownloadValidatorOptional)
     if (payload.url) assertNotPrivateUrl(payload.url)
-    await this.mapService.downloadBaseAssets(payload.url)
-    return { success: true }
+    try {
+      await this.mapService.downloadBaseAssets(payload.url, payload.targetDisk)
+      return { success: true }
+    } catch (error: any) {
+      return response.badRequest({ message: error?.message || 'Erro ao baixar recursos básicos do mapa.' })
+    }
   }
 
-  async setupWorldBasemap({ response }: HttpContext) {
+  async setupWorldBasemap({ request, response }: HttpContext) {
     try {
-      const ready = await this.mapService.provisionWorldBasemap()
+      const { targetDisk } = await request.validateUsing(optionalTargetDiskValidator)
+      const ready = await this.mapService.provisionWorldBasemap(targetDisk)
       if (!ready) {
         return response.status(500).send({
           message:
@@ -49,7 +56,11 @@ export default class MapsController {
         })
       }
       return { success: true }
-    } catch {
+    } catch (error: any) {
+      const msg = error?.message || ''
+      if (msg.includes('Limite de espaço') || msg.includes('Espaço livre insuficiente')) {
+        return response.badRequest({ message: msg })
+      }
       return response.status(500).send({
         message:
           'Could not download the base map. Please connect this NOMAD to the internet and try again.',
@@ -57,24 +68,32 @@ export default class MapsController {
     }
   }
 
-  async downloadRemote({ request }: HttpContext) {
+  async downloadRemote({ request, response }: HttpContext) {
     const payload = await request.validateUsing(remoteDownloadValidator)
     assertNotPrivateUrl(payload.url)
-    const filename = await this.mapService.downloadRemote(payload.url)
-    return {
-      message: 'Download started successfully',
-      filename,
-      url: payload.url,
+    try {
+      const filename = await this.mapService.downloadRemote(payload.url, payload.targetDisk)
+      return {
+        message: 'Download started successfully',
+        filename,
+        url: payload.url,
+      }
+    } catch (error: any) {
+      return response.badRequest({ message: error?.message || 'Erro ao iniciar download do mapa.' })
     }
   }
 
-  async downloadCollection({ request }: HttpContext) {
+  async downloadCollection({ request, response }: HttpContext) {
     const payload = await request.validateUsing(downloadCollectionValidator)
-    const resources = await this.mapService.downloadCollection(payload.slug)
-    return {
-      message: 'Collection download started successfully',
-      slug: payload.slug,
-      resources,
+    try {
+      const resources = await this.mapService.downloadCollection(payload.slug, payload.targetDisk)
+      return {
+        message: 'Collection download started successfully',
+        slug: payload.slug,
+        resources,
+      }
+    } catch (error: any) {
+      return response.badRequest({ message: error?.message || 'Erro ao iniciar download da coleção.' })
     }
   }
 
@@ -103,11 +122,16 @@ export default class MapsController {
     return await this.mapService.getGlobalMapInfo()
   }
 
-  async downloadGlobalMap({}: HttpContext) {
-    const result = await this.mapService.downloadGlobalMap()
-    return {
-      message: 'Download started successfully',
-      ...result,
+  async downloadGlobalMap({ request, response }: HttpContext) {
+    try {
+      const { targetDisk } = await request.validateUsing(optionalTargetDiskValidator)
+      const result = await this.mapService.downloadGlobalMap(targetDisk)
+      return {
+        message: 'Download started successfully',
+        ...result,
+      }
+    } catch (error: any) {
+      return response.badRequest({ message: error?.message || 'Erro ao iniciar download do mapa global.' })
     }
   }
 
@@ -124,12 +148,16 @@ export default class MapsController {
     return await this.mapService.extractPreflight(payload)
   }
 
-  async extractRegion({ request }: HttpContext) {
+  async extractRegion({ request, response }: HttpContext) {
     const payload = await request.validateUsing(mapExtractValidator)
-    const result = await this.mapService.extractRegion(payload)
-    return {
-      message: 'Extract started successfully',
-      ...result,
+    try {
+      const result = await this.mapService.extractRegion(payload)
+      return {
+        message: 'Extract started successfully',
+        ...result,
+      }
+    } catch (error: any) {
+      return response.badRequest({ message: error?.message || 'Erro ao iniciar extração da região.' })
     }
   }
 

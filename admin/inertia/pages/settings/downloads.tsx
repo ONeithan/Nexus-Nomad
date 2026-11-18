@@ -310,7 +310,7 @@ export default function SettingsDownloads() {
                             <span className="text-sm font-semibold text-text-primary truncate">
                               {f.name}
                             </span>
-                            <span className="text-[10px] uppercase font-mono px-1.5 py-0.5 rounded bg-surface-secondary text-text-muted border border-border-default shrink-0">
+                            <span className="text-[0.625rem] uppercase font-mono px-1.5 py-0.5 rounded bg-surface-secondary text-text-muted border border-border-default shrink-0">
                               {f.category}
                             </span>
                           </div>
@@ -326,7 +326,7 @@ export default function SettingsDownloads() {
                           <div className="text-xs font-mono font-bold text-text-primary">
                             {formatBytes(f.sizeBytes, 1)}
                           </div>
-                          <div className="text-[10px] text-text-muted">no disco</div>
+                          <div className="text-[0.625rem] text-text-muted">no disco</div>
                         </div>
 
                         {/* Status */}
@@ -394,7 +394,7 @@ export default function SettingsDownloads() {
                 <p className="text-xs font-medium text-text-primary">
                   Nenhum arquivo temporário ou incompleto detectado no disco.
                 </p>
-                <p className="text-[11px] text-text-muted">
+                <p className="text-[0.6875rem] text-text-muted">
                   O armazenamento está limpo e sem sobras de downloads interrompidos.
                 </p>
               </div>

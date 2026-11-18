@@ -218,7 +218,7 @@ export default function CatalogPage({
                       <p className="text-xs text-text-muted line-clamp-1 mt-0.5">
                         {app.purpose}
                       </p>
-                      <div className="flex items-center gap-2 mt-1.5 text-[10px] text-text-muted">
+                      <div className="flex items-center gap-2 mt-1.5 text-[0.625rem] text-text-muted">
                         <span className="font-mono">Porta {app.port}</span>
                         <span>•</span>
                         <span className="uppercase">{app.category}</span>
@@ -257,16 +257,16 @@ export default function CatalogPage({
                           {activeApp.friendlyName}
                         </h2>
                         {activeApp.isNative ? (
-                          <span className="text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-600 border border-emerald-500/30">
+                          <span className="text-[0.6875rem] font-semibold px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-600 border border-emerald-500/30">
                             Nativo N.O.M.A.D.
                           </span>
                         ) : (
-                          <span className="text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-blue-500/15 text-blue-600 border border-blue-500/30">
+                          <span className="text-[0.6875rem] font-semibold px-2.5 py-0.5 rounded-full bg-blue-500/15 text-blue-600 border border-blue-500/30">
                             Arsenal Docker
                           </span>
                         )}
                         {installedSet.has(activeApp.id) && (
-                          <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-desert-green/15 text-desert-green border border-desert-green/30">
+                          <span className="inline-flex items-center gap-1 text-[0.6875rem] font-semibold px-2 py-0.5 rounded-full bg-desert-green/15 text-desert-green border border-desert-green/30">
                             <IconCheck size={12} /> Instalado
                           </span>
                         )}

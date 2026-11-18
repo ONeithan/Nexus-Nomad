@@ -27,7 +27,7 @@ const useDownloads = (props: useDownloadsProps) => {
   })
 
   const invalidate = () => {
-    queryClient.invalidateQueries({ queryKey: queryKey })
+    queryClient.invalidateQueries({ queryKey: ['download-jobs'] })
   }
 
   return { ...queryData, invalidate }

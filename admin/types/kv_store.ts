@@ -64,6 +64,7 @@ export const KV_STORE_SCHEMA = {
   'samba.password':             'string',
   'samba.hostPath':             'string',
   'storage.preferredDownloadDisk': 'string',
+  'storage.diskQuotas':         'string',
   // Learned per-model token-estimator corrections, as a JSON object keyed by
   // model name ({"llama3:8b":1.02,"qwen2.5:0.5b":1.26}). One row rather than a
   // key per model, since KVStoreKey is a closed union. Written by
@@ -116,6 +117,10 @@ export const KV_STORE_SCHEMA = {
   'portainer.endpointId': 'string',
   'portainer.deployTarget': 'string',
   'portainer.deployedServices': 'string',
+  'portainer.autoUseDefaultTarget': 'boolean',
+  'portainer.defaultUsername': 'string',
+  'portainer.defaultPassword': 'string',
+  'portainer.autoApplyCredentials': 'boolean',
   // TrueNAS integration settings
   'truenas.enabled': 'boolean',
   'truenas.url': 'string',

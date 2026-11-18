@@ -3,6 +3,7 @@ import {
   useTheme,
   Theme,
   HomeLayoutMode,
+  UiScaleMode,
   ThemeDefinition,
   THEME_DEFINITIONS,
 } from '~/hooks/useTheme'
@@ -13,6 +14,8 @@ interface ThemeContextType {
   toggleTheme: () => void
   homeLayout: HomeLayoutMode
   setHomeLayout: (mode: HomeLayoutMode) => void
+  uiScale: UiScaleMode
+  setUiScale: (scale: UiScaleMode) => void
   currentThemeDef: ThemeDefinition
   effectiveTacticalHome: boolean
 }
@@ -23,6 +26,8 @@ const ThemeContext = createContext<ThemeContextType>({
   toggleTheme: () => {},
   homeLayout: 'auto',
   setHomeLayout: () => {},
+  uiScale: '130',
+  setUiScale: () => {},
   currentThemeDef: THEME_DEFINITIONS[0],
   effectiveTacticalHome: true,
 })

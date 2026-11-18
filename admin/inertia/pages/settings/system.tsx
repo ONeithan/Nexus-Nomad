@@ -305,7 +305,7 @@ export default function SettingsPage(props: {
                                         <div className="font-mono font-semibold text-desert-green">
                                           {fs.mount === '/storage' ? '/mnt/nomad_storage (/storage)' : fs.mount}
                                         </div>
-                                        <div className="text-[11px] text-desert-stone-dark">
+                                        <div className="text-[0.6875rem] text-desert-stone-dark">
                                           {getMountRoleLabel(fs.mount)}
                                         </div>
                                       </td>
@@ -313,7 +313,7 @@ export default function SettingsPage(props: {
                                         <div className="font-semibold text-text-primary">
                                           {formatBytes(fs.used)} / {formatBytes(fs.size)}
                                         </div>
-                                        <div className="text-[11px] text-desert-stone-dark">
+                                        <div className="text-[0.6875rem] text-desert-stone-dark">
                                           {(fs.percentUsed || 0).toFixed(1)}%
                                         </div>
                                       </td>
