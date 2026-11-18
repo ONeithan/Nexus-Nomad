@@ -4,7 +4,6 @@
 # Nexus Project N.O.M.A.D.
 ### Sistema Operacional Tático de Campo, Sobrevivência & Arca do Conhecimento 100% Offline
 
-[![Versão](https://img.shields.io/badge/Versão-1.0.31--Nexus-olive)](https://github.com/ONeithan/Nexus-Nomad)
 [![Idioma](https://img.shields.io/badge/Idioma-Português%20(PT--BR)-green)](https://github.com/ONeithan/Nexus-Nomad)
 [![Doutrina](https://img.shields.io/badge/Doutrina-MIL--STD--810H%20(Off--Grid)-blue)](https://github.com/ONeithan/Nexus-Nomad)
 [![Docker](https://img.shields.io/badge/Docker-GHCR%20Oficial-2496ED)](https://github.com/ONeithan/Nexus-Nomad/pkgs/container/nexus-nomad)
@@ -73,29 +72,101 @@ Banco relacional com senhas protegidas por hash `scrypt`, separação entre **Bl
 
 ## 🚀 Instalação Rápida
 
-### Opção 1: Via Docker Compose (Recomendado)
+### Opção 1: Instalação Automática em 1 Comando (Debian 12/13 ou Ubuntu)
 
-Crie um arquivo `docker-compose.yml`:
+Em um servidor Linux limpo, execute:
+
+```bash
+sudo apt-get update && sudo apt-get install -y curl && \
+curl -fsSL https://raw.githubusercontent.com/ONeithan/Nexus-Nomad/main/install/install_nomad.sh -o install_nomad.sh && \
+sudo bash install_nomad.sh
+```
+
+---
+
+### Opção 2: Via Docker Compose
+
+Crie o arquivo `docker-compose.yml` em `/opt/project-nomad`:
 
 ```yaml
+version: '3.8'
+
 services:
   nomad_admin:
     image: ghcr.io/oneithan/nexus-nomad:latest
     container_name: nomad_admin
     restart: unless-stopped
     ports:
-      - "8080:80"
-      - "9999:9999"
+      - "8080:8080"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - /opt/project-nomad/storage:/app/storage
-      - /mnt/nomad_storage:/mnt/nomad_storage
+      - /mnt:/mnt
+      - /media:/media
+      - nomad-update-shared:/app/update-shared
     environment:
       - NODE_ENV=production
-      - PORT=80
+      - PORT=8080
+      - HOST=0.0.0.0
+      - APP_KEY=nomad_secret_military_key_security_32_chars
+      - DB_HOST=mysql
+      - DB_PORT=3306
+      - DB_USER=nomad_user
+      - DB_PASSWORD=nomad_secure_password
+      - DB_DATABASE=nomad
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - NOMAD_STORAGE_PATH=/opt/project-nomad/storage
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  mysql:
+    image: mysql:8.0
+    container_name: nomad_mysql
+    restart: unless-stopped
+    environment:
+      - MYSQL_ROOT_PASSWORD=nomad_root_secure
+      - MYSQL_DATABASE=nomad
+      - MYSQL_USER=nomad_user
+      - MYSQL_PASSWORD=nomad_secure_password
+    volumes:
+      - /opt/project-nomad/mysql:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: nomad_redis
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  dozzle:
+    image: amir20/dozzle:v10.0
+    container_name: nomad_dozzle
+    restart: unless-stopped
+    ports:
+      - "9999:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - DOZZLE_ENABLE_ACTIONS=false
+      - DOZZLE_ENABLE_SHELL=false
+
+volumes:
+  nomad-update-shared:
 ```
 
-Suba o contêiner:
+Suba o sistema:
 ```bash
 docker compose up -d
 ```
@@ -107,32 +178,21 @@ http://localhost:8080   (ou http://IP-DO-SERVIDOR:8080)
 
 ---
 
-### Opção 2: Instalação Automática em 1 Comando (Debian 12/13 ou Ubuntu)
-
-Em um servidor limpo:
-
-```bash
-sudo apt-get update && sudo apt-get install -y curl && \
-curl -fsSL https://raw.githubusercontent.com/ONeithan/Nexus-Nomad/main/install/install_nomad.sh -o install_nomad.sh && \
-sudo bash install_nomad.sh
-```
-
----
-
 ## 🔑 Portas Padrão & Credenciais de Fábrica
 
-| Aplicação | Porta TCP | Credenciais Padrão | Finalidade |
-| :--- | :--- | :--- | :--- |
-| **Centro de Comando NOMAD** | `:8080` | Cadastrado no 1º acesso | Painel principal e orquestrador do sistema |
-| **Monitor de Logs Docker (Dozzle)** | `:9999` | Integrado ao NOMAD | Monitoramento de logs de contêineres em tempo real |
-| **Open WebUI (Chat IA)** | `:8500` | Cadastro no 1º acesso | Interface avançada de inteligência artificial |
-| **Biblioteca Offline (Kiwix)** | `:8090` | Aberto / Sem senha | Consulta a arquivos ZIM e Wikipédia |
-| **Ferramentas de TI (IT-Tools)** | `:8430` | Aberto (100% PT-BR) | Utilitários de rede, conversão e criptografia |
-| **Ferramentas de Dados (CyberChef)**| `:8100` | Aberto (100% PT-BR) | Canivete suíço de análise e decodificação |
-| **Gerenciador de Arquivos (FileBrowser)** | `:8410` | `admin` / `nomad` | Gerenciador de arquivos web |
-| **Biblioteca de E-books (Calibre-Web)** | `:8083` | `admin` / `admin123` | Leitor e catálogo digital de livros (pasta `/books`) |
-| **Manipulação de PDFs (Stirling PDF)**| `:8087` | Aberto localmente | Divisão, mesclagem e OCR em PDFs |
-| **Rede Samba (Compartilhamento LAN)**| Porta SMB | Definido em Armazenamento | Acesso via rede local: `\\IP-DO-NOMAD\nomad` |
+| Aplicação | Porta TCP | Rota / Proxy Nativo | Credenciais Padrão | Finalidade |
+| :--- | :---: | :--- | :--- | :--- |
+| **Centro de Comando NOMAD** | `:8080` | `/home` | Cadastrado no 1º acesso | Painel principal e orquestrador do sistema |
+| **Monitor de Logs Docker (Dozzle)** | `:9999` | Integrado ao NOMAD | Sessão do NOMAD | Monitoramento de logs de contêineres em tempo real |
+| **Open WebUI (Chat IA)** | `:8500` | `/chat` (seletor) | Cadastro no 1º acesso | Interface avançada de inteligência artificial |
+| **Biblioteca Offline (Kiwix)** | `:8090` | `/` | Aberto / Sem senha | Consulta a arquivos ZIM e Wikipédia |
+| **Ferramentas de TI (IT-Tools)** | `:8430` | `/apps-pt/it-tools/` | Aberto (100% PT-BR) | Utilitários de rede, conversão e criptografia |
+| **Ferramentas de Dados (CyberChef)**| `:8100` | `/apps-pt/cyberchef/` | Aberto (100% PT-BR) | Canivete suíço de análise e decodificação |
+| **Gerenciador de Arquivos (FileBrowser)** | `:8410` | `/` | `admin` / `nomad` | Gerenciador de arquivos web |
+| **Biblioteca de E-books (Calibre-Web)** | `:8083` | `/` | `admin` / `admin123` | Leitor e catálogo digital de livros (pasta `/books`) |
+| **Manipulação de PDFs (Stirling PDF)**| `:8087` | `/` | Aberto localmente | Divisão, mesclagem e OCR em PDFs |
+| **Educação Offline (Kolibri)** | `:8085` | `/` | Cadastrado no 1º acesso | Cursos Khan Academy, Simulações PhET e livros |
+| **Rede Samba (Compartilhamento LAN)**| Porta SMB | `\\IP-DO-NOMAD\nomad` | Definido em Armazenamento | Acesso via rede local Windows Explorer e Mac Finder |
 
 ---
 
@@ -145,7 +205,7 @@ sudo bash install_nomad.sh
 | **Com IA Local (Ollama/WebUI)** | x86_64 Moderno | 16 GB+ | 1 TB+ NVMe (+ GPU NVIDIA/AMD opcional) |
 
 > [!TIP]
-> **Aceleração com GPU Externa:** Você pode rodar o N.O.M.A.D. em um notebook ou servidor modesto e conectar a IA diretamente à placa de vídeo do seu PC gamer (ex: RTX 5060) através da rede local. Veja o passo a passo completo no guia de [Inteligência Artificial na Wiki](https://github.com/ONeithan/Nexus-Nomad/wiki/Inteligencia-Artificial-e-Chat).
+> **Aceleração com GPU Externa na Rede Local:** Você pode rodar o N.O.M.A.D. em um notebook ou servidor modesto e conectar a IA diretamente à placa de vídeo do seu PC gamer (ex: RTX 5060) através da rede local. Veja o passo a passo completo no guia de [Inteligência Artificial na Wiki](https://github.com/ONeithan/Nexus-Nomad/wiki/Inteligencia-Artificial-e-Chat).
 
 ---
 
