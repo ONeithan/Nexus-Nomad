@@ -15,16 +15,22 @@
 ---
 
 > [!IMPORTANT]
-> ### 📖 Documentação Completa na Wiki Oficial
-> **Para guias passo a passo, manuais de 113 aplicações, tutoriais de mapeamento de HDs, configuração de GPU (RTX) para IA e controle de operadores, acesse a [Wiki Oficial do Nexus N.O.M.A.D.](https://github.com/ONeithan/Nexus-Nomad/wiki):**
-> * 🛰️ [Centro de Comando & Telemetria ao Vivo](https://github.com/ONeithan/Nexus-Nomad/wiki/Home)
-> * 🚀 [Instalação, Boot Militar & Primeiro Acesso](https://github.com/ONeithan/Nexus-Nomad/wiki/Instalacao-e-Primeiros-Passos)
-> * 🛡️ [Segurança, Perfis & Níveis de Operador (01 a 05)](https://github.com/ONeithan/Nexus-Nomad/wiki/Seguranca-e-Autenticacao)
-> * 📦 [Central de Aplicativos, Catálogo & Guias (113 Apps)](https://github.com/ONeithan/Nexus-Nomad/wiki/Central-de-Aplicativos)
-> * 📚 [Conteúdo Offline: ZIM, Wikipédia, Kolibri & Mapas](https://github.com/ONeithan/Nexus-Nomad/wiki/Conteudo-Offline-ZIM-Mapas-e-Educacao)
-> * 💾 [Discos, Armazenamento, Mapeamento em Lote & Downloads](https://github.com/ONeithan/Nexus-Nomad/wiki/Discos-Armazenamento-e-Samba)
-> * 🤖 [Inteligência Artificial, Open WebUI & Assistente Nativo](https://github.com/ONeithan/Nexus-Nomad/wiki/Inteligencia-Artificial-e-Chat)
-> * ⚙️ [Configurações do Sistema, Atualizações & Temas Táticos](https://github.com/ONeithan/Nexus-Nomad/wiki/Configuracoes-do-Sistema-e-Temas)
+> ### 📖 Galeria Visual Completa & Manuais na Wiki Oficial
+> **Todas as capturas de tela, tutoriais de campo passo a passo e documentações aprofundadas dos 113 aplicativos estão concentradas exclusivamente na nossa Wiki Oficial.**
+> 
+> 👉 **[Acesse a Wiki Oficial do Nexus N.O.M.A.D.](https://github.com/ONeithan/Nexus-Nomad/wiki)**
+> 
+> * 🛰️ [Centro de Comando Tático & Telemetria em Tempo Real](https://github.com/ONeithan/Nexus-Nomad/wiki/Home)
+> * 🚀 [Sequência de Boot Militar & Inicialização Tática](https://github.com/ONeithan/Nexus-Nomad/wiki/Boot-Militar-e-Inicializacao)
+> * 🛡️ [Segurança, Hashing de Senhas & Níveis de Operador 01 a 05](https://github.com/ONeithan/Nexus-Nomad/wiki/Seguranca-e-Autenticacao)
+> * 📦 [Central de Aplicativos & 113 Guias Operacionais](https://github.com/ONeithan/Nexus-Nomad/wiki/Central-de-Aplicativos)
+> * 🛠️ [Ferramentas Táticas Traduzidas (IT-Tools, CyberChef, Calibre, Dozzle)](https://github.com/ONeithan/Nexus-Nomad/wiki/Ferramentas-Traduzidas-PT-BR)
+> * 🌐 [Explorador ZIM & Wikipédia Completa Offline (45 GB / 14 GB / 850 MB)](https://github.com/ONeithan/Nexus-Nomad/wiki/Explorador-ZIM-e-Wikipedia)
+> * 🎓 [Central Educacional Kolibri (Khan Academy & Simulações PhET)](https://github.com/ONeithan/Nexus-Nomad/wiki/Central-Educacional-Kolibri)
+> * 🗺️ [Cartografia Offline Vetorial Protomaps PMTiles (Planeta 130 GB)](https://github.com/ONeithan/Nexus-Nomad/wiki/Cartografia-e-Mapas-Offline)
+> * 🩺 [Guia Médico Tático, Bulário e Protocolos Clínicos de Trauma](https://github.com/ONeithan/Nexus-Nomad/wiki/Guia-Medico-e-Farmacologico)
+> * 💾 [Armazenamento Raio-X, Compartilhamento Samba e Mapeamento em Lote](https://github.com/ONeithan/Nexus-Nomad/wiki/Discos-Armazenamento-e-Samba)
+> * 🧠 [Inteligência Artificial, RAG Vetorial e Aceleração por GPU Externa](https://github.com/ONeithan/Nexus-Nomad/wiki/Inteligencia-Artificial-e-Chat)
 
 ---
 
@@ -32,41 +38,15 @@
 
 O **Nexus Project N.O.M.A.D.** (*Network Operations, Mapping & Autonomous Defense*) é uma suíte operacional completa projetada para transformar qualquer computador portátil, servidor doméstico ou homelab em uma **Arca de Sobrevivência e Conhecimento Civilizatório**.
 
-Construído sob a doutrina **100% Off-Grid**, o sistema opera de forma autônoma sem requisições para a nuvem, mantendo todas as ferramentas de comunicação, saúde, educação, cartografia, engenharia, criptografia e inteligência artificial disponíveis mesmo em cenários de desastre natural, apagão cibernético ou colapso de infraestrutura.
+Construído sob a doutrina **100% Off-Grid**, o sistema opera de forma estritamente autônoma sem requisições para a nuvem ou telemetria invasiva, mantendo todas as ferramentas de comunicação, saúde, educação, cartografia, engenharia, criptografia e inteligência artificial disponíveis mesmo em cenários de desastre natural, apagão cibernético ou colapso de infraestrutura.
 
----
-
-## 📸 Conheça o Sistema por Dentro
-
-### 1. Centro de Comando Tático & Telemetria em Tempo Real
-Painel unificado com monitoramento de ciclos curtos de CPU (carga, frequência e temperatura), cálculo exato de memória RAM e consolidação de unidades de armazenamento em um **Pool Global**.
-
-![Centro de Comando Nexus NOMAD](docs/images/centro-de-comando.png)
-
-### 2. Central de Aplicativos com Mais de 100 Ferramentas Integradas
-Instalação e controle de contêineres Docker em apenas 1 clique, com suporte a seleção e instalação em massa, e detecção de destino (`Local` ou `Portainer`).
-
-![Central de Aplicativos](docs/images/central-de-aplicativos.png)
-
-### 3. Catálogo & Guia Operacional Completo (113 Aplicações em PT-BR)
-Cada um dos 113 módulos inclui uma ficha técnica com propósito operacional, arquitetura interna de funcionamento e exemplos práticos da vida real.
-
-![Catálogo e Guias Técnicos](docs/images/catalogo-guias.png)
-
-### 4. Acervo ZIM Civilizatório, Wikipédia e Educação Offline
-Pacotes completos da Wikipédia em português com ou sem imagens, manuais médicos de emergência, guias de sobrevivência e canais educacionais do **Kolibri** (Khan Academy, PhET e StoryWeaver).
-
-![Explorador de Conteúdo ZIM e Wikipédia](docs/images/explorador-zim-wikipedia.png)
-
-### 5. Central de Mapeamento de Discos de Download (Para TODOS os Módulos)
-Botão mestre **"⚡ Mapear TUDO para este HD"** que move automaticamente pastas de dados pesados para HDs secundários ou externos sem quebrar nenhuma aplicação.
-
-![Central de Mapeamento de Discos](docs/images/mapeamento-discos.png)
-
-### 6. Sistema Real de Autenticação em MySQL & 5 Níveis de Permissão
-Banco relacional com senhas protegidas por hash `scrypt`, separação entre **Bloquear Terminal** e **Deslogar**, e controle de permissões por nível militar (Nível 01 a 05).
-
-![Segurança e Perfis de Operador](docs/images/seguranca-operadores.png)
+### 🛡️ Os Pilares Fundamentais do Sistema:
+1. **Autonomia Radical (100% Offline):** Nenhuma biblioteca externa, fonte de texto, script ou contêiner depende de internet para inicializar ou operar.
+2. **Doutrina Tática Militar (MIL-STD-810H):** Interface rugerizada com paletas de camuflagem (Olive Drab, Desert Ops e Noturno), monitoramento em tempo real de hardware e scanlines CRT opcionais.
+3. **Preservação de Conhecimento:** Integração profunda com arquivos `.zim` (Wikipédia completa, manuais de sobrevivência, enciclopédias médicas) e plataforma educacional Kolibri.
+4. **Navegação Vetorial Sem Nuvem:** Mapas mundiais no formato Protomaps PMTiles para zoom fluído e rotas visuais sem conexões remotas.
+5. **Inteligência Artificial Desacoplada:** Assistente nativo com busca vetorial RAG no acervo local, além de integração com Open WebUI e suporte a aceleração em GPUs externas na rede local.
+6. **Mapeamento de Armazenamento Inteligente:** Botão mestre para consolidar todos os downloads e acervos pesados em discos externos com um único clique.
 
 ---
 
@@ -205,7 +185,7 @@ http://localhost:8080   (ou http://IP-DO-SERVIDOR:8080)
 | **Com IA Local (Ollama/WebUI)** | x86_64 Moderno | 16 GB+ | 1 TB+ NVMe (+ GPU NVIDIA/AMD opcional) |
 
 > [!TIP]
-> **Aceleração com GPU Externa na Rede Local:** Você pode rodar o N.O.M.A.D. em um notebook ou servidor modesto e conectar a IA diretamente à placa de vídeo do seu PC gamer (ex: RTX 5060) através da rede local. Veja o passo a passo completo no guia de [Inteligência Artificial na Wiki](https://github.com/ONeithan/Nexus-Nomad/wiki/Inteligencia-Artificial-e-Chat).
+> **Aceleração com GPU Externa na Rede Local:** Você pode rodar o N.O.M.A.D. em um notebook ou servidor modesto e conectar a IA diretamente à placa de vídeo do seu PC gamer através da rede local. Veja o passo a passo completo no [Guia de Aceleração de IA na Wiki](https://github.com/ONeithan/Nexus-Nomad/wiki/Aceleracao-IA-com-GPU-Externa).
 
 ---
 
