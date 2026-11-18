@@ -765,7 +765,7 @@ export default class ServiceSeeder extends BaseSeeder {
       is_dependency_service: false,
       is_custom: false,
       category: 'ai',
-      depends_on: SERVICE_NAMES.OLLAMA,
+      depends_on: null,
     },
     {
       service_name: SERVICE_NAMES.DIFY,

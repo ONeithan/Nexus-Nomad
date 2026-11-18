@@ -56,11 +56,11 @@ export default class ChatsController {
   async suggestions({ response }: HttpContext) {
     try {
       const suggestions = await this.chatService.getChatSuggestions()
-      return response.status(200).json({ suggestions })
+      return response.status(200).json({ suggestions: suggestions || [] })
     } catch (error) {
-      logger.error({ err: error }, '[ChatsController] Failed to get suggestions')
-      return response.status(500).json({
-        error: 'Failed to get suggestions',
+      logger.warn({ err: error }, '[ChatsController] Failed to get suggestions, returning empty list')
+      return response.status(200).json({
+        suggestions: [],
       })
     }
   }

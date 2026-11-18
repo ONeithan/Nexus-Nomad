@@ -57,9 +57,6 @@ export function getServiceLink(ui_location: string, customUrl?: string | null): 
         if (parsedPort === 8200) {
             return '/apps-pt/flatnotes/';
         }
-        if (parsedPort === 8500) {
-            return `http://${window.location.hostname}:9999`;
-        }
         // If it's a port number, return a link to the service on that port
         return `http://${window.location.hostname}:${parsedPort}`;
     }

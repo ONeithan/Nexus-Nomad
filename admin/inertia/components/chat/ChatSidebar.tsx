@@ -52,7 +52,7 @@ export default function ChatSidebar({
         'fixed inset-y-0 left-0 z-50 md:static md:z-auto md:flex',
         isMobileOpen ? 'flex' : 'hidden'
       )}
-      aria-label="Chat conversations"
+      aria-label="Conversas do chat"
     >
       <div className="p-4 border-b border-border-subtle h-[75px] flex items-center justify-center">
         <StyledButton
@@ -64,13 +64,13 @@ export default function ChatSidebar({
           variant="primary"
           fullWidth
         >
-          New Chat
+          Novo Chat
         </StyledButton>
       </div>
 
       <div className="flex-1 overflow-y-auto">
         {sessions.length === 0 ? (
-          <div className="p-4 text-center text-text-muted text-sm">No previous chats</div>
+          <div className="p-4 text-center text-text-muted text-sm">Nenhum chat anterior</div>
         ) : (
           <div className="p-2 space-y-1">
             {sessions.map((session) => (
@@ -127,7 +127,7 @@ export default function ChatSidebar({
           size="sm"
           fullWidth
         >
-          {isInModal ? 'Open Full Chat' : 'Back to Home'}
+          {isInModal ? 'Abrir Chat Completo' : 'Voltar ao Início'}
         </StyledButton>
         <StyledButton
           onClick={() => {
@@ -138,7 +138,7 @@ export default function ChatSidebar({
           size="sm"
           fullWidth
         >
-          Models & Settings
+          Modelos & Configurações
         </StyledButton>
         <StyledButton
           onClick={() => {
@@ -149,7 +149,7 @@ export default function ChatSidebar({
           size="sm"
           fullWidth
         >
-          Knowledge Base
+          Base de Conhecimento
         </StyledButton>
         <StyledButton
           onClick={() => {
@@ -170,7 +170,7 @@ export default function ChatSidebar({
             size="sm"
             fullWidth
           >
-            Clear History
+            Limpar Histórico
           </StyledButton>
         )}
       </div>

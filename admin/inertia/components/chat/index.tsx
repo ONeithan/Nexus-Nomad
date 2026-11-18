@@ -403,7 +403,7 @@ export default function Chat({
       if (!sessionId) {
         let newSession: Awaited<ReturnType<typeof api.createChatSession>> | undefined
         try {
-          newSession = await api.createChatSession('New Chat', selectedModel)
+          newSession = await api.createChatSession('Novo Chat', selectedModel)
         } catch {
           newSession = undefined
         }
@@ -417,7 +417,7 @@ export default function Chat({
             {
               id: `msg-${Date.now()}-error`,
               role: 'assistant',
-              content: 'Sorry, there was an error starting this chat. Please try again.',
+              content: 'Desculpe, ocorreu um erro ao iniciar esta conversa. Por favor, tente novamente.',
               timestamp: new Date(),
             },
           ])
@@ -578,17 +578,17 @@ export default function Chat({
     <>
       {pendingModelSwitch && (
         <StyledModal
-          title={`Switch to ${pendingModelSwitch}?`}
+          title={`Alternar para ${pendingModelSwitch}?`}
           onConfirm={handleConfirmModelSwitch}
           onCancel={handleCancelModelSwitch}
           open={true}
-          confirmText="Switch & New Chat"
-          cancelText="Cancel"
+          confirmText="Alternar e Novo Chat"
+          cancelText="Cancelar"
           confirmVariant="primary"
         >
           <p className="text-text-primary">
-            Switching to <strong>{pendingModelSwitch}</strong> will start a new chat. Your current
-            conversation stays available in the sidebar.
+            Alternar para <strong>{pendingModelSwitch}</strong> iniciará uma nova conversa. Seu chat atual
+            continuará disponível na barra lateral.
           </p>
         </StyledModal>
       )}
@@ -631,7 +631,7 @@ export default function Chat({
                 <IconMenu2 className="h-6 w-6 text-text-muted" aria-hidden="true" />
               </button>
               <h2 className="text-lg font-semibold text-text-primary truncate">
-                {activeSession?.title || 'New Chat'}
+                {activeSession?.title || 'Novo Chat'}
               </h2>
             </div>
             <div className="flex items-center gap-2 sm:gap-4 min-w-0">
@@ -644,13 +644,13 @@ export default function Chat({
                       : 'text-green-700 bg-green-50 border border-green-200'
                   )}
                 >
-                  {remoteStatus?.connected === false ? 'Remote Disconnected' : 'Remote Connected'}
+                  {remoteStatus?.connected === false ? 'Remoto Desconectado' : 'Remoto Conectado'}
                 </span>
               )}
               {ragEnabled && (
                 <div className="flex items-center gap-2">
                   <label htmlFor="collection-select" className="text-sm text-text-secondary">
-                    Search in:
+                    Buscar em:
                   </label>
                   <select
                     id="collection-select"
@@ -658,7 +658,7 @@ export default function Chat({
                     onChange={(e) => setCollectionFilter(e.target.value)}
                     className="px-3 py-1.5 border border-border-default rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-desert-green focus:border-transparent bg-surface-primary"
                   >
-                    <option value="">All</option>
+                    <option value="">Todos</option>
                     {knownCollections.map((c) => (
                       <option key={c} value={c}>{c}</option>
                     ))}
@@ -667,12 +667,12 @@ export default function Chat({
               )}
               <div className="flex items-center gap-2 min-w-0">
                 <label htmlFor="model-select" className="text-sm text-text-secondary">
-                  Model:
+                  Modelo:
                 </label>
                 {isLoadingModels ? (
-                  <div className="text-sm text-text-muted">Loading models...</div>
+                  <div className="text-sm text-text-muted">Carregando modelos...</div>
                 ) : installedModels.length === 0 ? (
-                  <div className="text-sm text-red-600">No models installed</div>
+                  <div className="text-sm text-red-600">Nenhum modelo instalado</div>
                 ) : (
                   <select
                     id="model-select"
@@ -690,11 +690,11 @@ export default function Chat({
                 )}
               </div>
               <div className="flex items-center">
-                <span className="text-sm text-text-secondary select-none">Knowledge Base:</span>
+                <span className="text-sm text-text-secondary select-none">Base de Conhecimento:</span>
                 <InfoTooltip
                   position="bottom"
                   align="right"
-                  text="When on, the assistant searches your knowledge base for relevant documents before answering. Turning this off is faster and lighter on hardware, which helps when your knowledge base is small or empty. This is the same setting as in AI Assistant settings."
+                  text="Quando ativado, o assistente busca documentos relevantes na sua base de conhecimento antes de responder. Desativar torna as respostas mais rápidas e consome menos memória."
                 />
                 <Switch
                   id="chat-rag-toggle"
@@ -704,11 +704,11 @@ export default function Chat({
               </div>
               {selectedModelSupportsThinking && (
                 <div className="flex items-center">
-                  <span className="text-sm text-text-secondary select-none">Thinking:</span>
+                  <span className="text-sm text-text-secondary select-none">Raciocínio:</span>
                   <InfoTooltip
                     position="bottom"
                     align="right"
-                    text="When on, this model works through its reasoning before answering. Slower, but often better on tricky questions. Your choice is remembered for this model; the default for other models is set in AI Assistant settings."
+                    text="Quando ativado, o modelo processa o raciocínio detalhado antes de emitir a resposta."
                   />
                   <Switch
                     id="chat-thinking-toggle"
@@ -720,7 +720,7 @@ export default function Chat({
               {isInModal && (
                 <button
                   type="button"
-                  aria-label="Close chat"
+                  aria-label="Fechar chat"
                   onClick={() => {
                     if (onClose) {
                       onClose()
