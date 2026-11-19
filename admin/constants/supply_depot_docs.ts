@@ -119,8 +119,14 @@ export const SUPPLY_DEPOT_DOC_ANCHORS: Record<string, string> = {
   "nomad_linkding": "nomad-linkding"
 }
 
-// Returns the in-app docs link for a service, or null if it has no documentation section.
-export function getSupplyDepotDocLink(serviceName: string): string | null {
+// Returns the individual app doc slug (e.g. 'app-nomad-filebrowser'), or null if undocumented.
+export function getSupplyDepotAppDocSlug(serviceName: string): string | null {
   const anchor = SUPPLY_DEPOT_DOC_ANCHORS[serviceName]
-  return anchor ? `/docs/${SUPPLY_DEPOT_DOC_PAGE}#${anchor}` : null
+  return anchor ? `app-${anchor}` : null
+}
+
+// Returns the dedicated in-app individual manual URL (/docs/app-<slug>), or null if undocumented.
+export function getSupplyDepotDocLink(serviceName: string): string | null {
+  const docSlug = getSupplyDepotAppDocSlug(serviceName)
+  return docSlug ? `/docs/${docSlug}` : null
 }

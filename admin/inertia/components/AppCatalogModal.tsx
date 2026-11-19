@@ -355,7 +355,7 @@ export default function AppCatalogModal({
                     </div>
 
                     <a
-                      href={`/docs/supply-depot-apps#${activeApp.docsAnchor}`}
+                      href={`/docs/app-${activeApp.docsAnchor}`}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-surface-secondary border border-border-subtle hover:border-desert-green hover:text-desert-green text-text-primary transition-colors"
@@ -462,7 +462,7 @@ export default function AppCatalogModal({
               </Link>
               <span>•</span>
               <a
-                href={`/docs/supply-depot-apps#${activeApp?.docsAnchor || ''}`}
+                href={`/docs/app-${activeApp?.docsAnchor || ''}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-desert-green hover:underline flex items-center gap-1 font-semibold"

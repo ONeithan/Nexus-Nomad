@@ -16,6 +16,7 @@ export default class DocsController {
         const content = await this.docsService.parseFile(params.slug);
         return inertia.render('docs/show', {
             content,
+            slug: params.slug,
         });
     }
 }

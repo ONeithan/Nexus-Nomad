@@ -110,7 +110,7 @@ export default function CatalogPage({
               className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg bg-desert-green/15 border border-desert-green/30 hover:bg-desert-green/25 text-desert-green text-xs font-semibold transition-colors"
             >
               <IconBook size={16} />
-              <span>Manual Offline</span>
+              <span>Central de Manuais Individuais</span>
               <IconExternalLink size={14} className="opacity-70" />
             </a>
           </div>
@@ -289,7 +289,7 @@ export default function CatalogPage({
                   </div>
 
                   <a
-                    href={`/docs/supply-depot-apps#${activeApp.docsAnchor}`}
+                    href={`/docs/app-${activeApp.docsAnchor}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-surface-secondary border border-border-subtle hover:border-desert-green hover:text-desert-green text-text-primary transition-colors"

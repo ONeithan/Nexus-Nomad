@@ -19,19 +19,28 @@ type SidebarItem = {
 interface StyledSidebarProps {
   title: string
   items: SidebarItem[]
+  topSlot?: React.ReactNode
+  emptyMessage?: string
 }
 
-const StyledSidebar: React.FC<StyledSidebarProps> = ({ title, items }) => {
+const StyledSidebar: React.FC<StyledSidebarProps> = ({
+  title,
+  items,
+  topSlot,
+  emptyMessage,
+}) => {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [debugModalOpen, setDebugModalOpen] = useState(false)
-  const { appVersion } = usePage().props as unknown as UsePageProps
+  const page = usePage()
+  const { appVersion } = page.props as unknown as UsePageProps
 
   const currentPath = useMemo(() => {
-    if (typeof window === 'undefined') return ''
-    return window.location.pathname
-  }, [])
+    const raw =
+      page.url || (typeof window !== 'undefined' ? window.location.pathname : '')
+    return raw.split('?')[0].split('#')[0]
+  }, [page.url])
 
-  const ListItem = (item: SidebarItem) => {
+  const renderListItem = (item: SidebarItem) => {
     const className = classNames(
       item.current
         ? 'bg-desert-green text-white'
@@ -41,17 +50,17 @@ const StyledSidebar: React.FC<StyledSidebarProps> = ({ title, items }) => {
     const content = (
       <>
         {item.icon && <item.icon aria-hidden="true" className="size-6 shrink-0" />}
-        {item.name}
+        <span className="truncate">{item.name}</span>
       </>
     )
     return (
-      <li key={item.name}>
+      <li key={`${item.href}-${item.name}`}>
         {item.target === '_blank' ? (
           <a href={item.href} target="_blank" rel="noopener noreferrer" className={className}>
             {content}
           </a>
         ) : (
-          <Link href={item.href} className={className}>
+          <Link href={item.href} className={className} onClick={() => setSidebarOpen(false)}>
             {content}
           </Link>
         )}
@@ -59,47 +68,50 @@ const StyledSidebar: React.FC<StyledSidebarProps> = ({ title, items }) => {
     )
   }
 
-  const Sidebar = () => {
-    return (
-      <div className="flex grow flex-col gap-y-5 overflow-y-auto bg-desert-sand px-6 ring-1 ring-white/5 pt-4 shadow-md">
-        <div className="flex h-16 shrink-0 items-center">
-          <img src="/nomad-primary.svg" alt="Logotipo do Nexus Project NOMAD" className="h-16 w-16 object-contain" />
-          <h1 className="ml-3 text-xl font-semibold text-text-primary">{title}</h1>
-        </div>
-        <nav className="flex flex-1 flex-col">
-          <ul role="list" className="flex flex-1 flex-col gap-y-7">
-            <li>
-              <div className="mb-3">
-                <Link
-                  href="/home"
-                  className="flex flex-row items-center gap-x-2 text-desert-green hover:bg-desert-green/10 rounded-md p-2 text-sm font-semibold transition-colors border border-desert-green/20"
-                >
-                  <IconArrowLeft aria-hidden="true" className="size-5 shrink-0" />
-                  <span>Voltar ao Início</span>
-                </Link>
-              </div>
-              <ul role="list" className="-mx-2 space-y-1">
-                {items.map((item) => (
-                  <ListItem key={item.name} {...item} current={currentPath === item.href} />
-                ))}
-              </ul>
-            </li>
-          </ul>
-        </nav>
-        <div className="mb-4 flex flex-col items-center gap-1 text-sm text-text-secondary text-center">
-          <p>Nexus Project NOMAD&trade; Centro de Comando v{appVersion}</p>
-          <button
-            onClick={() => setDebugModalOpen(true)}
-            className="text-gray-500 hover:text-desert-green inline-flex items-center gap-1 cursor-pointer"
-          >
-            <IconBug className="size-3.5" />
-            Diagnóstico do Sistema
-          </button>
-          <ThemeToggle />
-        </div>
+  const sidebarContent = (
+    <div className="flex grow flex-col gap-y-4 overflow-y-auto bg-desert-sand px-6 ring-1 ring-white/5 pt-4 shadow-md">
+      <div className="flex h-16 shrink-0 items-center">
+        <img src="/nomad-primary.svg" alt="Logotipo do Nexus Project NOMAD" className="h-16 w-16 object-contain" />
+        <h1 className="ml-3 text-xl font-semibold text-text-primary">{title}</h1>
       </div>
-    )
-  }
+      <nav className="flex flex-1 flex-col">
+        <ul role="list" className="flex flex-1 flex-col gap-y-5">
+          <li>
+            <div className="mb-3">
+              <Link
+                href="/home"
+                className="flex flex-row items-center gap-x-2 text-desert-green-foreground hover:bg-desert-green/15 rounded-md p-2 text-sm font-semibold transition-colors border border-border-default"
+              >
+                <IconArrowLeft aria-hidden="true" className="size-5 shrink-0" />
+                <span>Voltar ao Início</span>
+              </Link>
+            </div>
+            {topSlot && <div className="mb-3">{topSlot}</div>}
+            {items.length === 0 && emptyMessage ? (
+              <p className="text-xs text-text-muted px-2 py-4 text-center">{emptyMessage}</p>
+            ) : (
+              <ul role="list" className="-mx-2 space-y-1">
+                {items.map((item) =>
+                  renderListItem({ ...item, current: currentPath === item.href })
+                )}
+              </ul>
+            )}
+          </li>
+        </ul>
+      </nav>
+      <div className="mb-4 flex flex-col items-center gap-1 text-sm text-text-secondary text-center">
+        <p>Nexus Project NOMAD&trade; Centro de Comando v{appVersion}</p>
+        <button
+          onClick={() => setDebugModalOpen(true)}
+          className="text-gray-500 hover:text-desert-green inline-flex items-center gap-1 cursor-pointer"
+        >
+          <IconBug className="size-3.5" />
+          Diagnóstico do Sistema
+        </button>
+        <ThemeToggle />
+      </div>
+    </div>
+  )
 
   return (
     <>
@@ -134,13 +146,13 @@ const StyledSidebar: React.FC<StyledSidebarProps> = ({ title, items }) => {
                 </button>
               </div>
             </TransitionChild>
-            <Sidebar />
+            {sidebarContent}
           </DialogPanel>
         </div>
       </Dialog>
       {/* Desktop sidebar */}
       <div className="hidden xl:fixed xl:inset-y-0 xl:z-50 xl:flex xl:w-72 xl:flex-col">
-        <Sidebar />
+        {sidebarContent}
       </div>
       <DebugInfoModal open={debugModalOpen} onClose={() => setDebugModalOpen(false)} />
     </>

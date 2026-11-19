@@ -4,6 +4,7 @@ import { getFile, getFileStatsIfExists, listDirectoryContentsRecursive } from '.
 import path from 'path'
 import InternalServerErrorException from '#exceptions/internal_server_error_exception'
 import logger from '@adonisjs/core/services/logger'
+import { APP_CATALOG } from '../../constants/app_catalog_data.js'
 
 export class DocsService {
   private docsPath = path.join(process.cwd(), 'docs')
@@ -64,9 +65,18 @@ export class DocsService {
     }
 
     return files.sort((a, b) => {
+      const isAppA = a.slug.startsWith('app-')
+      const isAppB = b.slug.startsWith('app-')
+      if (isAppA !== isAppB) {
+        return isAppA ? 1 : -1
+      }
+      if (isAppA && isAppB) {
+        return a.title.localeCompare(b.title, 'pt-BR')
+      }
       const orderA = DocsService.DOC_ORDER[a.slug] ?? 999
       const orderB = DocsService.DOC_ORDER[b.slug] ?? 999
-      return orderA - orderB
+      if (orderA !== orderB) return orderA - orderB
+      return a.title.localeCompare(b.title, 'pt-BR')
     })
   }
 
@@ -153,7 +163,7 @@ export class DocsService {
     '41_filosofia_latim_essencial_e_estoicismo': 'Filosofia: Latim & Estoicismo',
     'getting-started': 'Sistema: Primeiros Passos',
     'use-cases': 'Sistema: Casos de Uso',
-    'supply-depot-apps': 'Sistema: Módulos do Depósito',
+    'supply-depot-apps': 'Catálogo: Manuais Individuais de Apps',
     'drug-reference': 'Sistema: Guia Farmacológico',
     'community-add-ons': 'Sistema: Extensões',
     'updates': 'Sistema: Atualizações',
@@ -162,10 +172,25 @@ export class DocsService {
     'release-notes': 'Sistema: Notas de Versão',
   }
 
+  private static readonly APP_DOC_TITLES: Map<string, string> = new Map([
+    ...APP_CATALOG.map((app): [string, string] => [
+      app.docsAnchor.toLowerCase(),
+      `App: ${app.friendlyName}`,
+    ]),
+    ['nomad-kolibri-2', 'App: Plataforma Educacional (Kolibri)'],
+  ])
+
   private prettify(filename: string) {
     const slug = filename.replace(/\.md$/, '')
     if (DocsService.TITLE_OVERRIDES[slug]) {
       return DocsService.TITLE_OVERRIDES[slug]
+    }
+    if (slug.startsWith('app-')) {
+      const anchor = slug.slice(4).toLowerCase()
+      const appTitle = DocsService.APP_DOC_TITLES.get(anchor)
+      if (appTitle) {
+        return appTitle
+      }
     }
     // Remove hyphens, underscores, and file extension
     const cleaned = slug.replace(/_/g, ' ').replace(/-/g, ' ')
