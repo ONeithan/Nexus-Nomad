@@ -1096,10 +1096,21 @@ export class PortainerService {
       cmdBlock = `    command: [${parts.join(', ')}]\n`
     }
 
+    const lowerSvcName = serviceName.toLowerCase()
+    const requiresPreSeededVolume =
+      lowerSvcName.includes('kiwix') ||
+      lowerSvcName.includes('calibre') ||
+      lowerSvcName.includes('vaultwarden') ||
+      lowerSvcName.includes('meshcore')
+
     const topLevelVolumesBlock =
       declaredNamedVolumes.size > 0
         ? `\nvolumes:\n${Array.from(declaredNamedVolumes)
-            .map((v) => `  ${v}:\n    external: true`)
+            .map((v) =>
+              requiresPreSeededVolume
+                ? `  ${v}:\n    external: true`
+                : `  ${v}:\n    name: ${v}`
+            )
             .join('\n')}\n`
         : ''
 
@@ -1214,12 +1225,14 @@ ${cmdBlock}${topLevelVolumesBlock}`
     client: AxiosInstance,
     endpointId: number,
     serviceName: string,
-    stackName: string
+    stackName: string,
+    hostPort?: string
   ): Promise<void> {
     const lowerStack = stackName.toLowerCase()
     const lowerService = serviceName.toLowerCase()
     const altStack = `nomad-${lowerService.replace(/^nomad[-_]/, '')}`
     const candidateEpIds = await this.resolveCandidateEndpointIds(client, endpointId)
+    const numericHostPort = hostPort ? Number(hostPort) : 0
 
     const deleteMatchingStacks = async () => {
       const stacksResp = await client.get('/api/stacks', { timeout: 10000 }).catch(() => null)
@@ -1264,6 +1277,12 @@ ${cmdBlock}${topLevelVolumesBlock}`
           const cNames: string[] = (c.Names || []).map((n: string) => n.toLowerCase())
           const proj = (c.Labels?.['com.docker.compose.project'] || '').toLowerCase()
           const comSvc = (c.Labels?.['com.docker.compose.service'] || '').toLowerCase()
+          const cState = String(c.State || '').toLowerCase()
+          const isStopped = cState === 'exited' || cState === 'dead' || cState === 'created'
+          const holdsTargetPort =
+            numericHostPort > 0 &&
+            (c.Ports || []).some((p: any) => Number(p?.PublicPort) === numericHostPort)
+
           const isMatch =
             cNames.some(
               (n) =>
@@ -1277,7 +1296,8 @@ ${cmdBlock}${topLevelVolumesBlock}`
             proj === lowerService ||
             proj === altStack ||
             comSvc === lowerService ||
-            comSvc === lowerStack
+            comSvc === lowerStack ||
+            (isStopped && holdsTargetPort)
 
           if (isMatch && c.Id) {
             logger.info(
@@ -1296,15 +1316,34 @@ ${cmdBlock}${topLevelVolumesBlock}`
       }
     }
 
+    const deleteOrphanNetworks = async () => {
+      const targetNets = new Set([`${lowerStack}_default`, `${altStack}_default`, `${lowerService}_default`])
+      for (const epId of candidateEpIds) {
+        const netResp = await client
+          .get(`/api/endpoints/${epId}/docker/networks`, { timeout: 8000 })
+          .catch(() => null)
+        const networks: any[] = Array.isArray(netResp?.data) ? netResp.data : []
+        for (const n of networks) {
+          const nName = String(n?.Name || '').toLowerCase()
+          if (targetNets.has(nName) && n?.Id) {
+            await client
+              .delete(`/api/endpoints/${epId}/docker/networks/${n.Id}`, { timeout: 8000 })
+              .catch(() => {})
+          }
+        }
+      }
+    }
+
     try {
       // 1. Delete stacks first
       await deleteMatchingStacks()
       await new Promise((r) => setTimeout(r, 600))
-      // 2. Force-remove any remaining containers (including stuck 'created' sidecars)
+      // 2. Force-remove any remaining containers (including stopped containers holding target port)
       await deleteMatchingContainers()
       await new Promise((r) => setTimeout(r, 400))
-      // 3. Second pass on stacks in case a stuck container prevented stack deletion on pass 1
+      // 3. Second pass on stacks and clean up orphan Compose networks
       await deleteMatchingStacks()
+      await deleteOrphanNetworks()
     } catch (err: any) {
       logger.warn(`[PortainerService] Cleanup warning for ${serviceName}: ${err?.message}`)
     }
@@ -1740,7 +1779,7 @@ ${cmdBlock}${topLevelVolumesBlock}`
         'initializing',
         `[1/5] Limpando contêineres ou stacks anteriores de ${stackName} no Portainer...`
       )
-      await this.cleanupBeforeRemoteDeploy(client, endpointId, serviceName, stackName)
+      await this.cleanupBeforeRemoteDeploy(client, endpointId, serviceName, stackName, hostPort)
 
       // 3. Resolve internal port & env
       let internalPort = '8080'
@@ -1896,21 +1935,58 @@ ${cmdBlock}${topLevelVolumesBlock}`
           },
           { timeout: 300000 }
         )
-        deployedViaStack = true
+
+        // Verify the stack actually spawned a container and didn't stall in Portainer "Error" state
+        await new Promise((r) => setTimeout(r, 3500))
+        const [postStackResp, postContResp] = await Promise.all([
+          client.get('/api/stacks', { timeout: 10000 }).catch(() => null),
+          client.get(`/api/endpoints/${endpointId}/docker/containers/json?all=1`, { timeout: 10000 }).catch(() => null),
+        ])
+        const createdStack = Array.isArray(postStackResp?.data)
+          ? postStackResp.data.find((s: any) => (s.Name || '').toLowerCase() === stackName.toLowerCase())
+          : null
+        const spawnedCont = Array.isArray(postContResp?.data)
+          ? postContResp.data.find(
+              (c: any) =>
+                !c.Names?.some((n: string) => n.endsWith('-init')) &&
+                (c.Labels?.['com.docker.compose.project']?.toLowerCase() === stackName.toLowerCase() ||
+                  c.Names?.some((n: string) => n.toLowerCase().includes(stackName.toLowerCase())))
+            )
+          : null
+
+        if (spawnedCont && spawnedCont.State === 'running' && createdStack?.Status !== 2) {
+          deployedViaStack = true
+        } else {
+          logger.warn(
+            `[PortainerService] Stack ${stackName} created but container not running (state=${spawnedCont?.State || 'missing'}, stackStatus=${createdStack?.Status}). Falling back to direct Docker Engine API...`
+          )
+          await this.cleanupBeforeRemoteDeploy(client, endpointId, serviceName, stackName, hostPort)
+        }
       } catch (stackErr: any) {
         logger.warn(
           `[PortainerService] Stacks API failed (${stackErr?.response?.data?.message || stackErr?.message}). Cleaning up partial stack and falling back to Docker Container API...`
         )
-        await this.cleanupBeforeRemoteDeploy(client, endpointId, serviceName, stackName)
+        await this.cleanupBeforeRemoteDeploy(client, endpointId, serviceName, stackName, hostPort)
       }
 
-      // 8. Fallback: If Stacks API was unavailable, deploy container directly via Docker Engine Proxy
+      // 8. Fallback: If Stacks API was unavailable or stalled in Error, deploy container directly via Docker Engine Proxy
       if (!deployedViaStack) {
         this.broadcast(
           serviceName,
           'creating',
           `Implantando contêiner ${stackName} via Docker Engine do Portainer...`
         )
+
+        // Ensure named volumes exist when falling back directly to Docker Engine API
+        if (!endpointStorageRoot) {
+          await this.initNamedVolumeIfRemoteOnly(
+            client,
+            endpointId,
+            serviceName,
+            config,
+            service.container_image
+          )
+        }
 
         const rawBinds: string[] = config?.HostConfig?.Binds || []
         const { binds: resolvedBinds, usesHostBinds } = this.rewriteBindsForHostStorage(
@@ -1928,7 +2004,12 @@ ${cmdBlock}${topLevelVolumesBlock}`
                   const parts = b.split(':')
                   const targetPath = parts[1] || '/data'
                   const mode = parts[2] ? `:${parts[2]}` : ''
-                  return `nomad-${serviceName}-data:${targetPath}${mode}`
+                  const cleanName =
+                    targetPath
+                      .replace(/^\//, '')
+                      .replace(/[^a-zA-Z0-9_-]/g, '-')
+                      .toLowerCase() || 'data'
+                  return `nomad-${serviceName}-${cleanName}:${targetPath}${mode}`
                 }
                 return b
               })
@@ -2348,7 +2429,7 @@ ${cmdBlock}${topLevelVolumesBlock}`
 
       // 3. Clean up old stack/containers and recreate stack in Portainer
       this.broadcast(serviceName, 'recreating', `Atualizando Stack ${stackName} no Portainer...`)
-      await this.cleanupBeforeRemoteDeploy(client, endpointId, serviceName, stackName)
+      await this.cleanupBeforeRemoteDeploy(client, endpointId, serviceName, stackName, hostPort)
 
       await client.post(
         `/api/stacks/create/standalone/string?endpointId=${endpointId}`,

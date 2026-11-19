@@ -12,6 +12,7 @@ import {
   IconCloudDownload,
   IconDeviceDesktop,
   IconFileText,
+  IconKey,
   IconPackage,
   IconPencil,
   IconPlayerPlay,
@@ -50,6 +51,7 @@ import { BROADCAST_CHANNELS } from '../../constants/broadcast'
 import { ServiceSlim } from '../../types/services'
 import { getServiceLink } from '~/lib/navigation'
 import { getSupplyDepotDocLink } from '../../constants/supply_depot_docs'
+import { getAppDefaultCredentials } from '../../constants/app_catalog_data'
 import api from '~/lib/api'
 import { toTitleCase } from '../../app/utils/misc'
 import { SERVICE_NAMES } from '../../constants/service_names'
@@ -322,9 +324,20 @@ export default function SupplyDepotPage(props: {
     if (!hasInstallingService) return
     const interval = setInterval(async () => {
       try {
-        const fresh = await api.getSystemServices()
+        const fresh = await api.getSystemServices(true)
         if (Array.isArray(fresh) && fresh.length > 0) {
-          setServices(fresh)
+          setServices((prev) => {
+            // Merge by service_name so catalog items NEVER vanish even if an endpoint returns a subset
+            const freshByName = new Map(fresh.map((s) => [s.service_name, s]))
+            const updated = prev.map((existing) => freshByName.get(existing.service_name) ?? existing)
+            const existingNames = new Set(prev.map((s) => s.service_name))
+            for (const item of fresh) {
+              if (!existingNames.has(item.service_name)) {
+                updated.push(item)
+              }
+            }
+            return updated
+          })
         }
       } catch {
         // Ignore transient polling errors
@@ -1629,17 +1642,27 @@ function AppCard({
         </p>
       )}
 
-      {(service.service_name === SERVICE_NAMES.FILEBROWSER ||
-        service.service_name === SERVICE_NAMES.CALIBREWEB) && (
-        <div className="mb-3 px-2.5 py-1.5 rounded-md bg-surface-secondary border border-border-subtle text-[0.6875rem] font-mono text-text-secondary flex items-center justify-between gap-2">
-          <span>Login padrão:</span>
-          <span className="font-bold text-text-primary">
-            {service.service_name === SERVICE_NAMES.FILEBROWSER
-              ? 'admin / nomad'
-              : 'admin / admin123'}
-          </span>
-        </div>
-      )}
+      {!service.is_custom && (() => {
+        const creds = getAppDefaultCredentials(service.service_name)
+        const summary =
+          creds.mode === 'fixed'
+            ? `${creds.username} / ${creds.password}`
+            : creds.mode === 'none'
+              ? 'Acesso direto (sem senha)'
+              : 'Criar conta no 1º acesso'
+        return (
+          <div
+            className="mb-3 px-2.5 py-1.5 rounded-md bg-surface-secondary border border-border-subtle text-[0.6875rem] font-mono text-text-secondary flex items-center justify-between gap-2"
+            title={creds.note || summary}
+          >
+            <span className="inline-flex items-center gap-1 shrink-0 text-amber-500">
+              <IconKey className="w-3.5 h-3.5" />
+              <span>{creds.mode === 'fixed' ? 'Login padrão:' : 'Acesso:'}</span>
+            </span>
+            <span className="font-bold text-text-primary truncate">{summary}</span>
+          </div>
+        )
+      })()}
 
       {/* Metadata row: category badge + port pill */}
       <div className="flex items-center gap-2 mb-4 flex-wrap">

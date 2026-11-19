@@ -2190,6 +2190,200 @@ export const APP_CATALOG: AppCatalogEntry[] = [
   }
 ]
 
+export interface AppDefaultCredentials {
+  mode: 'none' | 'fixed' | 'setup'
+  username: string
+  password: string
+  note?: string
+}
+
+const FIXED_OR_SPECIAL_CREDENTIALS: Record<string, AppDefaultCredentials> = {
+  nomad_filebrowser: {
+    mode: 'fixed',
+    username: 'admin',
+    password: 'nomad',
+    note: 'Login padrão criado pelo N.O.M.A.D. (ou use o usuário/senha global configurado em Servidores Remotos).',
+  },
+  nomad_calibreweb: {
+    mode: 'fixed',
+    username: 'admin',
+    password: 'admin123',
+    note: 'Na primeira abertura, aponte a biblioteca (Calibre Database) para a pasta /books.',
+  },
+  nomad_npm: {
+    mode: 'fixed',
+    username: 'admin@example.com',
+    password: 'changeme',
+    note: 'Credenciais de fábrica do Nginx Proxy Manager. Altere e-mail e senha após o primeiro login.',
+  },
+  nomad_technitium_dns: {
+    mode: 'fixed',
+    username: 'admin',
+    password: 'admin',
+    note: 'Credenciais iniciais do Technitium DNS. O painel solicitará troca de senha no primeiro acesso.',
+  },
+  nomad_gotify: {
+    mode: 'fixed',
+    username: 'admin',
+    password: 'admin',
+    note: 'Credenciais padrão de fábrica do Gotify. Altere em Usuários após entrar.',
+  },
+  nomad_grocy: {
+    mode: 'fixed',
+    username: 'admin',
+    password: 'admin',
+    note: 'Login padrão inicial do Grocy.',
+  },
+  nomad_partkeepr: {
+    mode: 'fixed',
+    username: 'admin',
+    password: 'admin',
+    note: 'Login padrão inicial do PartKeepr.',
+  },
+  nomad_traccar: {
+    mode: 'fixed',
+    username: 'admin',
+    password: 'admin',
+    note: 'Credenciais iniciais do Traccar (em versões novas, pode solicitar cadastro na 1ª tela).',
+  },
+  nomad_rclone_web: {
+    mode: 'fixed',
+    username: 'admin',
+    password: 'nomad',
+    note: 'Login HTTP básico padrão da interface Rclone Web.',
+  },
+  nomad_kasm_webtop: {
+    mode: 'fixed',
+    username: 'abc',
+    password: 'abc',
+    note: 'O ambiente gráfico Webtop geralmente abre direto no navegador; se pedir senha, utilize abc / abc.',
+  },
+  nomad_openrem: {
+    mode: 'fixed',
+    username: 'openremadmin',
+    password: 'changeme',
+    note: 'Credenciais iniciais padrão do OpenREM.',
+  },
+  nomad_open_webui: {
+    mode: 'setup',
+    username: 'Criar no 1º acesso',
+    password: 'Criar no 1º acesso',
+    note: 'O primeiro usuário cadastrado na tela inicial assume automaticamente o papel de Administrador.',
+  },
+  nomad_kolibri_2: {
+    mode: 'setup',
+    username: 'Criar no assistente inicial',
+    password: 'Criar no assistente inicial',
+    note: 'Selecione Português (Brasil) na primeira tela e crie sua conta de Superusuário/Tutor.',
+  },
+  nomad_paperless: {
+    mode: 'setup',
+    username: 'Criar no 1º acesso (ou Credencial Global)',
+    password: 'Criar no 1º acesso (ou Credencial Global)',
+    note: 'Se "Aplicar Credenciais Globais" estiver ativo em Servidores Remotos, o usuário/senha configurado lá será usado automaticamente.',
+  },
+  nomad_directus: {
+    mode: 'setup',
+    username: 'admin@nomad.local (ou Credencial Global)',
+    password: 'Definida nas Credenciais Globais',
+    note: 'Configure o usuário/senha padrão em Servidores Remotos antes de instalar, ou crie no assistente inicial.',
+  },
+  nomad_tubearchivist: {
+    mode: 'setup',
+    username: 'admin (ou Credencial Global)',
+    password: 'Definida nas Credenciais Globais',
+    note: 'Suporta injeção automática pelas Credenciais Globais em Configurações > Servidores Remotos.',
+  },
+  nomad_pihole: {
+    mode: 'setup',
+    username: '(apenas senha)',
+    password: 'Definida nas Credenciais Globais / Console',
+    note: 'Ative as Credenciais Globais em Servidores Remotos antes de instalar para definir a senha web automaticamente.',
+  },
+  nomad_duplicati: {
+    mode: 'setup',
+    username: '(apenas senha)',
+    password: 'Sem senha inicial (ou Credencial Global)',
+    note: 'Por padrão entra direto pela rede local ou usa a senha das Credenciais Globais.',
+  },
+  nomad_vaultwarden: {
+    mode: 'setup',
+    username: 'Criar conta na tela inicial',
+    password: 'Criar senha mestre na tela inicial',
+    note: 'Clique em "Criar Conta" para gerar seu cofre. O painel /admin usa o ADMIN_TOKEN caso configurado nas Credenciais Globais.',
+  },
+}
+
+const DIRECT_ACCESS_IDS = new Set([
+  'nomad_kiwix_server',
+  'nomad_qdrant',
+  'nomad_ollama',
+  'nomad_cyberchef',
+  'nomad_flatnotes',
+  'nomad_stirling_pdf',
+  'nomad_it_tools',
+  'nomad_excalidraw',
+  'nomad_meshtastic_web',
+  'nomad_meshcore_web',
+  'nomad_translate',
+  'nomad_syncthing',
+  'nomad_dozzle',
+  'nomad_whisper',
+  'nomad_netalertx',
+  'nomad_scrutiny',
+  'nomad_nmap_web',
+  'nomad_frigate',
+  'nomad_blocky',
+  'nomad_searxng',
+  'nomad_smokeping',
+  'nomad_speedtest',
+  'nomad_peanut',
+  'nomad_music_assistant',
+  'nomad_snapcast',
+  'nomad_lyrion_lms',
+  'nomad_podgrab',
+  'nomad_changedetection',
+  'nomad_apprise',
+  'nomad_kicad_web',
+  'nomad_librecad_web',
+  'nomad_mainsail',
+  'nomad_openwebrx',
+  'nomad_mumble',
+  'nomad_jitsi',
+  'nomad_etherpad',
+  'nomad_hedgedoc',
+  'nomad_rustdesk',
+  'nomad_archivebox',
+  'nomad_microbin',
+  'nomad_cups',
+  'nomad_urbackup',
+  'nomad_weewx',
+  'nomad_wol_web',
+  'nomad_homepage',
+  'nomad_dokuwiki',
+])
+
+export function getAppDefaultCredentials(serviceName: string): AppDefaultCredentials {
+  const clean = (serviceName || '').toLowerCase().trim()
+  if (FIXED_OR_SPECIAL_CREDENTIALS[clean]) {
+    return FIXED_OR_SPECIAL_CREDENTIALS[clean]
+  }
+  if (DIRECT_ACCESS_IDS.has(clean)) {
+    return {
+      mode: 'none',
+      username: 'Acesso Direto (Sem login)',
+      password: 'Sem senha inicial',
+      note: 'Esta aplicação abre diretamente no navegador sem exigir login ou senha na primeira utilização.',
+    }
+  }
+  return {
+    mode: 'setup',
+    username: 'Criar conta no 1º acesso',
+    password: 'Definir senha no 1º acesso',
+    note: 'No primeiro acesso via navegador, o aplicativo exibe um assistente rápido para você cadastrar seu login e senha de administrador.',
+  }
+}
+
 export function getAppCatalogEntry(serviceName: string): AppCatalogEntry | undefined {
   if (!serviceName) return undefined
   const clean = serviceName.toLowerCase().trim()

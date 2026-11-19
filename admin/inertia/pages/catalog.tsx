@@ -14,6 +14,7 @@ import {
 } from '@tabler/icons-react'
 import AppLayout from '~/layouts/AppLayout'
 import DynamicIcon, { DynamicIconName } from '~/components/DynamicIcon'
+import AppCredentialsCard from '~/components/AppCredentialsCard'
 import {
   APP_CATALOG,
   AppCatalogEntry,
@@ -294,10 +295,13 @@ export default function CatalogPage({
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-surface-secondary border border-border-subtle hover:border-desert-green hover:text-desert-green text-text-primary transition-colors"
                   >
                     <IconBook size={15} />
-                    <span>Abrir no Manual</span>
+                    <span>Abrir Manual Individual</span>
                     <IconExternalLink size={13} className="opacity-70" />
                   </a>
                 </div>
+
+                {/* Credentials Card: Login & Senha Padrão */}
+                <AppCredentialsCard appId={activeApp.id} />
 
                 {/* Section 1: Para que serve */}
                 <div className="space-y-2">

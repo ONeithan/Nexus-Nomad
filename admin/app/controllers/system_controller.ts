@@ -62,8 +62,9 @@ export default class SystemController {
         return await this.systemService.getLiveTelemetry();
     }
 
-    async getServices({ }: HttpContext) {
-        return await this.systemService.getServices({ installedOnly: true });
+    async getServices({ request }: HttpContext) {
+        const includeAll = request.qs().all === 'true'
+        return await this.systemService.getServices({ installedOnly: !includeAll });
     }
 
     async installService({ request, response }: HttpContext) {

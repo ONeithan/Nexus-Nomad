@@ -16,6 +16,7 @@ import {
   IconMinimize,
 } from '@tabler/icons-react'
 import DynamicIcon, { DynamicIconName } from '~/components/DynamicIcon'
+import AppCredentialsCard from '~/components/AppCredentialsCard'
 import {
   APP_CATALOG,
   AppCatalogEntry,
@@ -60,14 +61,18 @@ export default function AppCatalogModal({
     initialAppId || 'nomad_kiwix_server'
   )
   const [isFullscreen, setIsFullscreen] = useState(false)
+  const [singleAppMode, setSingleAppMode] = useState(Boolean(initialAppId))
 
-  // Sync selectedAppId when initialAppId changes
+  // Sync selectedAppId & singleAppMode when modal opens or initialAppId changes
   useEffect(() => {
-    if (initialAppId) {
-      setSelectedAppId(initialAppId)
-      setSearchQuery('')
+    if (isOpen) {
+      setSingleAppMode(Boolean(initialAppId))
+      if (initialAppId) {
+        setSelectedAppId(initialAppId)
+        setSearchQuery('')
+      }
     }
-  }, [initialAppId])
+  }, [isOpen, initialAppId])
 
   // Filtered catalog list
   const filteredApps = useMemo(() => {
@@ -114,28 +119,45 @@ export default function AppCatalogModal({
               <div>
                 <div className="flex items-center gap-2">
                   <h2 className="text-base sm:text-lg font-bold font-mono-mil tracking-wide uppercase text-text-primary">
-                    Catálogo & Guia Operacional N.O.M.A.D.
+                    {singleAppMode && activeApp
+                      ? `Guia Operacional — ${activeApp.friendlyName}`
+                      : 'Catálogo & Guia Operacional N.O.M.A.D.'}
                   </h2>
-                  <span className="text-xs px-2 py-0.5 rounded-full font-mono bg-desert-green/10 text-desert-green border border-desert-green/30 font-semibold">
-                    {APP_CATALOG.length} Aplicações
-                  </span>
+                  {!singleAppMode && (
+                    <span className="text-xs px-2 py-0.5 rounded-full font-mono bg-desert-green/10 text-desert-green border border-desert-green/30 font-semibold">
+                      {APP_CATALOG.length} Aplicações
+                    </span>
+                  )}
                 </div>
                 <p className="text-xs text-text-muted mt-0.5">
-                  Propósito operacional, arquitetura de funcionamento e exemplos práticos da vida real para cada aplicação.
+                  {singleAppMode
+                    ? 'Manual individual com login/senha padrão, finalidade, recursos e exemplo prático de uso.'
+                    : 'Propósito operacional, arquitetura de funcionamento e exemplos práticos da vida real para cada aplicação.'}
                 </p>
               </div>
             </div>
 
             <div className="flex items-center gap-2">
-              <Link
-                href={`/catalog?app=${activeApp?.id || ''}&category=${selectedCategory}`}
-                onClick={onClose}
-                className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-surface-secondary border border-border-subtle hover:border-desert-green hover:text-desert-green text-text-primary transition-colors"
-                title="Abrir como Página Completa Dedicada"
-              >
-                <span>Ver como Página</span>
-                <IconExternalLink size={14} className="opacity-70" />
-              </Link>
+              {singleAppMode ? (
+                <button
+                  type="button"
+                  onClick={() => setSingleAppMode(false)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-desert-green/15 border border-desert-green/30 hover:bg-desert-green/25 text-desert-green transition-colors cursor-pointer"
+                >
+                  <IconApps size={14} />
+                  <span>Ver Catálogo Completo ({APP_CATALOG.length} Apps)</span>
+                </button>
+              ) : (
+                <Link
+                  href={`/catalog?app=${activeApp?.id || ''}&category=${selectedCategory}`}
+                  onClick={onClose}
+                  className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-surface-secondary border border-border-subtle hover:border-desert-green hover:text-desert-green text-text-primary transition-colors"
+                  title="Abrir como Página Completa Dedicada"
+                >
+                  <span>Ver como Página</span>
+                  <IconExternalLink size={14} className="opacity-70" />
+                </Link>
+              )}
 
               <button
                 onClick={() => setIsFullscreen(!isFullscreen)}
@@ -155,7 +177,8 @@ export default function AppCatalogModal({
             </div>
           </div>
 
-          {/* Search & Category Filter Toolbar */}
+          {/* Search & Category Filter Toolbar (hidden in individual app mode) */}
+          {!singleAppMode && (
           <div className="p-4 border-b border-border-subtle bg-surface-primary space-y-3">
             <div className="relative">
               <IconSearch
@@ -200,10 +223,12 @@ export default function AppCatalogModal({
               })}
             </div>
           </div>
+          )}
 
-          {/* Content Body: Two Columns */}
+          {/* Content Body: Two Columns (or focused single column when singleAppMode is active) */}
           <div className="flex-1 flex flex-col md:flex-row overflow-hidden min-h-0">
             {/* Left Column: Apps List */}
+            {!singleAppMode && (
             <div className="w-full md:w-80 lg:w-96 border-b md:border-b-0 md:border-r border-border-subtle overflow-y-auto bg-surface-secondary/30 divide-y divide-border-subtle/40">
               {filteredApps.length === 0 ? (
                 <div className="p-8 text-center text-text-muted text-sm space-y-2">
@@ -276,6 +301,7 @@ export default function AppCatalogModal({
                 })
               )}
             </div>
+            )}
 
             {/* Right Column: Detailed View */}
             <div className="flex-1 overflow-y-auto p-6 md:p-8 space-y-6 bg-surface-primary">
@@ -335,10 +361,13 @@ export default function AppCatalogModal({
                       className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-surface-secondary border border-border-subtle hover:border-desert-green hover:text-desert-green text-text-primary transition-colors"
                     >
                       <IconBook size={15} />
-                      <span>Abrir no Manual</span>
+                      <span>Abrir Manual Individual</span>
                       <IconExternalLink size={13} className="opacity-70" />
                     </a>
                   </div>
+
+                  {/* Credentials Card: Login & Senha Padrão */}
+                  <AppCredentialsCard appId={activeApp.id} />
 
                   {/* Section 1: Para que serve */}
                   <div className="space-y-2">
@@ -403,8 +432,24 @@ export default function AppCatalogModal({
           {/* Footer info bar */}
           <div className="px-6 py-3 border-t border-border-subtle bg-surface-secondary/70 flex flex-wrap items-center justify-between gap-3 text-xs text-text-muted">
             <span>
-              Exibindo <strong>{filteredApps.length}</strong> de{' '}
-              <strong>{APP_CATALOG.length}</strong> aplicações homologadas.
+              {singleAppMode && activeApp ? (
+                <>
+                  Visualizando guia individual de <strong>{activeApp.friendlyName}</strong> (
+                  <button
+                    type="button"
+                    onClick={() => setSingleAppMode(false)}
+                    className="text-desert-green hover:underline font-semibold cursor-pointer"
+                  >
+                    Ver todos os {APP_CATALOG.length} aplicativos
+                  </button>
+                  )
+                </>
+              ) : (
+                <>
+                  Exibindo <strong>{filteredApps.length}</strong> de{' '}
+                  <strong>{APP_CATALOG.length}</strong> aplicações homologadas.
+                </>
+              )}
             </span>
             <div className="flex items-center gap-3">
               <Link
@@ -413,17 +458,17 @@ export default function AppCatalogModal({
                 className="text-text-secondary hover:text-text-primary flex items-center gap-1 font-medium"
               >
                 <IconExternalLink size={13} />
-                Abrir como Página
+                Abrir Página Completa
               </Link>
               <span>•</span>
               <a
-                href="/docs/supply-depot-apps"
+                href={`/docs/supply-depot-apps#${activeApp?.docsAnchor || ''}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-desert-green hover:underline flex items-center gap-1 font-semibold"
               >
                 <IconBook size={14} />
-                Manual Completo Offline
+                Manual Individual Offline
               </a>
             </div>
           </div>

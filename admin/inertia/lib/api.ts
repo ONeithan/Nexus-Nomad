@@ -677,9 +677,11 @@ class API {
     })()
   }
 
-  async getSystemServices() {
+  async getSystemServices(includeAll = false) {
     return catchInternal(async () => {
-      const response = await this.client.get<Array<ServiceSlim>>('/system/services')
+      const response = await this.client.get<Array<ServiceSlim>>('/system/services', {
+        params: includeAll ? { all: 'true' } : undefined,
+      })
       return response.data
     })()
   }

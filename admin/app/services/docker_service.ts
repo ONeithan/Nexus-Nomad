@@ -684,7 +684,7 @@ export class DockerService {
    * those frozen-prefix apps instead of leaving them mounting an empty directory.
    * Idempotent: binds already under `root` match no other prefix and are left alone.
    */
-  private async _applyHostStorageRoot(containerConfig: any): Promise<void> {
+  private async _applyHostStorageRoot(containerConfig: any, serviceName?: string): Promise<void> {
     const binds: string[] | undefined = containerConfig?.HostConfig?.Binds
     if (!binds?.length) return
     const root = await this._resolveHostStorageRoot()
@@ -711,13 +711,43 @@ export class DockerService {
       })
     }
 
+    // Ensure FileBrowser mounts all host disks (/mnt, /media) so symlinks and secondary HDDs are always accessible
+    if (serviceName === SERVICE_NAMES.FILEBROWSER) {
+      const fbBinds: string[] = containerConfig.HostConfig.Binds || []
+      const existingDests = new Set(fbBinds.map((b) => b.split(':')[1] || ''))
+      const extraDiskBinds = [
+        `${root}/downloads:/srv/downloads`,
+        '/mnt:/mnt',
+        '/media:/media',
+        '/mnt:/srv/discos-mnt',
+        '/media:/srv/discos-media',
+      ]
+      try {
+        await access('/mnt/nomad_storage')
+        extraDiskBinds.push('/mnt/nomad_storage:/srv/disco-secundario')
+      } catch {}
+      for (const eb of extraDiskBinds) {
+        const dest = eb.split(':')[1] || ''
+        if (dest && !existingDests.has(dest)) {
+          fbBinds.push(eb)
+          existingDests.add(dest)
+        }
+      }
+      containerConfig.HostConfig.Binds = fbBinds
+    }
+
     // Pre-create host bind directories with permissive permissions to prevent UID/GID permission denied crashes
     const resolvedBinds: string[] = containerConfig?.HostConfig?.Binds || []
     for (const b of resolvedBinds) {
       const firstColon = b.indexOf(':')
       if (firstColon < 0) continue
       const hostSrc = b.slice(0, firstColon)
-      if (!hostSrc.startsWith('/var/run') && !hostSrc.startsWith('/dev')) {
+      if (
+        !hostSrc.startsWith('/var/run') &&
+        !hostSrc.startsWith('/dev') &&
+        hostSrc !== '/mnt' &&
+        hostSrc !== '/media'
+      ) {
         await mkdir(hostSrc, { recursive: true }).catch(() => {})
         await chmod(hostSrc, 0o777).catch(() => {})
       }
@@ -740,7 +770,7 @@ export class DockerService {
 
       // Point storage binds at wherever the admin's storage volume actually lives
       // on the host (covers dependency installs too — they recurse through here).
-      await this._applyHostStorageRoot(containerConfig)
+      await this._applyHostStorageRoot(containerConfig, service.service_name)
       const defaultCreds = await getConfiguredDefaultCredentials()
       if (defaultCreds.enabled && defaultCreds.password) {
         containerConfig.Env = injectDefaultCredentialEnv(
