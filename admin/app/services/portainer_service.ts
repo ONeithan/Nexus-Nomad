@@ -183,9 +183,11 @@ export class PortainerService {
   public async isEnabled(): Promise<boolean> {
     const envVal = env.get('PORTAINER_ENABLED')
     if (envVal !== undefined) return String(envVal) === 'true'
+    const url = await this.getBaseUrl()
+    const apiKey = await this.getApiKey()
+    if (url && apiKey) return true
     const kvVal = await KVStore.getValue('portainer.enabled')
     if (kvVal !== null) return Boolean(kvVal)
-    const url = await KVStore.getValue('portainer.url')
     return Boolean(url && url.trim().length > 0)
   }
 

@@ -14,7 +14,9 @@ export default class SupplyDepotController {
       KVStore.getValue('portainer.deployTarget').catch(() => null),
     ])
     const deployTarget: 'local' | 'portainer' =
-      savedTarget === 'portainer' && portainer?.enabled ? 'portainer' : 'local'
+      savedTarget === 'portainer' || (Boolean(portainer?.url) && savedTarget !== 'local')
+        ? 'portainer'
+        : 'local'
     return inertia.render('supply-depot', {
       system: { services },
       portainer: portainer

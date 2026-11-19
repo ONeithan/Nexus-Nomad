@@ -746,9 +746,14 @@ class API {
 
   async installService(service_name: string, target?: 'local' | 'portainer') {
     try {
+      const effectiveTarget =
+        target ||
+        (typeof window !== 'undefined'
+          ? (localStorage.getItem('nomad:last_install_target') as 'local' | 'portainer') || undefined
+          : undefined)
       const response = await this.client.post<{ success: boolean; message: string }>(
         '/system/services/install',
-        { service_name, target }
+        { service_name, target: effectiveTarget }
       )
       return response.data
     } catch (error) {

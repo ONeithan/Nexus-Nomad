@@ -159,24 +159,22 @@ export default function SupplyDepotPage(props: {
   const [portainerModalOpen, setPortainerModalOpen] = useState(false)
   const [editApp, setEditApp] = useState<CustomAppInitial | null>(null)
   const [defaultTarget, setDefaultTarget] = useState<'local' | 'portainer'>(() => {
-    if (!props.portainer?.enabled) return 'local'
     if (typeof window !== 'undefined') {
       try {
         const saved = localStorage.getItem('nomad:last_install_target')
         if (saved === 'portainer' || saved === 'local') return saved
       } catch {}
     }
-    return 'local'
+    return props.portainer?.deployTarget || (props.portainer?.url ? 'portainer' : 'local')
   })
   const [installTarget, setInstallTarget] = useState<'local' | 'portainer'>(() => {
-    if (!props.portainer?.enabled) return 'local'
     if (typeof window !== 'undefined') {
       try {
         const saved = localStorage.getItem('nomad:last_install_target')
         if (saved === 'portainer' || saved === 'local') return saved
       } catch {}
     }
-    return 'local'
+    return props.portainer?.deployTarget || (props.portainer?.url ? 'portainer' : 'local')
   })
   // App whose custom launch URL is being configured (null while the modal is closed).
   const [urlApp, setUrlApp] = useState<ServiceSlim | null>(null)
@@ -224,8 +222,7 @@ export default function SupplyDepotPage(props: {
   }
 
   const openInstallModal = (service: ServiceSlim) => {
-    const remembered: 'local' | 'portainer' = isPortainerConfigured ? defaultTarget : 'local'
-    setInstallTarget(remembered)
+    setInstallTarget(defaultTarget)
     setForceInstall(false)
     setModal({ type: 'install', service })
   }
@@ -281,7 +278,7 @@ export default function SupplyDepotPage(props: {
   const [preflightLoading, setPreflightLoading] = useState(false)
   const [forceInstall, setForceInstall] = useState(false)
 
-  const isPortainerConfigured = Boolean(props.portainer?.enabled && props.portainer?.online)
+  const isPortainerConfigured = Boolean(props.portainer?.url || props.portainer?.enabled)
 
   const dropdownRef = useRef<HTMLDivElement>(null)
 
@@ -419,7 +416,8 @@ export default function SupplyDepotPage(props: {
     const hasWarnings =
       (preflight?.portConflicts.length ?? 0) > 0 || (preflight?.resourceWarnings.length ?? 0) > 0
 
-    if (hasWarnings && !forceInstall) return
+    // Bloqueia com aviso apenas para instalação local. Instalações remotas no Portainer rodam no servidor remoto.
+    if (installTarget === 'local' && hasWarnings && !forceInstall) return
 
     rememberInstallTarget(installTarget)
     setLoading(true)

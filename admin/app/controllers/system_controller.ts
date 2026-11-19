@@ -8,6 +8,7 @@ import { ContentAutoUpdateService } from '#services/content_auto_update_service'
 import { DownloadService } from '#services/download_service'
 import { QueueService } from '#services/queue_service'
 import { CheckServiceUpdatesJob } from '#jobs/check_service_updates_job'
+import KVStore from '#models/kv_store'
 import {
   affectServiceValidator,
   checkLatestVersionValidator,
@@ -67,11 +68,24 @@ export default class SystemController {
 
     async installService({ request, response }: HttpContext) {
         const payload = await request.validateUsing(installServiceValidator);
-
-        // Check if deploy target is Portainer (Remote Server) or Local (defaults to Local)
-        const portainerEnabled = await this.systemService.isPortainerEnabled()
         const target = payload.target || 'local'
-        if (target === 'portainer' && portainerEnabled) {
+
+        // Check if deploy target is Portainer (Remote Server)
+        // If target is portainer, NEVER fall through to local installation silently!
+        if (target === 'portainer') {
+            const portainerUrl = await this.systemService.portainerService.getBaseUrl()
+            const apiKey = await this.systemService.portainerService.getApiKey()
+
+            if (!portainerUrl || !apiKey) {
+                return response.status(400).send({
+                    success: false,
+                    message: 'Servidor Portainer não configurado. Acesse Configurações > Servidores e informe a URL e a API Key antes de instalar remotamente.',
+                })
+            }
+
+            // Auto-enable Portainer integration if credentials are present
+            await KVStore.setValue('portainer.enabled', true).catch(() => {})
+
             const result = await this.systemService.deployToPortainer(payload.service_name)
             if (result.success) {
                 return response.send({ success: true, message: result.message })
@@ -157,12 +171,9 @@ export default class SystemController {
 
     async forceReinstallService({ request, response }: HttpContext) {
         const payload = await request.validateUsing(installServiceValidator);
-        const portainerEnabled = await this.systemService.isPortainerEnabled();
-        const isRemote =
-            portainerEnabled &&
-            (await this.systemService.portainerService.isDeployedRemotely(payload.service_name));
+        const isRemote = await this.systemService.portainerService.isDeployedRemotely(payload.service_name);
 
-        if (isRemote) {
+        if (isRemote || payload.target === 'portainer') {
             await this.systemService.portainerService.undeployService(payload.service_name, false).catch(() => {});
             const result = await this.systemService.deployToPortainer(payload.service_name);
             return response.send({ success: result.success, message: result.message });
