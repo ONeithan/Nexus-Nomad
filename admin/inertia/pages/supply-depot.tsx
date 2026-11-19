@@ -316,6 +316,23 @@ export default function SupplyDepotPage(props: {
     }
   }, [installActivity])
 
+  // Fallback polling while any service is installing (protects against missed SSE events or page reloads)
+  const hasInstallingService = services.some((s) => s.installation_status === 'installing')
+  useEffect(() => {
+    if (!hasInstallingService) return
+    const interval = setInterval(async () => {
+      try {
+        const fresh = await api.getSystemServices()
+        if (Array.isArray(fresh) && fresh.length > 0) {
+          setServices(fresh)
+        }
+      } catch {
+        // Ignore transient polling errors
+      }
+    }, 4000)
+    return () => clearInterval(interval)
+  }, [hasInstallingService])
+
   // Listen for service update-check completion (manual or nightly), then reload so
   // refreshed available_update_version values surface on the cards.
   useEffect(() => {

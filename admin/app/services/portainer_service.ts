@@ -1087,14 +1087,20 @@ export class PortainerService {
       declaredNamedVolumes.add(defaultVol)
     }
 
-    // 3. Environment Variables
-    const envVars = [
+    // 3. Environment Variables (deduplicated by key, avoiding LC_ALL=pt_BR.UTF-8 locale warnings)
+    const rawEnvVars = [
       ...(config?.Env || []),
       ...extraEnv,
-      'LANG=pt_BR.UTF-8',
-      'LC_ALL=pt_BR.UTF-8',
       'TZ=America/Sao_Paulo',
     ]
+    const envMap = new Map<string, string>()
+    for (const item of rawEnvVars) {
+      const idx = item.indexOf('=')
+      if (idx > 0) {
+        envMap.set(item.slice(0, idx), item)
+      }
+    }
+    const envVars = Array.from(envMap.values())
 
     const portsBlock = portsList.map((p) => `      - ${p}`).join('\n')
     const volumesBlock = volumeMounts.map((v) => `      ${v}`).join('\n')
@@ -1763,13 +1769,43 @@ ${cmdBlock}${topLevelVolumesBlock}`
         }
       }
 
-      const envVars = [
+      // Safeguard: Open WebUI full `:main` image (4.5 GB) bundles PyTorch/SentenceTransformers and
+      // triggers Linux OOM Killer (exit code 137) on homelab servers. Automatically use `:main-slim` (~200 MB / ~300 MB RAM).
+      if (serviceName === 'nomad_open_webui') {
+        if (!service.container_image || service.container_image === 'ghcr.io/open-webui/open-webui:main') {
+          service.container_image = 'ghcr.io/open-webui/open-webui:main-slim'
+          await service.save().catch(() => {})
+        }
+        const openWebUiDefaults = [
+          'UVICORN_WORKERS=1',
+          'WEBUI_SECRET_KEY=nomad_open_webui_secret_key_2026',
+          'ANONYMIZED_TELEMETRY=false',
+          'DO_NOT_TRACK=true',
+          'SCARF_NO_ANALYTICS=true',
+          'ENABLE_COMMUNITY_SHARING=false',
+        ]
+        for (const defVar of openWebUiDefaults) {
+          const k = defVar.split('=')[0]
+          if (
+            !extraEnv.some((e) => e.startsWith(`${k}=`)) &&
+            !(config?.Env || []).some((e: string) => e.startsWith(`${k}=`))
+          ) {
+            extraEnv.push(defVar)
+          }
+        }
+      }
+
+      const rawEnvVars = [
         ...(config?.Env || []),
         ...extraEnv,
-        'LANG=pt_BR.UTF-8',
-        'LC_ALL=pt_BR.UTF-8',
         'TZ=America/Sao_Paulo',
       ]
+      const envMap = new Map<string, string>()
+      for (const item of rawEnvVars) {
+        const idx = item.indexOf('=')
+        if (idx > 0) envMap.set(item.slice(0, idx), item)
+      }
+      const envVars = Array.from(envMap.values())
 
       // 4. Pull Docker image on Portainer endpoint first so stack creation & volume init use it immediately
       this.broadcast(
@@ -2031,9 +2067,12 @@ ${cmdBlock}${topLevelVolumesBlock}`
           )
           logs = typeof logsResp?.data === 'string' ? logsResp.data : ''
         } catch {}
+        const oomDetected = Boolean(cState?.OOMKilled) || Number(cState?.ExitCode) === 137
         await this.cleanupBeforeRemoteDeploy(client, endpointId, serviceName, stackName)
         throw new Error(
-          `Contêiner não permaneceu ativo (estado: ${cState?.Status || runningCont.State}, reinícios: ${restartCount}). ${logs ? `Logs: ${logs.replace(/[^\x20-\x7E\n]/g, '').slice(0, 220)}` : ''}`
+          oomDetected
+            ? `Contêiner encerrado por falta de memória RAM no servidor Portainer (Exit Code 137 / OOM). Libere memória no servidor remoto e tente novamente.`
+            : `Contêiner não permaneceu ativo (estado: ${cState?.Status || runningCont.State}, código: ${cState?.ExitCode ?? '?'}, reinícios: ${restartCount}). ${logs ? `Logs: ${logs.replace(/[^\x20-\x7E\n]/g, '').slice(0, 220)}` : ''}`
         )
       }
 
