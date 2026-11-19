@@ -521,30 +521,9 @@ export class PortainerService {
       }
     }
 
-    // Auto-clean any orphaned '-init' containers or broken 'nomad-*' stacks with no main container
-    if (portainerReachable) {
-      for (const initCont of liveContainers.filter((c) => c.name.endsWith('-init') && c.state !== 'running')) {
-        await client
-          .delete(`/api/endpoints/${endpointId}/docker/containers/${initCont.fullId}?force=true&v=true`, { timeout: 5000 })
-          .catch(() => {})
-      }
-      for (const stack of liveStacks) {
-        const sName = (stack.Name || '').toLowerCase()
-        if (sName.startsWith('nomad-')) {
-          const hasMainCont = liveContainers.some(
-            (c) =>
-              !c.name.endsWith('-init') &&
-              (c.name.toLowerCase() === sName || c.projectName.toLowerCase() === sName)
-          )
-          if (!hasMainCont) {
-            const sEpId = stack.EndpointId || endpointId
-            await client
-              .delete(`/api/stacks/${stack.Id}?endpointId=${sEpId}`, { timeout: 8000 })
-              .catch(() => {})
-          }
-        }
-      }
-    }
+    // NOTE: syncWithDellInventory is called by read-only GET /api/system/services (including polling).
+    // It MUST NEVER delete Portainer stacks or containers, because deleting a stack mid-deploy causes
+    // Portainer to run `docker compose down` -> SIGTERM -> SIGKILL (exited - code 137) on booting apps!
 
     // 2. Reconcile & Enrich catalog services deployed to or already running on Portainer
     const deployedSet = new Set(deployedServices)
@@ -577,7 +556,9 @@ export class PortainerService {
       // If Portainer is reachable and the container no longer exists (e.g. removed by user or failed deploy),
       // automatically unmark it so NOMAD shows "Instalar" instead of a phantom "Ativo" card!
       if (portainerReachable && !matchedCont) {
-        const isCurrentlyInstalling = index !== -1 && services[index].installation_status === 'installing'
+        const isCurrentlyInstalling =
+          PortainerService.activeDeploys.has(deployedName) ||
+          (index !== -1 && services[index].installation_status === 'installing')
         if (!isCurrentlyInstalling) {
           await this.unmarkDeployedRemotely(deployedName)
           await Service.query()
@@ -1303,11 +1284,11 @@ ${cmdBlock}${topLevelVolumesBlock}`
               `[PortainerService] Removing container ${cNames.join(',')} (${c.Id.slice(0, 12)}) on endpoint ${epId}...`
             )
             await client
-              .post(`/api/endpoints/${epId}/docker/containers/${c.Id}/stop`, null, { timeout: 8000 })
+              .post(`/api/endpoints/${epId}/docker/containers/${c.Id}/stop?t=2`, null, { timeout: 15000 })
               .catch(() => {})
             await client
               .delete(`/api/endpoints/${epId}/docker/containers/${c.Id}?force=true&v=true`, {
-                timeout: 15000,
+                timeout: 20000,
               })
               .catch(() => {})
           }
@@ -1613,6 +1594,7 @@ ${cmdBlock}${topLevelVolumesBlock}`
   }
 
   private static deployQueue: Promise<void> = Promise.resolve()
+  private static activeDeploys = new Set<string>()
 
   private async executeRemoteDeploy(
     service: Service,
@@ -1624,17 +1606,22 @@ ${cmdBlock}${topLevelVolumesBlock}`
     endpointId: number,
     preinstall?: { hostStorageRoot?: string; extraEnv?: string[] }
   ): Promise<void> {
+    PortainerService.activeDeploys.add(service.service_name)
     const run = async () => {
-      await this._runRemoteDeployInternal(
-        service,
-        config,
-        hostPort,
-        hostIp,
-        client,
-        _apiKey,
-        endpointId,
-        preinstall
-      )
+      try {
+        await this._runRemoteDeployInternal(
+          service,
+          config,
+          hostPort,
+          hostIp,
+          client,
+          _apiKey,
+          endpointId,
+          preinstall
+        )
+      } finally {
+        PortainerService.activeDeploys.delete(service.service_name)
+      }
     }
     const chained = PortainerService.deployQueue.then(run, run)
     PortainerService.deployQueue = chained.catch(() => {})
@@ -2043,20 +2030,27 @@ ${cmdBlock}${topLevelVolumesBlock}`
         await new Promise((r) => setTimeout(r, 2500))
       }
 
-      const inspectCheck = await client
-        .get(`/api/endpoints/${endpointId}/docker/containers/${runningCont.Id}/json`, {
-          timeout: 10000,
-        })
-        .catch(() => null)
+      let inspectCheck: any = null
+      for (let iAttempt = 0; iAttempt < 3; iAttempt++) {
+        inspectCheck = await client
+          .get(`/api/endpoints/${endpointId}/docker/containers/${runningCont.Id}/json`, {
+            timeout: 20000,
+          })
+          .catch(() => null)
+        if (inspectCheck?.data?.State) break
+        await new Promise((r) => setTimeout(r, 2000))
+      }
 
       const cState = inspectCheck?.data?.State
       const restartCount = inspectCheck?.data?.RestartCount ?? 0
-      const isHealthyRunning =
-        Boolean(cState?.Running) &&
-        cState?.Status !== 'exited' &&
-        cState?.Status !== 'dead' &&
-        !cState?.Restarting &&
-        restartCount <= 2
+      // If inspect timed out transiently, trust the verified `runningCont.State === 'running'` instead of killing a healthy container!
+      const isHealthyRunning = cState
+        ? Boolean(cState.Running) &&
+          cState.Status !== 'exited' &&
+          cState.Status !== 'dead' &&
+          !cState.Restarting &&
+          restartCount <= 2
+        : runningCont.State === 'running'
 
       if (!isHealthyRunning) {
         let logs = ''
@@ -2067,11 +2061,10 @@ ${cmdBlock}${topLevelVolumesBlock}`
           )
           logs = typeof logsResp?.data === 'string' ? logsResp.data : ''
         } catch {}
-        const oomDetected = Boolean(cState?.OOMKilled) || Number(cState?.ExitCode) === 137
-        await this.cleanupBeforeRemoteDeploy(client, endpointId, serviceName, stackName)
+        const oomDetected = Boolean(cState?.OOMKilled)
         throw new Error(
           oomDetected
-            ? `Contêiner encerrado por falta de memória RAM no servidor Portainer (Exit Code 137 / OOM). Libere memória no servidor remoto e tente novamente.`
+            ? `Contêiner encerrado por falta de memória RAM (OOMKilled) no servidor Portainer.`
             : `Contêiner não permaneceu ativo (estado: ${cState?.Status || runningCont.State}, código: ${cState?.ExitCode ?? '?'}, reinícios: ${restartCount}). ${logs ? `Logs: ${logs.replace(/[^\x20-\x7E\n]/g, '').slice(0, 220)}` : ''}`
         )
       }
