@@ -614,9 +614,9 @@ test('CSS animations, hover cascade, reduced-motion, contrast and release metada
     assert.ok(routes.includes(`documented(${snippet}`), `Missing documented() wrapper for ${snippet}`)
   }
 
-  // 8) Triple version sync to v1.0.37 across workflow and boot gate
-  assert.match(workflow, /# Build release trigger: v1\.0\.37/)
-  assert.match(workflow, /default: '1\.0\.37-nexus'/)
-  assert.match(workflow, /inputs\.version \|\| '1\.0\.37-nexus'/)
-  assert.match(bootGate, /:\s*'v1\.0\.37'/)
+  // 8) Triple version sync to v1.0.36 across workflow and boot gate
+  assert.match(workflow, /# Build release trigger: v1\.0\.36/)
+  assert.match(workflow, /default: '1\.0\.36-nexus'/)
+  assert.match(workflow, /inputs\.version \|\| '1\.0\.36-nexus'/)
+  assert.match(bootGate, /:\s*'v1\.0\.36'/)
 })
