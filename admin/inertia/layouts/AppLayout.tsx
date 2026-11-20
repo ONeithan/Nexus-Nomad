@@ -122,15 +122,18 @@ export default function AppLayout({
                     </div>
                   </Link>
 
-                  <div className="hidden xl:flex items-center gap-2 text-[10px] font-mono-mil">
-                    <span className="px-2 py-0.5 rounded bg-surface-secondary border border-border-default text-desert-green font-bold inline-flex items-center gap-1.5">
-                      <span className="w-1.5 h-1.5 rounded-full bg-desert-green nomad-telemetry-dot" />
-                      RESTRITO // OFF-GRID
+                  <div className="hidden lg:flex items-center gap-2 text-xs font-mono-mil">
+                    <span className="nomad-classified-badge px-2.5 py-1 rounded-md bg-emerald-500/10 border border-emerald-500/35 nomad-status-online-text font-bold inline-flex items-center gap-1.5 shadow-xs">
+                      <span className="relative flex h-2 w-2 shrink-0">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500 shadow-[0_0_6px_#10b981]" />
+                      </span>
+                      <span className="tracking-wide">RESTRITO // OFF-GRID</span>
                     </span>
-                    <span className="px-2 py-0.5 rounded bg-surface-secondary border border-border-default text-text-muted">
+                    <span className="px-2.5 py-1 rounded-md bg-surface-secondary border border-border-default text-text-primary/90 font-semibold tracking-wide shadow-xs">
                       MIL-STD-810H
                     </span>
-                    <span className="px-2 py-0.5 rounded bg-surface-secondary border border-border-default text-desert-tan font-bold">
+                    <span className="px-2.5 py-1 rounded-md bg-surface-secondary border border-desert-tan/45 text-desert-tan font-extrabold tracking-wider shadow-xs">
                       NÓ: NEXUS-01
                     </span>
                   </div>
@@ -140,10 +143,16 @@ export default function AppLayout({
 
             <div className="flex items-center gap-1.5">
               {isHome ? (
-                <div className="hidden md:flex items-center gap-2 px-2.5 py-1 rounded bg-surface-secondary border border-border-subtle text-[11px] font-mono-mil mr-1">
-                  <span className="w-2 h-2 rounded-full bg-desert-green nomad-telemetry-dot" />
-                  <span className="text-text-muted uppercase">STATUS:</span>
-                  <span className="text-desert-olive font-bold">100% NOMINAL</span>
+                <div
+                  title="N.O.M.A.D. online e 100% operacional na rede local (com ou sem internet)"
+                  className="hidden sm:flex items-center gap-2.5 px-3.5 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/45 text-xs sm:text-[0.8125rem] font-mono-mil mr-1 shadow-xs"
+                >
+                  <span className="relative flex h-2.5 w-2.5 shrink-0">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500 shadow-[0_0_8px_#10b981]" />
+                  </span>
+                  <span className="text-text-secondary uppercase font-semibold tracking-wider">STATUS:</span>
+                  <span className="nomad-status-online-text font-extrabold tracking-wider">100% NOMINAL</span>
                 </div>
               ) : isSupplyDepot ? (
                 <button
@@ -264,7 +273,7 @@ export default function AppLayout({
           </>
         )}
 
-        <div className="flex-1 w-full bg-desert">{children}</div>
+        <div className="flex-1 w-full bg-desert nomad-page-enter">{children}</div>
         <Footer />
 
         {aiStatus.hasAnyAi && (

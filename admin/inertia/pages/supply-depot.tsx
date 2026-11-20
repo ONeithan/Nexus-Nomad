@@ -957,7 +957,7 @@ export default function SupplyDepotPage(props: {
             {installedServices.length > 0 && (
               <section>
                 <StyledSectionHeader title={`Instalados (${installedServices.length})`} />
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 nomad-stagger-grid">
                   {installedServices.map((service) => (
                     <AppCard
                       key={service.service_name}
@@ -996,7 +996,7 @@ export default function SupplyDepotPage(props: {
             {availableServices.length > 0 && (
               <section>
                 <StyledSectionHeader title={`Disponíveis para Instalar (${availableServices.length})`} />
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 nomad-stagger-grid">
                   {availableServices.map((service) => (
                     <AppCard
                       key={service.service_name}

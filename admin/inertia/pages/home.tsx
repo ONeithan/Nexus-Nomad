@@ -158,7 +158,10 @@ function CircularGauge({
           strokeDashoffset={offset}
           strokeLinecap="round"
           fill="transparent"
-          className="transition-all duration-700 ease-out"
+          style={{
+            filter: `drop-shadow(0 0 6px ${color}55)`,
+            transition: 'stroke-dashoffset 0.85s cubic-bezier(0.22, 1, 0.36, 1), stroke 0.35s ease',
+          }}
         />
       </svg>
       <div className="absolute flex flex-col items-center justify-center text-center px-1">
@@ -516,6 +519,7 @@ export default function Home(props: {
 
   const { data: activeDownloads = [] } = useDownloads({})
   const runningDownloads = activeDownloads.filter((d) => d.status !== 'failed')
+  const failedDownloads = activeDownloads.filter((d) => d.status === 'failed')
   const currentActiveJob =
     runningDownloads.find((d) => d.status === 'active') || runningDownloads[0]
 
@@ -552,6 +556,51 @@ export default function Home(props: {
         : currentActiveJob.url) || 'Pacote de Dados'
   : null
   const activeDownloadPercent = currentActiveJob ? Math.round(currentActiveJob.progress || 0) : 0
+
+  type SplitMergePhase = 'idle' | 'splitting-out' | 'merging-out' | 'split-in' | 'merge-in'
+  const [diskTransitionPhase, setDiskTransitionPhase] = useState<SplitMergePhase>('idle')
+  const [cpuTransitionPhase, setCpuTransitionPhase] = useState<SplitMergePhase>('idle')
+  const diskAnimTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const cpuAnimTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    return () => {
+      if (diskAnimTimerRef.current) clearTimeout(diskAnimTimerRef.current)
+      if (cpuAnimTimerRef.current) clearTimeout(cpuAnimTimerRef.current)
+    }
+  }, [])
+
+  const handleTogglePoolsCombined = () => {
+    if (diskAnimTimerRef.current) clearTimeout(diskAnimTimerRef.current)
+    const willSplit = dashboardConfig.poolsCombined
+    setDiskTransitionPhase(willSplit ? 'splitting-out' : 'merging-out')
+    diskAnimTimerRef.current = setTimeout(() => {
+      saveDashboardConfig({
+        ...dashboardConfig,
+        poolsCombined: !willSplit,
+      })
+      setDiskTransitionPhase(willSplit ? 'split-in' : 'merge-in')
+      diskAnimTimerRef.current = setTimeout(() => {
+        setDiskTransitionPhase('idle')
+      }, 480)
+    }, 170)
+  }
+
+  const handleToggleCpuCombined = () => {
+    if (cpuAnimTimerRef.current) clearTimeout(cpuAnimTimerRef.current)
+    const willSplit = dashboardConfig.cpuCombined
+    setCpuTransitionPhase(willSplit ? 'splitting-out' : 'merging-out')
+    cpuAnimTimerRef.current = setTimeout(() => {
+      saveDashboardConfig({
+        ...dashboardConfig,
+        cpuCombined: !willSplit,
+      })
+      setCpuTransitionPhase(willSplit ? 'split-in' : 'merge-in')
+      cpuAnimTimerRef.current = setTimeout(() => {
+        setCpuTransitionPhase('idle')
+      }, 480)
+    }, 170)
+  }
 
   const handleOpenAiHub = () => {
     if (!aiStatus.hasAnyAi) {
@@ -750,9 +799,9 @@ export default function Home(props: {
         /* ====================================================================
            PAINEL DE CONTROLE N.O.M.A.D. (PROPORÇÃO EQUILIBRADA & TEMPO REAL)
            ==================================================================== */
-        <div className="max-w-[85rem] w-full mx-auto px-4 sm:px-6 py-5 space-y-5">
+        <div className="max-w-[85rem] w-full mx-auto px-4 sm:px-6 py-5 space-y-5 nomad-page-enter">
           {/* 1. BARRA OPERACIONAL COMPACTA */}
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 px-4 py-2.5 rounded-xl border border-border-default bg-surface-primary shadow-sm">
+          <div className="nomad-hud-header flex flex-col md:flex-row md:items-center justify-between gap-3 px-4 py-2.5 rounded-xl border border-border-default bg-surface-primary shadow-sm">
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-text-secondary">
               <span className="inline-flex items-center gap-2 font-medium">
                 <span className="w-2 h-2 rounded-full bg-emerald-500 nomad-telemetry-dot" />
@@ -842,27 +891,23 @@ export default function Home(props: {
                   <div className="flex items-center gap-2.5">
                     <button
                       type="button"
-                      onClick={() =>
-                        saveDashboardConfig({
-                          ...dashboardConfig,
-                          poolsCombined: !dashboardConfig.poolsCombined,
-                        })
-                      }
+                      onClick={handleTogglePoolsCombined}
+                      disabled={diskTransitionPhase === 'splitting-out' || diskTransitionPhase === 'merging-out'}
                       title={
                         dashboardConfig.poolsCombined
-                          ? 'Alternar para cards individuais por disco'
+                          ? 'Separar os discos físicos em cartões individuais com animação'
                           : 'Unificar todos os discos em uma única visualização'
                       }
-                      className="px-2.5 py-1 rounded-md text-xs font-medium border border-border-default bg-surface-secondary hover:border-desert-tan text-text-secondary hover:text-text-primary transition-colors cursor-pointer inline-flex items-center gap-1.5"
+                      className="group px-3 py-1 rounded-md text-xs font-semibold border border-border-default bg-surface-secondary hover:border-desert-tan text-text-secondary hover:text-text-primary transition-all cursor-pointer inline-flex items-center gap-1.5"
                     >
                       {dashboardConfig.poolsCombined ? (
                         <>
-                          <IconLayoutGrid size={14} className="text-desert-tan" />
+                          <IconLayoutGrid size={14} className="text-desert-tan group-hover:scale-110 transition-transform duration-300" />
                           <span>Ver Separados</span>
                         </>
                       ) : (
                         <>
-                          <IconBox size={14} className="text-desert-tan" />
+                          <IconBox size={14} className="text-desert-tan group-hover:scale-110 transition-transform duration-300" />
                           <span>Unificar Discos</span>
                         </>
                       )}
@@ -882,7 +927,15 @@ export default function Home(props: {
                   </div>
                 ) : dashboardConfig.poolsCombined ? (
                   /* NOVA VISUALIZAÇÃO UNIFICADA REAL (1 ÚNICO CARD COESO) */
-                  <div className="rounded-xl border border-border-default border-t-2 border-t-desert-tan bg-surface-primary p-4 sm:p-5 shadow-sm">
+                  <div
+                    className={`rounded-xl border border-border-default border-t-2 border-t-desert-tan bg-surface-primary p-4 sm:p-5 shadow-sm transition-all ${
+                      diskTransitionPhase === 'splitting-out'
+                        ? 'nomad-split-pre-exit'
+                        : diskTransitionPhase === 'merge-in'
+                          ? 'nomad-merge-lock'
+                          : ''
+                    }`}
+                  >
                     <div className="flex flex-col lg:flex-row lg:items-center gap-5">
                       {/* Bloco Esquerdo: Gauge Consolidado Único */}
                       <div className="flex items-center gap-4 lg:w-[300px] lg:pr-5 lg:border-r border-border-default/60 shrink-0">
@@ -935,7 +988,7 @@ export default function Home(props: {
                                 <div
                                   key={target.path}
                                   title={`${target.path}: ${formatBytes(used)} em uso`}
-                                  className="h-full transition-all duration-700"
+                                  className="h-full transition-all duration-700 nomad-progress-shimmer"
                                   style={{
                                     width: `${Math.max(sharePct, 1)}%`,
                                     backgroundColor: palette[idx % palette.length],
@@ -1032,10 +1085,21 @@ export default function Home(props: {
                         ? 'NVMe Sistema (Interno)'
                         : `Disco Secundário (HD ${idx})`
 
+                      const splitCardAnimClass =
+                        diskTransitionPhase === 'merging-out'
+                          ? idx % 2 === 0
+                            ? 'nomad-merge-pre-left'
+                            : 'nomad-merge-pre-right'
+                          : diskTransitionPhase === 'split-in'
+                            ? idx % 2 === 0
+                              ? 'nomad-split-wing-left'
+                              : 'nomad-split-wing-right'
+                            : 'nomad-interactive-card'
+
                       return (
                         <div
                           key={target.path}
-                          className="rounded-xl border border-border-default border-t-2 border-t-desert-tan bg-surface-primary p-4 flex flex-col justify-between shadow-sm"
+                          className={`rounded-xl border border-border-default border-t-2 border-t-desert-tan bg-surface-primary p-4 flex flex-col justify-between shadow-sm ${splitCardAnimClass}`}
                         >
                           <div className="flex items-center justify-between pb-2.5 mb-3 border-b border-border-default/60">
                             <div className="flex items-center gap-2 min-w-0">
@@ -1115,7 +1179,15 @@ export default function Home(props: {
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-4">
                   {/* CPU: MODO UNIFICADO EM TEMPO REAL */}
                   {dashboardConfig.cpuCombined ? (
-                    <div className={`${hwColSpan} rounded-xl border border-border-default bg-surface-primary p-4 flex flex-col justify-between shadow-sm hover:border-desert-tan/70 transition-colors`}>
+                    <div
+                      className={`${hwColSpan} rounded-xl border border-border-default bg-surface-primary p-4 flex flex-col justify-between shadow-sm hover:border-desert-tan/70 transition-all ${
+                        cpuTransitionPhase === 'splitting-out'
+                          ? 'nomad-split-pre-exit'
+                          : cpuTransitionPhase === 'merge-in'
+                            ? 'nomad-merge-lock'
+                            : 'nomad-interactive-card'
+                      }`}
+                    >
                       <div className="flex items-center justify-between pb-2.5 mb-3 border-b border-border-default/60">
                         <div className="flex items-center gap-2">
                           <IconCpu size={16} className="text-cyan-400" />
@@ -1129,14 +1201,10 @@ export default function Home(props: {
                         </div>
                         <button
                           type="button"
-                          onClick={() =>
-                            saveDashboardConfig({
-                              ...dashboardConfig,
-                              cpuCombined: false,
-                            })
-                          }
-                          title="Separar carga e modelo em 2 cards"
-                          className="text-xs text-text-muted hover:text-desert-tan cursor-pointer font-medium"
+                          onClick={handleToggleCpuCombined}
+                          disabled={cpuTransitionPhase === 'splitting-out' || cpuTransitionPhase === 'merging-out'}
+                          title="Separar carga e modelo em 2 cards com animação"
+                          className="text-xs text-text-muted hover:text-desert-tan cursor-pointer font-medium transition-colors"
                         >
                           Separar
                         </button>
@@ -1214,7 +1282,15 @@ export default function Home(props: {
                     /* CPU: MODO SEPARADO (2 CARDS) */
                     <>
                       {dashboardConfig.cpuUsage && (
-                        <div className={`${hwColSpan} rounded-xl border border-border-default bg-surface-primary p-4 flex flex-col justify-between shadow-sm hover:border-desert-tan/70 transition-colors`}>
+                        <div
+                          className={`${hwColSpan} rounded-xl border border-border-default bg-surface-primary p-4 flex flex-col justify-between shadow-sm hover:border-desert-tan/70 transition-all ${
+                            cpuTransitionPhase === 'merging-out'
+                              ? 'nomad-merge-pre-left'
+                              : cpuTransitionPhase === 'split-in'
+                                ? 'nomad-split-wing-left'
+                                : 'nomad-interactive-card'
+                          }`}
+                        >
                           <div className="flex items-center justify-between pb-2.5 mb-3 border-b border-border-default/60">
                             <div className="flex items-center gap-2">
                               <IconCpu size={16} className="text-cyan-400" />
@@ -1224,14 +1300,10 @@ export default function Home(props: {
                             </div>
                             <button
                               type="button"
-                              onClick={() =>
-                                saveDashboardConfig({
-                                  ...dashboardConfig,
-                                  cpuCombined: true,
-                                })
-                              }
-                              title="Unificar carga e modelo"
-                              className="text-xs text-text-muted hover:text-desert-tan cursor-pointer font-medium"
+                              onClick={handleToggleCpuCombined}
+                              disabled={cpuTransitionPhase === 'splitting-out' || cpuTransitionPhase === 'merging-out'}
+                              title="Unificar carga e modelo com animação"
+                              className="text-xs text-text-muted hover:text-desert-tan cursor-pointer font-medium transition-colors"
                             >
                               Unificar
                             </button>
@@ -1256,7 +1328,15 @@ export default function Home(props: {
                       )}
 
                       {dashboardConfig.cpuModel && (
-                        <div className={`${hwColSpan} rounded-xl border border-border-default bg-surface-primary p-4 flex flex-col justify-between shadow-sm hover:border-desert-tan/70 transition-colors`}>
+                        <div
+                          className={`${hwColSpan} rounded-xl border border-border-default bg-surface-primary p-4 flex flex-col justify-between shadow-sm hover:border-desert-tan/70 transition-all ${
+                            cpuTransitionPhase === 'merging-out'
+                              ? 'nomad-merge-pre-right'
+                              : cpuTransitionPhase === 'split-in'
+                                ? 'nomad-split-wing-right'
+                                : 'nomad-interactive-card'
+                          }`}
+                        >
                           <div className="flex items-center justify-between pb-2.5 mb-3 border-b border-border-default/60">
                             <span className="text-xs font-bold uppercase tracking-wider text-text-primary">
                               Processador Host
@@ -1292,7 +1372,7 @@ export default function Home(props: {
 
                   {/* MEMÓRIA RAM REAL (CORRIGIDA: Em Uso Real = Total - Disponível) */}
                   {dashboardConfig.memory && (
-                    <div className={`${hwColSpan} rounded-xl border border-border-default bg-surface-primary p-4 flex flex-col justify-between shadow-sm hover:border-desert-tan/70 transition-colors`}>
+                    <div className={`${hwColSpan} nomad-interactive-card rounded-xl border border-border-default bg-surface-primary p-4 flex flex-col justify-between shadow-sm hover:border-desert-tan/70 transition-colors`}>
                       <div className="flex items-center justify-between pb-2.5 mb-3 border-b border-border-default/60">
                         <div className="flex items-center gap-2">
                           <IconActivity size={16} className="text-emerald-400" />
@@ -1370,7 +1450,7 @@ export default function Home(props: {
 
                   {/* LOG DE EVENTOS & FILA DE DOWNLOADS */}
                   {dashboardConfig.eventLog && (
-                    <div className={`${hwColSpan} rounded-xl border border-border-default bg-surface-primary p-4 flex flex-col justify-between shadow-sm hover:border-desert-tan/70 transition-colors`}>
+                    <div className={`${hwColSpan} nomad-interactive-card rounded-xl border border-border-default bg-surface-primary p-4 flex flex-col justify-between shadow-sm hover:border-desert-tan/70 transition-colors`}>
                       <div className="flex items-center justify-between pb-2.5 mb-3 border-b border-border-default/60">
                         <span className="text-xs font-bold uppercase tracking-wider text-text-primary">
                           Log de Eventos &amp; Fila
@@ -1428,7 +1508,7 @@ export default function Home(props: {
 
                             <div className="relative h-2 w-full bg-surface-primary rounded-full overflow-hidden border border-border-default/50">
                               <div
-                                className="h-full bg-gradient-to-r from-desert-olive via-emerald-500 to-desert-tan rounded-full transition-all duration-500 ease-out"
+                                className="h-full bg-gradient-to-r from-desert-olive via-emerald-500 to-desert-tan rounded-full transition-all duration-500 ease-out nomad-progress-shimmer"
                                 style={{ width: `${Math.max(activeDownloadPercent, 3)}%` }}
                               />
                             </div>
@@ -1451,6 +1531,16 @@ export default function Home(props: {
                                 </Link>
                               )}
                             </div>
+                          </div>
+                        ) : failedDownloads.length > 0 ? (
+                          <div className="flex items-center justify-between gap-2 pt-1 border-t border-border-subtle">
+                            <span>Fila de Downloads:</span>
+                            <Link
+                              href="/settings/downloads"
+                              className="text-red-400 hover:underline font-semibold"
+                            >
+                              {failedDownloads.length} erro(s) — Ver Log →
+                            </Link>
                           </div>
                         ) : (
                           <div className="flex items-center justify-between gap-2 pt-1 border-t border-border-subtle">
@@ -1491,11 +1581,11 @@ export default function Home(props: {
                 </span>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 nomad-stagger-grid">
                 {/* 1. Configuração Inicial (Nativo NOMAD) */}
                 <Link
                   href="/easy-setup"
-                  className="rounded-xl border border-border-default bg-surface-primary p-4 flex flex-col justify-between hover:border-desert-orange transition-all group shadow-sm"
+                  className="nomad-interactive-card rounded-xl border border-border-default bg-surface-primary p-4 flex flex-col justify-between hover:border-desert-orange transition-all group shadow-sm"
                 >
                   <div>
                     <div className="flex items-center justify-between mb-2.5">
@@ -1520,7 +1610,7 @@ export default function Home(props: {
                 {/* 2. Central de Aplicativos */}
                 <Link
                   href="/supply-depot"
-                  className="rounded-xl border border-border-default bg-surface-primary p-4 flex flex-col justify-between hover:border-desert-orange transition-all group shadow-sm"
+                  className="nomad-interactive-card rounded-xl border border-border-default bg-surface-primary p-4 flex flex-col justify-between hover:border-desert-orange transition-all group shadow-sm"
                 >
                   <div>
                     <div className="flex items-center justify-between mb-2.5">
@@ -1546,7 +1636,7 @@ export default function Home(props: {
                 <button
                   type="button"
                   onClick={() => openAppCatalog()}
-                  className="text-left rounded-xl border border-border-default bg-surface-primary p-4 flex flex-col justify-between hover:border-desert-tan transition-all group shadow-sm cursor-pointer"
+                  className="nomad-interactive-card text-left rounded-xl border border-border-default bg-surface-primary p-4 flex flex-col justify-between hover:border-desert-tan transition-all group shadow-sm cursor-pointer"
                 >
                   <div>
                     <div className="flex items-center justify-between mb-2.5">
@@ -1571,23 +1661,23 @@ export default function Home(props: {
                 {/* 4. Discos & Armazenamento */}
                 <Link
                   href="/settings/storage"
-                  className="rounded-xl border border-border-default bg-surface-primary p-4 flex flex-col justify-between hover:border-desert-green transition-all group shadow-sm"
+                  className="nomad-interactive-card rounded-xl border border-border-default bg-surface-primary p-4 flex flex-col justify-between hover:border-desert-tan transition-all group shadow-sm"
                 >
                   <div>
                     <div className="flex items-center justify-between mb-2.5">
-                      <span className="text-xs px-2 py-0.5 rounded bg-desert-green/15 text-desert-green font-semibold border border-desert-green/30">
+                      <span className="text-xs px-2 py-0.5 rounded bg-emerald-500/15 nomad-status-online-text font-semibold border border-emerald-500/30">
                         Multi-HD &amp; Samba
                       </span>
-                      <IconServer size={20} className="text-desert-green group-hover:scale-110 transition-transform" />
+                      <IconServer size={20} className="nomad-status-online-text group-hover:scale-110 transition-transform" />
                     </div>
-                    <h3 className="text-sm sm:text-base font-bold text-text-primary group-hover:text-desert-green transition-colors">
+                    <h3 className="text-sm sm:text-base font-bold text-text-primary group-hover:text-emerald-400 transition-colors">
                       Discos &amp; Samba SMB
                     </h3>
                     <p className="text-xs text-text-secondary mt-1 leading-relaxed">
                       Navegue pastas, defina disco padrão para downloads e configure rede SMB.
                     </p>
                   </div>
-                  <div className="mt-3 pt-2.5 border-t border-border-subtle flex items-center justify-between text-xs font-semibold text-desert-green">
+                  <div className="mt-3 pt-2.5 border-t border-border-subtle flex items-center justify-between text-xs font-semibold nomad-status-online-text">
                     <span>Gerenciar Storage</span>
                     <IconArrowRight size={15} />
                   </div>
@@ -1596,7 +1686,7 @@ export default function Home(props: {
                 {/* 5. Mapas Offline */}
                 <Link
                   href="/maps"
-                  className="rounded-xl border border-border-default bg-surface-primary p-4 flex flex-col justify-between hover:border-desert-tan transition-all group shadow-sm"
+                  className="nomad-interactive-card rounded-xl border border-border-default bg-surface-primary p-4 flex flex-col justify-between hover:border-desert-tan transition-all group shadow-sm"
                 >
                   <div>
                     <div className="flex items-center justify-between mb-2.5">
@@ -1622,7 +1712,7 @@ export default function Home(props: {
                 <button
                   type="button"
                   onClick={handleOpenAiHub}
-                  className="text-left rounded-xl border border-border-default bg-surface-primary p-4 flex flex-col justify-between hover:border-desert-olive transition-all group shadow-sm cursor-pointer"
+                  className="nomad-interactive-card text-left rounded-xl border border-border-default bg-surface-primary p-4 flex flex-col justify-between hover:border-desert-olive transition-all group shadow-sm cursor-pointer"
                 >
                   <div>
                     <div className="flex items-center justify-between mb-2.5">
@@ -1655,26 +1745,34 @@ export default function Home(props: {
                 {/* 7. Gerenciador de Downloads */}
                 <Link
                   href="/settings/downloads"
-                  className="rounded-xl border border-border-default bg-surface-primary p-4 flex flex-col justify-between hover:border-desert-tan transition-all group shadow-sm"
+                  className="nomad-interactive-card rounded-xl border border-border-default bg-surface-primary p-4 flex flex-col justify-between hover:border-desert-tan transition-all group shadow-sm"
                 >
                   <div>
                     <div className="flex items-center justify-between mb-2.5">
-                      <span className="text-xs px-2 py-0.5 rounded bg-surface-secondary text-desert-tan font-semibold border border-border-default">
+                      <span
+                        className={`text-xs px-2 py-0.5 rounded font-semibold border ${
+                          failedDownloads.length > 0
+                            ? 'bg-red-500/15 text-red-400 border-red-500/35'
+                            : 'bg-surface-secondary text-desert-tan border-border-default'
+                        }`}
+                      >
                         {runningDownloads.length > 0
-                          ? `${runningDownloads.length} baixando`
-                          : 'Auto-Resume Ativo'}
+                          ? `${runningDownloads.length} na fila`
+                          : failedDownloads.length > 0
+                            ? `${failedDownloads.length} falha(s)`
+                            : 'Auto-Retomada 3x'}
                       </span>
                       <IconDownload size={20} className="text-desert-tan group-hover:scale-110 transition-transform" />
                     </div>
                     <h3 className="text-sm sm:text-base font-bold text-text-primary group-hover:text-desert-tan transition-colors">
-                      Downloads &amp; Fila
+                      Downloads &amp; Logs
                     </h3>
                     <p className="text-xs text-text-secondary mt-1 leading-relaxed">
-                      Monitore acervos ZIM, mapas, modelos e limpe arquivos temporários órfãos.
+                      Monitore acervos ZIM, mapas, modelos, logs em PT-BR e erros com auto-envio ao fim da fila.
                     </p>
                   </div>
                   <div className="mt-3 pt-2.5 border-t border-border-subtle flex items-center justify-between text-xs font-semibold text-desert-tan">
-                    <span>Gerenciar Fila</span>
+                    <span>Gerenciar Fila &amp; Logs</span>
                     <IconArrowRight size={15} />
                   </div>
                 </Link>
@@ -1682,7 +1780,7 @@ export default function Home(props: {
                 {/* 8. Configurações do Sistema */}
                 <Link
                   href="/settings/system"
-                  className="rounded-xl border border-border-default bg-surface-primary p-4 flex flex-col justify-between hover:border-desert-tan transition-all group shadow-sm"
+                  className="nomad-interactive-card rounded-xl border border-border-default bg-surface-primary p-4 flex flex-col justify-between hover:border-desert-tan transition-all group shadow-sm"
                 >
                   <div>
                     <div className="flex items-center justify-between mb-2.5">
@@ -1746,7 +1844,7 @@ export default function Home(props: {
                 const displayedItems = pinnedItems.length > 0 ? pinnedItems : defaultPicks
 
                 return (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 nomad-stagger-grid">
                     {displayedItems.map((item) => {
                       const isPinned = pinnedServices.includes(item.serviceName || item.label)
                       const isLinkTile = Boolean(item.linkTile)

@@ -30,7 +30,30 @@ export default class DownloadsController {
   }
 
   async resumeAll() {
-    return this.downloadService.resumeAllInterruptedDownloads()
+    return this.downloadService.resumeAllInterruptedDownloads({
+      includePermanentMaxRetries: true,
+      source: 'manual',
+    })
+  }
+
+  async jobLogs({ params }: HttpContext) {
+    return await this.downloadService.getJobAuditLogs(params.jobId)
+  }
+
+  async listLogs({ request }: HttpContext) {
+    const limit = Number(request.input('limit', 200)) || 200
+    const filterRaw = String(request.input('filter', 'all'))
+    const filter = (['all', 'errors', 'recovery', 'completed'].includes(filterRaw)
+      ? filterRaw
+      : 'all') as 'all' | 'errors' | 'recovery' | 'completed'
+    const search = String(request.input('search', '') || '')
+    return await this.downloadService.listGlobalAuditLogs({ limit, filter, search })
+  }
+
+  async clearLogs({ request }: HttpContext) {
+    const jobId = request.input('jobId') ? String(request.input('jobId')) : undefined
+    const deletedCount = await this.downloadService.clearAuditLogs(jobId)
+    return { success: true, deletedCount }
   }
 
   async incomplete() {

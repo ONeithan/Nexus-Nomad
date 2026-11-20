@@ -7,7 +7,12 @@ import {
 import { ServiceSlim } from '../../types/services'
 import { FileEntry } from '../../types/files'
 import { AppAutoUpdateStatus, AutoUpdateStatus, CheckLatestVersionResult, ContentAutoUpdateStatus, LiveTelemetryResponse, SystemInformationResponse, SystemUpdateStatus } from '../../types/system'
-import { DownloadJobWithProgress, IncompleteDownloadItem, WikipediaState } from '../../types/downloads'
+import {
+  DownloadAuditLogEntry,
+  DownloadJobWithProgress,
+  IncompleteDownloadItem,
+  WikipediaState,
+} from '../../types/downloads'
 import type { Country, CountryCode, CountryGroup, MapExtractPreflight } from '../../types/maps'
 import { EmbedJobWithProgress, FileWarningsResult, StoredFileInfo } from '../../types/rag'
 import type { CategoryWithStatus, CollectionWithStatus, ContentUpdateCheckResult, CreatorPackWithStatus, ResourceUpdateInfo } from '../../types/collections'
@@ -1144,6 +1149,46 @@ class API {
     return catchInternal(async () => {
       const response = await this.client.post<{ success: boolean; resumedCount: number; message: string }>(
         '/downloads/jobs/resume-all'
+      )
+      return response.data
+    })()
+  }
+
+  async getDownloadJobLogs(jobId: string): Promise<DownloadAuditLogEntry[]> {
+    return (
+      (await catchInternal(async () => {
+        const response = await this.client.get<DownloadAuditLogEntry[]>(
+          `/downloads/jobs/${encodeURIComponent(jobId)}/logs`
+        )
+        return Array.isArray(response.data) ? response.data : []
+      })()) || []
+    )
+  }
+
+  async listGlobalDownloadLogs(options?: {
+    limit?: number
+    filter?: 'all' | 'errors' | 'recovery' | 'completed'
+    search?: string
+  }): Promise<DownloadAuditLogEntry[]> {
+    return (
+      (await catchInternal(async () => {
+        const response = await this.client.get<DownloadAuditLogEntry[]>('/downloads/logs', {
+          params: {
+            limit: options?.limit ?? 200,
+            filter: options?.filter ?? 'all',
+            search: options?.search ?? '',
+          },
+        })
+        return Array.isArray(response.data) ? response.data : []
+      })()) || []
+    )
+  }
+
+  async clearDownloadLogs(jobId?: string): Promise<{ success: boolean; deletedCount: number } | undefined> {
+    return catchInternal(async () => {
+      const response = await this.client.delete<{ success: boolean; deletedCount: number }>(
+        '/downloads/logs',
+        { data: jobId ? { jobId } : undefined }
       )
       return response.data
     })()

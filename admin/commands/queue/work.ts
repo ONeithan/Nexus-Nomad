@@ -15,6 +15,9 @@ import { ContentAutoUpdateJob } from '#jobs/content_auto_update_job'
 import { DownloadDrugDataJob } from '#jobs/download_drug_data_job'
 import { IngestDrugDataJob } from '#jobs/ingest_drug_data_job'
 import { stallOptionsForQueue, type StallOptions } from '../../app/utils/queue_stall_options.js'
+import { diagnoseDownloadError } from '../../app/utils/download_diagnostics.js'
+import { repairDownloadDirectory } from '../../app/utils/fs.js'
+import { DownloadAuditService } from '#services/download_audit_service'
 import type { RunDownloadJobParams } from '../../types/downloads.js'
 
 export default class QueueWork extends BaseCommand {
@@ -50,6 +53,10 @@ export default class QueueWork extends BaseCommand {
     const queuesToProcess = this.all ? Array.from(allQueues.values()) : [this.queue]
 
     this.logger.info(`Starting workers for queues: ${queuesToProcess.join(', ')}`)
+
+    // Recover active/interrupted items and validate legacy failed downloads BEFORE starting workers,
+    // so queued items stay at the head and validated failed items enter cleanly at the tail.
+    await this.autoResumeInterruptedDownloads()
 
     const workers: Worker[] = []
 
@@ -91,8 +98,129 @@ export default class QueueWork extends BaseCommand {
       worker.on('failed', async (job, err) => {
         this.logger.error(`[${queueName}] Job failed: ${job?.id}, Error: ${err.message}`)
 
-        // If this was a Wikipedia download, mark it as failed in the DB
-        if (job?.data?.filetype === 'zim' && job?.data?.url?.includes('wikipedia_en_')) {
+        let isTerminal = (job?.attemptsMade ?? 0) >= (job?.opts?.attempts ?? 1)
+
+        if (job?.name === RunDownloadJob.key && job?.data) {
+          const params = job.data as RunDownloadJobParams
+          const jobId = String(job.id ?? RunDownloadJob.getJobId(params.url || ''))
+          const attempt = Number(params.retryAttempt ?? 1)
+          const maxRetries = Number(params.maxRetries ?? 3)
+          const diag = diagnoseDownloadError(err, params.filepath)
+
+          if (diag.retryable && attempt < maxRetries && params.url && params.filepath) {
+            // Do not fire terminal DB failure callbacks while retries remain
+            isTerminal = false
+            try {
+              const repair = diag.autoReparable
+                ? await repairDownloadDirectory(params.filepath).catch(() => ({
+                    repaired: false,
+                    notePt: undefined,
+                  }))
+                : { repaired: false, notePt: undefined }
+
+              const nextAttempt = attempt + 1
+              await DownloadAuditService.record({
+                jobId,
+                url: params.url,
+                filepath: params.filepath,
+                title: params.title,
+                filetype: params.filetype,
+                eventType: 'failed_attempt',
+                attempt,
+                maxAttempts: maxRetries,
+                errorCode: diag.code,
+                rawError: diag.rawMessage,
+                summaryPt: `Falha na tentativa ${attempt}/${maxRetries}: ${diag.summaryPt}`,
+                detailsPt: [diag.explanationPt, repair.notePt].filter(Boolean).join(' '),
+              })
+
+              const { QueueService } = await import('#services/queue_service')
+              const dlQueue = QueueService.getInstance().getQueue(RunDownloadJob.queue)
+              try {
+                await job.remove()
+              } catch {
+                const client = await dlQueue.client
+                await client.del(`bull:${RunDownloadJob.queue}:${jobId}:lock`).catch(() => {})
+                const freshJob = await dlQueue.getJob(jobId)
+                await freshJob?.remove().catch(() => {})
+              }
+
+              await RunDownloadJob.dispatch({
+                ...params,
+                timeout: Math.max(Number(params.timeout || 0), 120_000),
+                forceNew: false,
+                retryAttempt: nextAttempt,
+                maxRetries,
+                retryPolicyVersion: 2,
+                lastErrorCode: diag.code,
+                lastErrorPt: diag.summaryPt,
+                lastErrorDetailsPt: diag.explanationPt,
+                requeuedFromTailAt: new Date().toISOString(),
+                finalCancelledByRetryLimit: false,
+              })
+
+              await DownloadAuditService.record({
+                jobId,
+                url: params.url,
+                filepath: params.filepath,
+                title: params.title,
+                filetype: params.filetype,
+                eventType: 'requeued_tail',
+                attempt: nextAttempt,
+                maxAttempts: maxRetries,
+                errorCode: diag.code,
+                summaryPt: `Enviado ao final da fila (Tentativa ${nextAttempt}/${maxRetries}) — ${diag.summaryPt}`,
+                detailsPt: `Causa do desvio para o fim da fila: ${diag.explanationPt} Os downloads já presentes na fila continuarão normalmente antes desta nova tentativa.`,
+              })
+              this.logger.info(
+                `[downloads] Requeued ${jobId} to tail (${nextAttempt}/${maxRetries}) after: ${diag.code}`
+              )
+              return
+            } catch (requeueErr: any) {
+              this.logger.error(
+                `[downloads] Failed to requeue ${jobId} to tail: ${requeueErr?.message}`
+              )
+            }
+          }
+
+          // Reached max 3 attempts OR non-retryable error (user cancel / auth / ENOSPC)
+          isTerminal = true
+          await job
+            .updateData({
+              ...params,
+              retryAttempt: attempt,
+              maxRetries,
+              retryPolicyVersion: 2,
+              lastErrorCode: diag.code,
+              lastErrorPt: diag.summaryPt,
+              lastErrorDetailsPt: diag.explanationPt,
+              finalCancelledByRetryLimit: diag.retryable && attempt >= maxRetries,
+            })
+            .catch(() => {})
+
+          await DownloadAuditService.record({
+            jobId,
+            url: params.url,
+            filepath: params.filepath,
+            title: params.title,
+            filetype: params.filetype,
+            eventType: diag.code === 'USER_CANCELLED' ? 'cancelled_user' : 'cancelled_max_retries',
+            attempt,
+            maxAttempts: maxRetries,
+            errorCode: diag.code,
+            rawError: diag.rawMessage,
+            summaryPt:
+              diag.code === 'USER_CANCELLED'
+                ? 'Download cancelado pelo operador'
+                : diag.retryable
+                  ? `Cancelado definitivamente após ${attempt}/${maxRetries} tentativas — ${diag.summaryPt}`
+                  : `Interrompido (${diag.summaryPt})`,
+            detailsPt: `${diag.explanationPt} ${diag.actionHintPt}`,
+          })
+        }
+
+        // If this was a Wikipedia download and all retries are exhausted, mark failed in DB
+        if (isTerminal && job?.data?.filetype === 'zim' && job?.data?.url?.includes('wikipedia_')) {
           try {
             const { DockerService } = await import('#services/docker_service')
             const { ZimService } = await import('#services/zim_service')
@@ -106,13 +234,8 @@ export default class QueueWork extends BaseCommand {
           }
         }
 
-        // Terminal failure of an AUTO content update → advance that resource's
-        // backoff (self-disables after MAX_CONSECUTIVE_FAILURES). BullMQ emits
-        // `failed` on every attempt, so gate on the final attempt to count each
-        // doomed download once, not once per retry. Manual downloads (auto !== true)
-        // are deliberately excluded.
+        // Terminal failure of an AUTO content update → advance that resource's backoff
         const meta = job?.data?.resourceMetadata
-        const isTerminal = (job?.attemptsMade ?? 0) >= (job?.opts?.attempts ?? 1)
         if (job?.name === RunDownloadJob.key && meta?.auto === true && isTerminal) {
           try {
             const { default: InstalledResource } = await import('#models/installed_resource')
@@ -144,9 +267,6 @@ export default class QueueWork extends BaseCommand {
       workers.push(worker)
       this.logger.info(`Worker started for queue: ${queueName}`)
     }
-
-    // Auto-resume any downloads interrupted by container reboot, update or stall
-    await this.autoResumeInterruptedDownloads()
 
     // Schedule nightly update checks (idempotent, will persist over restarts)
     await CheckUpdateJob.scheduleNightly()
@@ -249,49 +369,14 @@ export default class QueueWork extends BaseCommand {
   private async autoResumeInterruptedDownloads(): Promise<void> {
     try {
       const { QueueService } = await import('#services/queue_service')
-      const queueService = QueueService.getInstance()
-      const queue = queueService.getQueue(RunDownloadJob.queue)
-
-      // 1. Recover active jobs with stale locks left by the previous dead container
-      const activeJobs = await queue.getJobs(['active'])
-      for (const job of activeJobs) {
-        const params = job.data as RunDownloadJobParams
-        if (params && params.url && params.filepath) {
-          try {
-            const client = await queue.client
-            await client.del(`bull:${RunDownloadJob.queue}:${job.id}:lock`)
-            await job.remove().catch(() => {})
-            await RunDownloadJob.dispatch(params)
-            this.logger.info(`[QueueWork] Auto-resumed interrupted active download on boot: ${params.url}`)
-          } catch (e: any) {
-            this.logger.error(`[QueueWork] Failed to auto-resume active job ${job.id}: ${e?.message}`)
-          }
-        }
-      }
-
-      // 2. Auto-recover failed jobs that were interrupted by container shutdown/reboot/stalls
-      const failedJobs = await queue.getJobs(['failed'])
-      for (const job of failedJobs) {
-        const params = job.data as RunDownloadJobParams
-        const reason = (job.failedReason || '').toLowerCase()
-        const isInterrupted =
-          reason.includes('stall') ||
-          reason.includes('restart') ||
-          reason.includes('sigterm') ||
-          reason.includes('abort') ||
-          reason.includes('econnreset') ||
-          reason.includes('etimedout') ||
-          reason.includes('socket hang up')
-
-        if (isInterrupted && params && params.url && params.filepath) {
-          try {
-            await job.remove().catch(() => {})
-            await RunDownloadJob.dispatch(params)
-            this.logger.info(`[QueueWork] Auto-resumed interrupted failed download on boot: ${params.url}`)
-          } catch (e: any) {
-            this.logger.error(`[QueueWork] Failed to auto-resume failed job ${job.id}: ${e?.message}`)
-          }
-        }
+      const { DownloadService } = await import('#services/download_service')
+      const downloadService = new DownloadService(QueueService.getInstance())
+      const result = await downloadService.resumeAllInterruptedDownloads({
+        includePermanentMaxRetries: false,
+        source: 'boot',
+      })
+      if (result.resumedCount > 0) {
+        this.logger.info(`[QueueWork] ${result.message}`)
       }
     } catch (err: any) {
       this.logger.error(`[QueueWork] Error during auto-resume on startup: ${err?.message}`)

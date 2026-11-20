@@ -219,9 +219,9 @@ export class MapService implements IMapService {
       await RunDownloadJob.dispatch({
         url: resource.url,
         filepath,
-        timeout: 30000,
+        timeout: 120000,
         allowedMimeTypes: PMTILES_MIME_TYPES,
-        forceNew: true,
+        forceNew: false,
         filetype: 'map',
         title: (resource as any).title || undefined,
         resourceMetadata: {
@@ -307,7 +307,9 @@ export class MapService implements IMapService {
 
     const existing = await RunDownloadJob.getActiveByUrl(url)
     if (existing) {
-      throw new Error(`Download already in progress for URL ${url}`)
+      throw new Error(
+        `Este mapa já está ativo ou aguardando na fila de downloads (${url}). Acompanhe em Downloads Ativos.`
+      )
     }
 
     const filename = url.split('/').pop()
@@ -334,13 +336,13 @@ export class MapService implements IMapService {
       ? { resource_id: parsedFilename.resource_id, version: parsedFilename.version, collection_ref: null }
       : undefined
 
-    // Dispatch background job
+    // Dispatch background job (forceNew: false so partials resume safely)
     const result = await RunDownloadJob.dispatch({
       url,
       filepath,
-      timeout: 30000,
+      timeout: 120000,
       allowedMimeTypes: PMTILES_MIME_TYPES,
-      forceNew: true,
+      forceNew: false,
       filetype: 'map',
       resourceMetadata,
     })
@@ -703,9 +705,11 @@ export class MapService implements IMapService {
   async downloadGlobalMap(targetDisk?: string): Promise<{ filename: string; jobId?: string }> {
     const info = await this.getGlobalMapInfo()
 
-    const existing = await RunDownloadJob.getByUrl(info.url)
+    const existing = await RunDownloadJob.getActiveByUrl(info.url)
     if (existing) {
-      throw new Error(`Download already in progress for URL ${info.url}`)
+      throw new Error(
+        `O download do Mapa Global (${info.key}) já está ativo ou aguardando na fila. Acompanhe ou veja o log em Configurações → Downloads Ativos.`
+      )
     }
 
     await this.prepareMapsDiskTarget(targetDisk, info.size)
@@ -722,7 +726,7 @@ export class MapService implements IMapService {
     const baseAssetsExist = await this.ensureBaseAssets()
     if (!baseAssetsExist) {
       throw new Error(
-        'Base map assets are missing and could not be downloaded. Please check your connection and try again.'
+        'Recursos básicos de mapas estão ausentes e não puderam ser baixados. Verifique sua conexão e tente novamente.'
       )
     }
 
@@ -730,10 +734,12 @@ export class MapService implements IMapService {
     const result = await RunDownloadJob.dispatch({
       url: info.url,
       filepath,
-      timeout: 30000,
+      timeout: 120000,
       allowedMimeTypes: PMTILES_MIME_TYPES,
       forceNew: false,
       filetype: 'map',
+      title: `Mapa Global Protomaps (${info.date})`,
+      totalBytes: info.size,
     })
 
     if (!result.job) {

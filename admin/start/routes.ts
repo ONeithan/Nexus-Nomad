@@ -316,9 +316,21 @@ router
       tags: ['downloads'],
     }).use(middleware.operatorPermission({ minLevel: 3 }))
     documented(router.post('/jobs/resume-all', [DownloadsController, 'resumeAll']), {
-      summary: 'Resume all interrupted download jobs',
+      summary: 'Validate errors, repair folders and resume/requeue downloads to queue tail',
       tags: ['downloads'],
     }).use(middleware.operatorPermission({ minLevel: 3 }))
+    documented(router.get('/jobs/:jobId/logs', [DownloadsController, 'jobLogs']), {
+      summary: 'Get detailed PT-BR audit log timeline for a specific download job',
+      tags: ['downloads'],
+    })
+    documented(router.get('/logs', [DownloadsController, 'listLogs']), {
+      summary: 'List global detailed download audit logs',
+      tags: ['downloads'],
+    })
+    documented(router.delete('/logs', [DownloadsController, 'clearLogs']), {
+      summary: 'Clear download audit logs',
+      tags: ['downloads'],
+    }).use(middleware.operatorPermission({ minLevel: 4 }))
     documented(router.get('/incomplete', [DownloadsController, 'incomplete']), {
       summary: 'List incomplete download files on disk',
       tags: ['downloads'],

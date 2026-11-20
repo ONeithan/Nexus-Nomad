@@ -10,7 +10,12 @@ import { RagService } from '#services/rag_service'
 import { OllamaService } from '#services/ollama_service'
 import { EmbedFileJob } from './embed_file_job.js'
 import { basename, join, resolve, sep } from 'node:path'
-import { ZIM_STORAGE_PATH } from '../utils/fs.js'
+import {
+  getFileStatsIfExists,
+  repairDownloadDirectory,
+  ZIM_STORAGE_PATH,
+} from '../utils/fs.js'
+import { DownloadAuditService } from '#services/download_audit_service'
 
 /** Maps live under `<cwd>/storage/maps/pmtiles`; no shared constant exists. */
 const MAP_STORAGE_PATH = '/storage/maps'
@@ -67,12 +72,69 @@ export class RunDownloadJob {
   }
 
   async handle(job: Job) {
-    const { url, filepath, timeout, allowedMimeTypes, forceNew, filetype, resourceMetadata, requestHeaders } =
-      job.data as RunDownloadJobParams
+    const {
+      url,
+      filepath,
+      timeout,
+      allowedMimeTypes,
+      forceNew,
+      filetype,
+      title,
+      resourceMetadata,
+      requestHeaders,
+      retryAttempt = 1,
+      maxRetries = 3,
+    } = job.data as RunDownloadJobParams
+
+    const jobId = String(job.id ?? RunDownloadJob.getJobId(url))
 
     // Register abort controller for this job
     const abortController = new AbortController()
-    RunDownloadJob.abortControllers.set(job.id!, abortController)
+    RunDownloadJob.abortControllers.set(jobId, abortController)
+
+    // Pre-validate & self-heal symlinked destination directories (fixes ENOTDIR on secondary disks)
+    const dirRepair = await repairDownloadDirectory(filepath).catch((repairErr: any) => ({
+      repaired: false,
+      resolvedDir: filepath,
+      notePt: `Falha ao validar diretório de destino: ${repairErr?.message || repairErr}`,
+      error: repairErr,
+    }))
+    if ('repaired' in dirRepair && dirRepair.repaired) {
+      await DownloadAuditService.record({
+        jobId,
+        url,
+        filepath,
+        title,
+        filetype,
+        eventType: 'directory_repaired',
+        attempt: retryAttempt,
+        maxAttempts: maxRetries,
+        summaryPt: 'Pasta de destino / link simbólico reparado automaticamente',
+        detailsPt: dirRepair.notePt,
+      })
+    }
+
+    const existingTmp = await getFileStatsIfExists(filepath + '.tmp').catch(() => null)
+    const existingBytes = existingTmp ? Number(existingTmp.size || 0) : 0
+
+    await DownloadAuditService.record({
+      jobId,
+      url,
+      filepath,
+      title,
+      filetype,
+      eventType: existingBytes > 0 && !forceNew ? 'resumed' : 'started',
+      attempt: retryAttempt,
+      maxAttempts: maxRetries,
+      summaryPt:
+        existingBytes > 0 && !forceNew
+          ? `Retomando download (Tentativa ${retryAttempt}/${maxRetries})`
+          : `Iniciando download (Tentativa ${retryAttempt}/${maxRetries})`,
+      detailsPt:
+        existingBytes > 0 && !forceNew
+          ? `Retomando transferência a partir de ${(existingBytes / (1024 * 1024)).toFixed(2)} MB já salvos em .tmp na fila com margem segura de 120s.`
+          : `Conectando ao espelho remoto (${url}) para gravar em "${filepath}".`,
+    })
 
     // Get Redis client for checking cancel signals from the API process
     const queueService = QueueService.getInstance()
@@ -319,6 +381,18 @@ export class RunDownloadJob {
           } as DownloadProgressData).catch((err) => {
             if (err?.code !== -1) throw err
           })
+          await DownloadAuditService.record({
+            jobId,
+            url,
+            filepath,
+            title,
+            filetype,
+            eventType: 'completed',
+            attempt: retryAttempt,
+            maxAttempts: maxRetries,
+            summaryPt: `Download concluído com sucesso (Tentativa ${retryAttempt}/${maxRetries})`,
+            detailsPt: `Arquivo salvo integralmente em "${filepath}" (${lastKnownProgress.totalBytes > 0 ? `${(lastKnownProgress.totalBytes / (1024 * 1024)).toFixed(2)} MB` : 'tamanho validado'}).`,
+          })
         },
       })
 
@@ -385,21 +459,60 @@ export class RunDownloadJob {
     const queue = queueService.getQueue(this.queue)
     const jobId = this.getJobId(params.url)
 
+    const existingJob = await queue.getJob(jobId)
+    if (existingJob) {
+      const state = await existingJob.getState().catch(() => 'unknown')
+      if (state === 'active' || state === 'waiting' || state === 'delayed') {
+        return {
+          job: existingJob,
+          created: false,
+          message: `Job already exists for URL ${params.url}`,
+        }
+      }
+      // Clear finished/failed prior record so a fresh dispatch goes to the tail of the FIFO queue
+      await existingJob.remove().catch(() => {})
+    }
+
+    const normalizedParams: RunDownloadJobParams = {
+      ...params,
+      timeout: Math.max(Number(params.timeout || 0), 120_000),
+      retryAttempt: Number(params.retryAttempt || 1),
+      maxRetries: Number(params.maxRetries || 3),
+      retryPolicyVersion: Number(params.retryPolicyVersion || 2),
+    }
+
     try {
-      const job = await queue.add(this.key, params, {
+      // attempts: 1 disables BullMQ hidden exponential backoff so QueueWork sends failed items
+      // cleanly to the TAIL (end) of the queue with PT-BR root cause up to 3 attempts total.
+      const job = await queue.add(this.key, normalizedParams, {
         jobId,
-        attempts: 10,
-        backoff: { type: 'exponential', delay: 30000 },
+        attempts: 1,
         removeOnComplete: true,
+        removeOnFail: false,
       })
+
+      if (normalizedParams.retryAttempt === 1 && !normalizedParams.requeuedFromTailAt) {
+        await DownloadAuditService.record({
+          jobId,
+          url: normalizedParams.url,
+          filepath: normalizedParams.filepath,
+          title: normalizedParams.title,
+          filetype: normalizedParams.filetype,
+          eventType: 'queued',
+          attempt: 1,
+          maxAttempts: normalizedParams.maxRetries,
+          summaryPt: 'Adicionado à fila de downloads',
+          detailsPt: `Destino: "${normalizedParams.filepath}" | Margem de timeout segura: ${(normalizedParams.timeout / 1000).toFixed(0)}s | Até ${normalizedParams.maxRetries} tentativas automáticas em caso de erro.`,
+        })
+      }
 
       return {
         job,
         created: true,
         message: `Dispatched download job for URL ${params.url}`,
       }
-    } catch (error) {
-      if (error.message.includes('job already exists')) {
+    } catch (error: any) {
+      if (error?.message?.includes('job already exists')) {
         const existing = await queue.getJob(jobId)
         return {
           job: existing,

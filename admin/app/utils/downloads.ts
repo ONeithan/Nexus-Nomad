@@ -44,7 +44,7 @@ const DOWNLOAD_HEADERS: Record<string, string> = {
 export async function doResumableDownload({
   url,
   filepath,
-  timeout = 30000,
+  timeout = 120000,
   signal,
   onProgress,
   onComplete,
@@ -52,6 +52,10 @@ export async function doResumableDownload({
   allowedMimeTypes,
   requestHeaders,
 }: DoResumableDownloadParams): Promise<string> {
+  // Enforce a safe minimum HTTP connect/head/stream margin of 120s so mirrors with
+  // heavy redirect chains (kiwix.org, protomaps) or busy queues don't spuriously time out at 30s.
+  const effectiveTimeout = Math.max(Number(timeout || 0), 120_000)
+
   const dirname = path.dirname(filepath)
   await ensureDirectoryExists(dirname)
 
@@ -77,7 +81,7 @@ export async function doResumableDownload({
   try {
     headResponse = await axios.head(url, {
       signal,
-      timeout,
+      timeout: effectiveTimeout,
       headers,
     })
   } catch (error: any) {
@@ -171,7 +175,7 @@ export async function doResumableDownload({
       responseType: 'stream',
       headers,
       signal,
-      timeout,
+      timeout: effectiveTimeout,
     })
 
   let response = await fetchStream(headers)

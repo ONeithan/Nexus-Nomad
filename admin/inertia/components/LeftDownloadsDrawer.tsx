@@ -109,7 +109,7 @@ export default function LeftDownloadsDrawer() {
                       <div className="w-full h-1.5 bg-surface-primary rounded-full overflow-hidden border border-border-subtle">
                         <div
                           className={`h-full transition-all duration-300 ${
-                            isFailed ? 'bg-desert-red' : 'bg-desert-orange'
+                            isFailed ? 'bg-desert-red' : 'bg-desert-orange nomad-progress-shimmer'
                           }`}
                           style={{ width: `${pct}%` }}
                         />
@@ -136,18 +136,25 @@ export default function LeftDownloadsDrawer() {
 
             <div className="px-3.5 py-2 border-t border-border-subtle bg-surface-secondary flex items-center justify-between text-[0.6875rem]">
               <Link
+                href="/settings/downloads"
+                onClick={() => setExpanded(false)}
+                className="text-desert-orange hover:underline font-semibold"
+              >
+                Fila &amp; Logs
+              </Link>
+              <Link
                 href="/settings/zim/remote-explorer"
                 onClick={() => setExpanded(false)}
-                className="text-desert-orange hover:underline font-medium"
+                className="text-text-secondary hover:underline font-medium"
               >
-                Explorador ZIM
+                ZIM
               </Link>
               <Link
                 href="/maps"
                 onClick={() => setExpanded(false)}
-                className="text-desert-green hover:underline font-medium"
+                className="nomad-status-online-text hover:underline font-medium"
               >
-                Mapas Offline
+                Mapas
               </Link>
             </div>
           </div>

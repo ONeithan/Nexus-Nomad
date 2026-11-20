@@ -44,6 +44,16 @@ export type RunDownloadJobParams = Omit<
   filetype: string
   title?: string
   totalBytes?: number
+  /** Smart tail-requeue retry tracking (max 3 attempts). */
+  retryAttempt?: number
+  maxRetries?: number
+  /** Marks jobs managed under v1.0.36 smart-queue policy (2) so legacy failed jobs recover once on boot. */
+  retryPolicyVersion?: number
+  lastErrorCode?: string
+  lastErrorPt?: string
+  lastErrorDetailsPt?: string
+  requeuedFromTailAt?: string
+  finalCancelledByRetryLimit?: boolean
   resourceMetadata?: {
     resource_id: string
     version: string
@@ -77,6 +87,31 @@ export type DownloadJobWithProgress = {
   lastProgressTime?: number
   status?: 'active' | 'waiting' | 'delayed' | 'failed'
   failedReason?: string
+  /** Smart retry + PT-BR diagnostics */
+  attempt?: number
+  maxAttempts?: number
+  errorCode?: string
+  errorSummaryPt?: string
+  errorDetailsPt?: string
+  requeueReason?: string
+  finalCancelledByRetryLimit?: boolean
+}
+
+export type DownloadAuditLogEntry = {
+  id: number
+  jobId: string
+  url?: string
+  filepath?: string
+  title?: string
+  filetype?: string
+  eventType: string
+  attempt: number
+  maxAttempts: number
+  errorCode?: string
+  rawError?: string
+  summaryPt: string
+  detailsPt?: string
+  createdAt: string
 }
 
 export type IncompleteDownloadItem = {

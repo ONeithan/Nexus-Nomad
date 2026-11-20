@@ -1086,8 +1086,8 @@ export class StorageManagerService {
           return { success: true, sourcePath: src, destPath, symlinkCreated: true, alreadyMapped: true }
         }
 
+        await mkdir(destPath, { recursive: true })
         if (existsSync(currentTarget)) {
-          await mkdir(destPath, { recursive: true })
           await this.movePathCrossDevice(currentTarget, destPath)
         }
 

@@ -763,10 +763,19 @@ body {
 /* ============================================================
    Theme-Native Tactical Interactions & Subtle HUD Animations
    ============================================================ */
+/* Crisp Theme-Aware Online Status Colors (bright emerald in dark themes, deep emerald in light) */
+.nomad-status-online-text {
+  color: #34d399;
+}
+
+[data-theme="light"] .nomad-status-online-text {
+  color: #047857;
+}
+
 @keyframes nomad-fade-up {
   from {
     opacity: 0;
-    transform: translateY(6px);
+    transform: translateY(8px);
   }
   to {
     opacity: 1;
@@ -774,14 +783,118 @@ body {
   }
 }
 
+@keyframes nomad-page-fade {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.996);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
 @keyframes nomad-modal-pop {
   from {
     opacity: 0;
-    transform: scale(0.97) translateY(4px);
+    transform: scale(0.95) translateY(8px);
   }
   to {
     opacity: 1;
     transform: scale(1) translateY(0);
+  }
+}
+
+/* Física de Separação & União dos Discos / CPU */
+@keyframes nomad-split-wing-left {
+  0% {
+    opacity: 0.15;
+    transform: translateX(36%) scale(0.92);
+  }
+  68% {
+    opacity: 1;
+    transform: translateX(-6px) scale(1.015);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+@keyframes nomad-split-wing-right {
+  0% {
+    opacity: 0.15;
+    transform: translateX(-36%) scale(0.92);
+  }
+  68% {
+    opacity: 1;
+    transform: translateX(6px) scale(1.015);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+@keyframes nomad-split-pre-exit {
+  0% {
+    opacity: 1;
+    transform: scaleX(1) scaleY(1);
+  }
+  100% {
+    opacity: 0.25;
+    transform: scaleX(0.94) scaleY(0.97);
+    filter: brightness(1.15);
+  }
+}
+
+@keyframes nomad-merge-pre-left {
+  0% {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+  100% {
+    opacity: 0.2;
+    transform: translateX(32%) scale(0.92);
+  }
+}
+
+@keyframes nomad-merge-pre-right {
+  0% {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+  100% {
+    opacity: 0.2;
+    transform: translateX(-32%) scale(0.92);
+  }
+}
+
+@keyframes nomad-merge-lock {
+  0% {
+    opacity: 0.25;
+    transform: scaleX(1.04) scaleY(0.94);
+    box-shadow: 0 0 0 0 rgba(52, 211, 153, 0);
+  }
+  65% {
+    opacity: 1;
+    transform: scaleX(0.992) scaleY(1.01);
+    box-shadow: 0 0 28px -6px color-mix(in srgb, var(--tactical-accent, #c2a677) 55%, transparent);
+  }
+  100% {
+    opacity: 1;
+    transform: scaleX(1) scaleY(1);
+    box-shadow: none;
+  }
+}
+
+/* Progresso fluido com brilho diagonal em movimento */
+@keyframes nomad-shimmer-flow {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
   }
 }
 
@@ -805,43 +918,133 @@ body {
   }
 }
 
+.nomad-page-enter {
+  animation: nomad-page-fade 0.34s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
 .nomad-animate-in {
-  animation: nomad-fade-up 0.24s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: nomad-fade-up 0.28s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 .nomad-modal-animate {
-  animation: nomad-modal-pop 0.2s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: nomad-modal-pop 0.24s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
+
+.nomad-split-wing-left {
+  animation: nomad-split-wing-left 0.46s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.nomad-split-wing-right {
+  animation: nomad-split-wing-right 0.46s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.nomad-split-pre-exit {
+  animation: nomad-split-pre-exit 0.17s cubic-bezier(0.4, 0, 1, 1) forwards;
+}
+
+.nomad-merge-pre-left {
+  animation: nomad-merge-pre-left 0.17s cubic-bezier(0.4, 0, 1, 1) forwards;
+}
+
+.nomad-merge-pre-right {
+  animation: nomad-merge-pre-right 0.17s cubic-bezier(0.4, 0, 1, 1) forwards;
+}
+
+.nomad-merge-lock {
+  animation: nomad-merge-lock 0.44s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.nomad-progress-shimmer {
+  background-image: linear-gradient(
+    110deg,
+    transparent 25%,
+    rgba(255, 255, 255, 0.24) 45%,
+    rgba(255, 255, 255, 0.08) 55%,
+    transparent 75%
+  );
+  background-size: 200% 100%;
+  animation: nomad-shimmer-flow 2.1s linear infinite;
+}
+
+/* Cascata escalonada para grids de cartões em todo o sistema */
+.nomad-stagger-grid > * {
+  animation: nomad-fade-up 0.36s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.nomad-stagger-grid > *:nth-child(1) { animation-delay: 20ms; }
+.nomad-stagger-grid > *:nth-child(2) { animation-delay: 55ms; }
+.nomad-stagger-grid > *:nth-child(3) { animation-delay: 90ms; }
+.nomad-stagger-grid > *:nth-child(4) { animation-delay: 125ms; }
+.nomad-stagger-grid > *:nth-child(5) { animation-delay: 160ms; }
+.nomad-stagger-grid > *:nth-child(6) { animation-delay: 195ms; }
+.nomad-stagger-grid > *:nth-child(7) { animation-delay: 230ms; }
+.nomad-stagger-grid > *:nth-child(8) { animation-delay: 265ms; }
+.nomad-stagger-grid > *:nth-child(n + 9) { animation-delay: 300ms; }
 
 /* Crisp tactile feedback on interactive buttons/links */
 button:not(:disabled),
 a[href] {
   transition:
-    transform 0.14s cubic-bezier(0.22, 1, 0.36, 1),
-    border-color 0.18s ease,
-    background-color 0.18s ease,
-    color 0.18s ease,
-    box-shadow 0.18s ease;
-}
-
-button:not(:disabled):active {
-  transform: scale(0.982);
-}
-
-.nomad-interactive-card {
-  transition:
-    transform 0.2s cubic-bezier(0.22, 1, 0.36, 1),
+    transform 0.16s cubic-bezier(0.22, 1, 0.36, 1),
     border-color 0.2s ease,
+    background-color 0.2s ease,
+    color 0.2s ease,
     box-shadow 0.2s ease;
 }
 
+button:not(:disabled):active {
+  transform: scale(0.978);
+}
+
+.nomad-interactive-card {
+  position: relative;
+  overflow: hidden;
+  transition:
+    transform 0.24s cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 0.22s ease,
+    box-shadow 0.24s ease;
+}
+
+.nomad-interactive-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  width: 50%;
+  background: linear-gradient(
+    105deg,
+    transparent 20%,
+    color-mix(in srgb, var(--tactical-accent, #c2a677) 10%, transparent) 50%,
+    transparent 80%
+  );
+  transform: translateX(-140%);
+  transition: transform 0.65s cubic-bezier(0.22, 1, 0.36, 1);
+  pointer-events: none;
+}
+
+.nomad-interactive-card:hover::before {
+  transform: translateX(240%);
+}
+
 .nomad-interactive-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 22px -12px rgba(0, 0, 0, 0.38);
+  transform: translateY(-3px);
+  box-shadow: 0 12px 26px -14px rgba(0, 0, 0, 0.45);
 }
 
 .nomad-interactive-card:active {
-  transform: translateY(0) scale(0.992);
+  transform: translateY(-1px) scale(0.992);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nomad-page-enter,
+  .nomad-animate-in,
+  .nomad-modal-animate,
+  .nomad-split-wing-left,
+  .nomad-split-wing-right,
+  .nomad-merge-lock,
+  .nomad-progress-shimmer,
+  .nomad-stagger-grid > * {
+    animation: none !important;
+    transition: none !important;
+  }
 }
 
 /* Subtle metallic/HUD sweep for "CLASSIFICAÇÃO: RESTRITO // OPERACIONAL" */

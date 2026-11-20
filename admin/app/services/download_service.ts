@@ -10,7 +10,9 @@ import type { Job, Queue } from 'bullmq'
 import { normalize, join, basename, resolve } from 'node:path'
 import { readdir, stat } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
-import { deleteFileIfExists } from '../utils/fs.js'
+import { deleteFileIfExists, repairDownloadDirectory } from '../utils/fs.js'
+import { diagnoseDownloadError } from '../utils/download_diagnostics.js'
+import { DownloadAuditService } from './download_audit_service.js'
 import transmit from '@adonisjs/transmit/services/main'
 import { BROADCAST_CHANNELS } from '../../constants/broadcast.js'
 
@@ -68,25 +70,48 @@ export class DownloadService {
       safeFetch(DownloadDrugDataJob.queue),
     ])
 
-    const fileDownloads = fileTagged.map(({ job, state }) => {
+    const fileDownloads = fileTagged.map(({ job, state }, index) => {
       const parsed = this.parseProgress(job.progress)
+      const data = (job.data || {}) as RunDownloadJobParams
+      const attempt = Number(data.retryAttempt ?? 1)
+      const maxAttempts = Number(data.maxRetries ?? 3)
+      const diag =
+        state === 'failed'
+          ? diagnoseDownloadError(job.failedReason || data.lastErrorPt || 'Erro desconhecido', data.filepath)
+          : null
+
       return {
         jobId: String(job.id ?? ''),
-        url: job.data?.url || '',
+        url: data.url || '',
         progress: parsed.percent,
-        filepath: job.data?.filepath ? normalize(job.data.filepath) : '',
-        filetype: job.data?.filetype,
-        title: job.data?.title || undefined,
+        filepath: data.filepath ? normalize(data.filepath) : '',
+        filetype: data.filetype,
+        title: data.title || undefined,
         downloadedBytes: parsed.downloadedBytes,
-        totalBytes: parsed.totalBytes || job.data?.totalBytes || undefined,
+        totalBytes: parsed.totalBytes || data.totalBytes || undefined,
         lastProgressTime: parsed.lastProgressTime,
         status: state,
-        failedReason: job.failedReason || undefined,
+        failedReason: diag ? diag.summaryPt : job.failedReason || undefined,
+        attempt,
+        maxAttempts,
+        errorCode: diag?.code ?? data.lastErrorCode,
+        errorSummaryPt: diag?.summaryPt ?? data.lastErrorPt,
+        errorDetailsPt: diag?.explanationPt ?? data.lastErrorDetailsPt,
+        requeueReason:
+          state !== 'failed' && attempt > 1 && data.lastErrorPt
+            ? `Movido ao fim da fila (${attempt}/${maxAttempts}) — causa anterior: ${data.lastErrorPt}`
+            : undefined,
+        finalCancelledByRetryLimit: Boolean(data.finalCancelledByRetryLimit),
+        _fifoIdx: index,
       }
     })
 
-    const extractDownloads = extractTagged.map(({ job, state }) => {
+    const extractDownloads = extractTagged.map(({ job, state }, index) => {
       const parsed = this.parseProgress(job.progress)
+      const diag =
+        state === 'failed'
+          ? diagnoseDownloadError(job.failedReason || 'Falha na extração de mapa', job.data?.outputFilepath)
+          : null
       return {
         jobId: String(job.id ?? ''),
         url: job.data?.sourceUrl || '',
@@ -98,20 +123,35 @@ export class DownloadService {
         totalBytes: parsed.totalBytes || job.data?.estimatedBytes || undefined,
         lastProgressTime: parsed.lastProgressTime,
         status: state,
-        failedReason: job.failedReason || undefined,
+        failedReason: diag ? diag.summaryPt : job.failedReason || undefined,
+        attempt: Number(job.data?.retryAttempt ?? 1),
+        maxAttempts: Number(job.data?.maxRetries ?? 3),
+        errorCode: diag?.code,
+        errorSummaryPt: diag?.summaryPt,
+        errorDetailsPt: diag?.explanationPt,
+        finalCancelledByRetryLimit: Boolean(job.data?.finalCancelledByRetryLimit),
+        _fifoIdx: index,
       }
     })
 
-    const modelDownloads = modelTagged.map(({ job, state }) => {
+    const modelDownloads = modelTagged.map(({ job, state }, index) => {
       const parsed = this.parseProgress(job.progress)
+      const isFailed = state === 'failed' || Boolean(job.failedReason)
+      const diag = isFailed
+        ? diagnoseDownloadError(job.failedReason || 'Falha ao baixar modelo de IA')
+        : null
       return {
         jobId: String(job.id ?? ''),
-        url: job.data?.modelName || 'Unknown Model',
+        url: job.data?.modelName || 'Modelo Desconhecido',
         progress: parsed.percent,
-        filepath: job.data?.modelName || 'Unknown Model',
+        filepath: job.data?.modelName || 'Modelo Desconhecido',
         filetype: 'model',
-        status: (state === 'failed' || job.failedReason ? 'failed' : 'active') as 'active' | 'failed',
-        failedReason: job.failedReason || undefined,
+        status: (isFailed ? 'failed' : state) as 'active' | 'waiting' | 'delayed' | 'failed',
+        failedReason: diag ? diag.summaryPt : job.failedReason || undefined,
+        errorCode: diag?.code,
+        errorSummaryPt: diag?.summaryPt,
+        errorDetailsPt: diag?.explanationPt,
+        _fifoIdx: index,
       }
     })
 
@@ -120,20 +160,28 @@ export class DownloadService {
       drugTagged.find(({ state }) => state === 'waiting' || state === 'delayed') ??
       drugTagged.find(({ state }) => state === 'failed')
     const drugDownloads = drugInFlight
-      ? [drugInFlight].map(({ job, state }) => {
+      ? [drugInFlight].map(({ job, state }, index) => {
           const parsed = this.parseProgress(job.progress)
+          const diag =
+            state === 'failed'
+              ? diagnoseDownloadError(job.failedReason || 'Falha na base farmacológica')
+              : null
           return {
             jobId: DownloadDrugDataJob.jobId,
             url: 'https://api.fda.gov/download.json',
             progress: parsed.percent,
-            filepath: job.data?.currentPartName || 'FDA Drug Reference',
+            filepath: job.data?.currentPartName || 'Base Farmacológica OpenFDA',
             filetype: 'drug-data',
-            title: 'FDA Drug Reference',
+            title: 'Guia Farmacológico Offline',
             downloadedBytes: parsed.downloadedBytes,
             totalBytes: parsed.totalBytes,
             lastProgressTime: parsed.lastProgressTime,
             status: state,
-            failedReason: job.failedReason || undefined,
+            failedReason: diag ? diag.summaryPt : job.failedReason || undefined,
+            errorCode: diag?.code,
+            errorSummaryPt: diag?.summaryPt,
+            errorDetailsPt: diag?.explanationPt,
+            _fifoIdx: index,
           }
         })
       : []
@@ -141,11 +189,17 @@ export class DownloadService {
     const allDownloads = [...fileDownloads, ...extractDownloads, ...modelDownloads, ...drugDownloads]
     const filtered = allDownloads.filter((job) => !filetype || job.filetype === filetype)
 
-    return filtered.sort((a, b) => {
-      if (a.status === 'failed' && b.status !== 'failed') return 1
-      if (a.status !== 'failed' && b.status === 'failed') return -1
-      return b.progress - a.progress
-    })
+    const statusRank = (s?: string) => (s === 'active' ? 0 : s === 'waiting' || s === 'delayed' ? 1 : 2)
+    return filtered
+      .sort((a, b) => {
+        const rankDiff = statusRank(a.status) - statusRank(b.status)
+        if (rankDiff !== 0) return rankDiff
+        if (a.status === 'active' && b.status === 'active') {
+          return b.progress - a.progress
+        }
+        return a._fifoIdx - b._fifoIdx
+      })
+      .map(({ _fifoIdx: _, ...rest }) => rest)
   }
 
   async removeFailedJob(jobId: string): Promise<void> {
@@ -176,81 +230,291 @@ export class DownloadService {
   }
 
   async retryFailedJob(jobId: string): Promise<{ success: boolean; message: string }> {
-    // Search both the file download queue and the model download queue
-    for (const queueName of [RunDownloadJob.queue, DownloadModelJob.queue]) {
+    // Search file download queue, map extract queue, and model download queue
+    for (const queueName of [
+      RunDownloadJob.queue,
+      RunExtractPmtilesJob.queue,
+      DownloadModelJob.queue,
+    ]) {
       const queue = this.queueService.getQueue(queueName)
       const job = await queue.getJob(jobId)
 
       if (job) {
-        // For Ollama model downloads, re-dispatch with the model name
         if (queueName === DownloadModelJob.queue) {
           const modelName = job.data.modelName
           if (!modelName) {
-            return { success: false, message: 'Cannot retry: model name not found in job data' }
+            return { success: false, message: 'Não foi possível reiniciar: nome do modelo ausente.' }
           }
-          // Remove the old failed job first, then dispatch a fresh one. The
-          // model jobId is a hash of the model name, so dispatching first meant
-          // this remove() targeted the job we had just enqueued under that same
-          // id rather than the old record, deleting the retry we were creating.
-          // Matches the file-download branch below.
           await job.remove().catch(() => {})
           await DownloadModelJob.dispatch({ modelName })
-          return { success: true, message: `Retrying download for model ${modelName}` }
+          await DownloadAuditService.record({
+            jobId,
+            url: modelName,
+            filepath: modelName,
+            title: modelName,
+            filetype: 'model',
+            eventType: 'retried_manual',
+            attempt: 1,
+            maxAttempts: 3,
+            summaryPt: `Download do modelo ${modelName} reenviado para o final da fila pelo operador`,
+          })
+          return { success: true, message: `Modelo ${modelName} enviado para o final da fila.` }
         }
 
-        // For file downloads (zim, map, etc.), re-dispatch with original params
+        if (queueName === RunExtractPmtilesJob.queue) {
+          const extractParams = job.data as RunExtractPmtilesJobParams
+          await repairDownloadDirectory(extractParams.outputFilepath).catch(() => {})
+          await job.remove().catch(() => {})
+          await RunExtractPmtilesJob.dispatch(extractParams)
+          await DownloadAuditService.record({
+            jobId,
+            url: extractParams.sourceUrl,
+            filepath: extractParams.outputFilepath,
+            title: extractParams.title,
+            filetype: 'map',
+            eventType: 'retried_manual',
+            attempt: 1,
+            maxAttempts: 3,
+            summaryPt: 'Extração de mapa validada e reenviada ao final da fila',
+          })
+          return { success: true, message: 'Extração de mapa reenviada ao final da fila.' }
+        }
+
         const params = job.data as RunDownloadJobParams
         if (!params.url || !params.filepath) {
-          return { success: false, message: 'Cannot retry: missing URL or filepath in job data' }
+          return {
+            success: false,
+            message: 'Não foi possível reiniciar: URL ou destino ausentes no registro.',
+          }
         }
 
-        // Remove the old failed job, then dispatch a fresh one
-        await job.remove().catch(() => {})
-        await RunDownloadJob.dispatch(params)
-        return { success: true, message: `Retrying download for ${params.url}` }
+        const diag = diagnoseDownloadError(job.failedReason || params.lastErrorPt || '', params.filepath)
+        const repair = await repairDownloadDirectory(params.filepath).catch(() => ({
+          repaired: false,
+          notePt: undefined,
+        }))
+
+        await DownloadAuditService.record({
+          jobId,
+          url: params.url,
+          filepath: params.filepath,
+          title: params.title,
+          filetype: params.filetype,
+          eventType: 'retried_manual',
+          attempt: 1,
+          maxAttempts: 3,
+          errorCode: diag.code,
+          rawError: diag.rawMessage,
+          summaryPt: `Erro validado e enviado ao final da fila pelo operador (${diag.summaryPt})`,
+          detailsPt: [diag.explanationPt, repair.notePt].filter(Boolean).join(' '),
+        })
+
+        // Remove failed entry cleanly (clearing stale lock if present), then push fresh to FIFO tail
+        await this._removeJobWithLockFallback(job, queue, queueName, jobId)
+        await RunDownloadJob.dispatch({
+          ...params,
+          forceNew: false,
+          timeout: Math.max(Number(params.timeout || 0), 120_000),
+          retryAttempt: 1,
+          maxRetries: 3,
+          retryPolicyVersion: 2,
+          lastErrorCode: diag.code,
+          lastErrorPt: diag.summaryPt,
+          lastErrorDetailsPt: diag.explanationPt,
+          requeuedFromTailAt: new Date().toISOString(),
+          finalCancelledByRetryLimit: false,
+        })
+        return {
+          success: true,
+          message: `Erro validado (${diag.summaryPt}) e download enviado ao final da fila.`,
+        }
       }
     }
 
-    return { success: false, message: 'Failed job not found. It may have already been dismissed.' }
+    return {
+      success: false,
+      message: 'Registro de download com falha não encontrado (já pode ter sido removido).',
+    }
   }
 
-  async resumeAllInterruptedDownloads(): Promise<{ success: boolean; resumedCount: number; message: string }> {
+  /**
+   * Preserves all active/waiting items ahead in the queue, recovers stale-lock active jobs,
+   * promotes legacy delayed backoff jobs, and validates/re-queues failed downloads to the TAIL
+   * of the queue (respecting active + waiting items ahead).
+   */
+  async resumeAllInterruptedDownloads(options?: {
+    includePermanentMaxRetries?: boolean
+    source?: 'boot' | 'manual'
+  }): Promise<{ success: boolean; resumedCount: number; message: string }> {
     const queue = this.queueService.getQueue(RunDownloadJob.queue)
+    const extractQueue = this.queueService.getQueue(RunExtractPmtilesJob.queue)
+    const includeFinal = options?.includePermanentMaxRetries ?? true
+    const source = options?.source ?? 'manual'
     let resumedCount = 0
 
-    // 1. Recover active jobs with stale locks
+    // 1. Recover active jobs left with stale worker locks without discarding .tmp progress
     const activeJobs = await queue.getJobs(['active'])
     for (const job of activeJobs) {
       const params = job.data as RunDownloadJobParams
-      if (params && params.url && params.filepath) {
-        try {
-          const client = await queue.client
-          await client.del(`bull:${RunDownloadJob.queue}:${job.id}:lock`)
-          await job.remove().catch(() => {})
-          await RunDownloadJob.dispatch(params)
-          resumedCount++
-        } catch {}
-      }
+      if (!params?.url || !params?.filepath) continue
+      const jobId = String(job.id ?? RunDownloadJob.getJobId(params.url))
+      try {
+        await repairDownloadDirectory(params.filepath).catch(() => {})
+        await this._removeJobWithLockFallback(job, queue, RunDownloadJob.queue, jobId)
+        await RunDownloadJob.dispatch({
+          ...params,
+          forceNew: false,
+          timeout: Math.max(Number(params.timeout || 0), 120_000),
+          retryAttempt: Number(params.retryAttempt || 1),
+          maxRetries: Number(params.maxRetries || 3),
+          retryPolicyVersion: 2,
+          requeuedFromTailAt: new Date().toISOString(),
+        })
+        await DownloadAuditService.record({
+          jobId,
+          url: params.url,
+          filepath: params.filepath,
+          title: params.title,
+          filetype: params.filetype,
+          eventType: source === 'boot' ? 'boot_recovery' : 'retried_manual',
+          attempt: Number(params.retryAttempt || 1),
+          maxAttempts: 3,
+          summaryPt:
+            source === 'boot'
+              ? 'Download ativo preservado após atualização/reinício do N.O.M.A.D.'
+              : 'Download com trava órfã destravado e retomado',
+          detailsPt: 'Arquivo parcial (.tmp) preservado. Retomando sem reiniciar do zero.',
+        })
+        resumedCount++
+      } catch {}
     }
 
-    // 2. Recover failed jobs
+    // 2. Promote any old delayed backoff jobs so they don't sit hours idle
+    const delayedJobs = await queue.getJobs(['delayed'])
+    for (const job of delayedJobs) {
+      try {
+        await job.promote()
+        resumedCount++
+      } catch {}
+    }
+
+    // 3. Validate failed jobs and append them to the TAIL of the queue (after waiting items)
     const failedJobs = await queue.getJobs(['failed'])
     for (const job of failedJobs) {
       const params = job.data as RunDownloadJobParams
-      if (params && params.url && params.filepath) {
-        try {
-          await job.remove().catch(() => {})
-          await RunDownloadJob.dispatch(params)
-          resumedCount++
-        } catch {}
+      if (!params?.url || !params?.filepath) continue
+      if (
+        !includeFinal &&
+        params.retryPolicyVersion === 2 &&
+        (params.finalCancelledByRetryLimit || Number(params.retryAttempt || 1) >= 3)
+      ) {
+        continue
       }
+
+      const jobId = String(job.id ?? RunDownloadJob.getJobId(params.url))
+      const diag = diagnoseDownloadError(job.failedReason || params.lastErrorPt || '', params.filepath)
+      // On boot/manual global validation, never re-dispatch items explicitly cancelled by operator or missing entitlement
+      if (diag.code === 'USER_CANCELLED' || diag.category === 'auth') continue
+
+      try {
+        const repair = await repairDownloadDirectory(params.filepath).catch((err: any) => ({
+          repaired: false,
+          notePt: `Aviso ao verificar pasta: ${err?.message || err}`,
+        }))
+
+        await DownloadAuditService.record({
+          jobId,
+          url: params.url,
+          filepath: params.filepath,
+          title: params.title,
+          filetype: params.filetype,
+          eventType: source === 'boot' ? 'boot_recovery' : 'retried_manual',
+          attempt: 1,
+          maxAttempts: 3,
+          errorCode: diag.code,
+          rawError: diag.rawMessage,
+          summaryPt:
+            source === 'boot'
+              ? `Pós-atualização: falha validada (${diag.summaryPt}) e enviado ao final da fila`
+              : `Validação manual: falha validada (${diag.summaryPt}) e enviado ao final da fila`,
+          detailsPt: [
+            `Causa identificada: ${diag.explanationPt}`,
+            repair.notePt || 'Diretório de destino validado.',
+            'Respeitando downloads ativos/na fila à frente; nova série de até 3 tentativas iniciada.',
+          ].join(' '),
+        })
+
+        await this._removeJobWithLockFallback(job, queue, RunDownloadJob.queue, jobId)
+        await RunDownloadJob.dispatch({
+          ...params,
+          forceNew: false,
+          timeout: Math.max(Number(params.timeout || 0), 120_000),
+          retryAttempt: 1,
+          maxRetries: 3,
+          retryPolicyVersion: 2,
+          lastErrorCode: diag.code,
+          lastErrorPt: diag.summaryPt,
+          lastErrorDetailsPt: diag.explanationPt,
+          requeuedFromTailAt: new Date().toISOString(),
+          finalCancelledByRetryLimit: false,
+        })
+        resumedCount++
+      } catch {}
+    }
+
+    // 4. Also recover failed map extract jobs if eligible
+    const failedExtracts = await extractQueue.getJobs(['failed'])
+    for (const job of failedExtracts) {
+      const params = job.data as RunExtractPmtilesJobParams
+      if (!params?.sourceUrl || !params?.outputFilepath) continue
+      const diag = diagnoseDownloadError(job.failedReason || '', params.outputFilepath)
+      if (diag.code === 'USER_CANCELLED') continue
+      try {
+        await repairDownloadDirectory(params.outputFilepath).catch(() => {})
+        await this._removeJobWithLockFallback(job, extractQueue, RunExtractPmtilesJob.queue, String(job.id ?? ''))
+        await RunExtractPmtilesJob.dispatch(params)
+        await DownloadAuditService.record({
+          jobId: String(job.id ?? ''),
+          url: params.sourceUrl,
+          filepath: params.outputFilepath,
+          title: params.title,
+          filetype: 'map',
+          eventType: source === 'boot' ? 'boot_recovery' : 'retried_manual',
+          attempt: 1,
+          maxAttempts: 3,
+          errorCode: diag.code,
+          rawError: diag.rawMessage,
+          summaryPt: `Extração de mapa validada (${diag.summaryPt}) e enviada ao final da fila`,
+          detailsPt: diag.explanationPt,
+        })
+        resumedCount++
+      } catch {}
     }
 
     return {
       success: true,
       resumedCount,
-      message: `${resumedCount} download(s) retomado(s) com sucesso.`,
+      message:
+        resumedCount > 0
+          ? `${resumedCount} download(s) validado(s) e enfileirado(s) ao final da fila com sucesso.`
+          : 'Nenhum download interrompido ou com erro pendente para retomada.',
     }
+  }
+
+  async getJobAuditLogs(jobId: string) {
+    return DownloadAuditService.getLogsForJob(jobId)
+  }
+
+  async listGlobalAuditLogs(options?: {
+    limit?: number
+    filter?: 'all' | 'errors' | 'recovery' | 'completed'
+    search?: string
+  }) {
+    return DownloadAuditService.listGlobalLogs(options)
+  }
+
+  async clearAuditLogs(jobId?: string) {
+    return DownloadAuditService.clearLogs(jobId)
   }
 
   async cancelJob(jobId: string): Promise<{ success: boolean; message: string }> {
@@ -355,6 +619,20 @@ export class DownloadService {
 
     await this._pollForTerminalState(job, jobId)
     await this._removeJobWithLockFallback(job, queue, RunDownloadJob.queue, jobId)
+
+    await DownloadAuditService.record({
+      jobId,
+      url: job.data?.url,
+      filepath,
+      title: job.data?.title,
+      filetype: job.data?.filetype,
+      eventType: 'cancelled_user',
+      attempt: Number(job.data?.retryAttempt ?? 1),
+      maxAttempts: Number(job.data?.maxRetries ?? 3),
+      errorCode: 'USER_CANCELLED',
+      summaryPt: 'Download cancelado manualmente pelo operador',
+      detailsPt: 'O download foi cancelado na fila e o arquivo parcial removido do disco.',
+    })
 
     // Delete the partial file from disk
     if (filepath) {

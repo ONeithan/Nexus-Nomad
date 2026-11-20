@@ -1,4 +1,4 @@
-import { lstat, mkdir, open, readdir, readFile, readlink, realpath, rm, stat, unlink } from 'fs/promises'
+import { lstat, mkdir, open, readdir, readFile, readlink, realpath, rename, rm, stat, unlink } from 'fs/promises'
 import path, { join } from 'path'
 import { FileEntry } from '../../types/files.js'
 import { createReadStream } from 'fs'
@@ -103,35 +103,110 @@ export async function listDirectoryContentsRecursive(
 
 export async function ensureDirectoryExists(targetPath: string): Promise<void> {
   try {
-    await stat(targetPath)
-    return
+    const st = await stat(targetPath)
+    if (st.isDirectory()) return
   } catch (error: any) {
-    if (error.code !== 'ENOENT' && error.code !== 'ELOOP') {
+    if (
+      error.code !== 'ENOENT' &&
+      error.code !== 'ELOOP' &&
+      error.code !== 'ENOTDIR'
+    ) {
       throw error
     }
   }
 
-  // Handle dangling symlinks (lstat succeeds while stat fails with ENOENT)
-  const lst = await lstat(targetPath).catch(() => null)
-  if (lst?.isSymbolicLink()) {
-    try {
-      const linkTarget = await readlink(targetPath)
-      const resolvedTarget = path.resolve(path.dirname(targetPath), linkTarget)
-      await mkdir(resolvedTarget, { recursive: true })
-      await stat(targetPath)
-      return
-    } catch {
-      await rm(targetPath, { force: true }).catch(() => {})
-    }
-  }
+  // Walk path segment-by-segment resolving symlinks so Node's recursive mkdir
+  // never chokes with ENOTDIR/ELOOP when e.g. /app/storage/maps -> /mnt/nomad_storage/maps
+  // is a symlink or its destination folder hasn't been created yet.
+  const abs = path.resolve(targetPath)
+  const parsed = path.parse(abs)
+  const parts = abs.slice(parsed.root.length).split(path.sep).filter(Boolean)
+  let current = parsed.root
 
-  try {
-    await mkdir(targetPath, { recursive: true })
-  } catch (mkdirErr: any) {
-    if (mkdirErr?.code !== 'EEXIST') {
-      throw mkdirErr
+  for (const part of parts) {
+    current = path.join(current, part)
+    let lst = await lstat(current).catch(() => null)
+
+    // Follow any symlink chain at this segment and materialize its target dir
+    let hops = 0
+    while (lst?.isSymbolicLink() && hops < 8) {
+      hops++
+      const rawLink = await readlink(current)
+      const resolvedLink = path.resolve(path.dirname(current), rawLink)
+      const targetLst = await lstat(resolvedLink).catch(() => null)
+
+      if (!targetLst) {
+        await mkdir(resolvedLink, { recursive: true })
+        current = resolvedLink
+        lst = await lstat(current).catch(() => null)
+        break
+      }
+
+      if (targetLst.isFile()) {
+        if (targetLst.size === 0) {
+          await rm(resolvedLink, { force: true }).catch(() => {})
+          await mkdir(resolvedLink, { recursive: true })
+        } else {
+          const backupPath = `${resolvedLink}.bak.${Date.now()}`
+          await rename(resolvedLink, backupPath)
+          await mkdir(resolvedLink, { recursive: true })
+        }
+        current = resolvedLink
+        lst = await lstat(current).catch(() => null)
+        break
+      }
+
+      current = resolvedLink
+      lst = targetLst
+    }
+
+    if (!lst) {
+      try {
+        await mkdir(current, { recursive: true })
+      } catch (mkdirErr: any) {
+        if (mkdirErr?.code !== 'EEXIST') {
+          throw mkdirErr
+        }
+      }
+      continue
+    }
+
+    if (lst.isFile()) {
+      // A stray file is sitting where a directory component must exist (causes ENOTDIR).
+      if (lst.size === 0) {
+        await rm(current, { force: true }).catch(() => {})
+      } else {
+        await rename(current, `${current}.bak.${Date.now()}`)
+      }
+      await mkdir(current, { recursive: true })
     }
   }
+}
+
+/**
+ * Validates and repairs the destination directory (including symlinked secondary disks)
+ * for a scheduled download filepath before execution.
+ */
+export async function repairDownloadDirectory(filepath: string): Promise<{
+  repaired: boolean
+  resolvedDir: string
+  notePt?: string
+}> {
+  const dir = path.dirname(path.resolve(filepath))
+  const preStat = await stat(dir).catch((e) => e)
+  const needsRepair = preStat instanceof Error
+
+  await ensureDirectoryExists(dir)
+  const resolvedDir = await realpath(dir).catch(() => dir)
+
+  if (needsRepair) {
+    return {
+      repaired: true,
+      resolvedDir,
+      notePt: `Diretório de destino reparado/validado automaticamente (${dir} → ${resolvedDir}).`,
+    }
+  }
+  return { repaired: false, resolvedDir }
 }
 
 export async function getFile(path: string, returnType: 'buffer'): Promise<Buffer | null>

@@ -7,7 +7,7 @@ import { QueueService } from '#services/queue_service'
 import logger from '@adonisjs/core/services/logger'
 import { DownloadProgressData } from '../../types/downloads.js'
 import { PMTILES_BINARY_PATH, buildPmtilesExtractArgs } from '../../constants/map_regions.js'
-import { deleteFileIfExists } from '../utils/fs.js'
+import { deleteFileIfExists, repairDownloadDirectory } from '../utils/fs.js'
 
 export interface RunExtractPmtilesJobParams {
   sourceUrl: string
@@ -71,6 +71,8 @@ export class RunExtractPmtilesJob {
   async handle(job: Job) {
     const params = job.data as RunExtractPmtilesJobParams
     const { sourceUrl, outputFilepath, regionFilepath, maxzoom, estimatedBytes } = params
+
+    await repairDownloadDirectory(outputFilepath).catch(() => {})
 
     logger.info(
       `[RunExtractPmtilesJob] Starting extract: source=${sourceUrl} region=${regionFilepath} ` +

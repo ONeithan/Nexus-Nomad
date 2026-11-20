@@ -186,7 +186,7 @@ export default function Show({ content, slug }: { content: any; slug?: string })
   return (
     <DocsLayout>
       <Head title={pageTitle} />
-      <div className="xl:pl-80 pt-8 pb-16 px-6 sm:px-8 lg:px-12 w-full">
+      <div className="xl:pl-80 pt-8 pb-16 px-6 sm:px-8 lg:px-12 w-full nomad-page-enter">
         <div className={isAppManualIndex ? 'max-w-6xl mx-auto' : 'max-w-4xl mx-auto'}>
           {/* Top Bar with Navigation & Breadcrumb */}
           <div className="mb-6 pb-4 border-b border-border-subtle flex flex-wrap items-center justify-between gap-4">
@@ -432,7 +432,7 @@ export default function Show({ content, slug }: { content: any; slug?: string })
                   </button>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 nomad-stagger-grid">
                   {filteredHubApps.map((app) => {
                     const creds = getAppDefaultCredentials(app.id)
                     const catLabel = CATEGORY_LABELS[app.category] || app.category
@@ -440,7 +440,7 @@ export default function Show({ content, slug }: { content: any; slug?: string })
                       <Link
                         key={app.id}
                         href={`/docs/app-${app.docsAnchor}`}
-                        className="group bg-surface-primary rounded-xl border border-border-subtle hover:border-desert-orange p-4 flex flex-col justify-between gap-3 shadow-sm transition-all"
+                        className="nomad-interactive-card group bg-surface-primary rounded-xl border border-border-subtle hover:border-desert-orange p-4 flex flex-col justify-between gap-3 shadow-sm transition-all"
                       >
                         <div className="space-y-2.5">
                           {/* Top icon & name */}

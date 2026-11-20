@@ -490,7 +490,7 @@ export class ZimService {
     const result = await RunDownloadJob.dispatch({
       url,
       filepath,
-      timeout: 30000,
+      timeout: 120000,
       allowedMimeTypes: ZIM_MIME_TYPES,
       filetype: 'zim',
       title: metadata?.title,
@@ -674,7 +674,7 @@ export class ZimService {
       await RunDownloadJob.dispatch({
         url: resolved.url,
         filepath,
-        timeout: 30000,
+        timeout: 120000,
         allowedMimeTypes: ZIM_MIME_TYPES,
         filetype: 'zim',
         title: (resource as any).title || undefined,
@@ -1284,7 +1284,7 @@ export class ZimService {
     // Check if already downloading
     const existingJob = await RunDownloadJob.getActiveByUrl(selectedOption.url)
     if (existingJob) {
-      return { success: false, message: 'Download already in progress' }
+      return { success: false, message: 'Já existe um download em andamento para esta opção.' }
     }
 
     // Extract filename from URL
@@ -1319,7 +1319,7 @@ export class ZimService {
     const result = await RunDownloadJob.dispatch({
       url: selectedOption.url,
       filepath,
-      timeout: 30000,
+      timeout: 120000,
       allowedMimeTypes: ZIM_MIME_TYPES,
       filetype: 'zim',
       title: selectedOption.name,
