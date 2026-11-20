@@ -613,11 +613,11 @@ test('CSS animations, hover cascade, reduced-motion, contrast and release metada
     assert.ok(routes.includes(`documented(${snippet}`), `Missing documented() wrapper for ${snippet}`)
   }
 
-  // 8) Triple version sync to v1.0.39 across workflow and boot gate
-  assert.match(workflow, /# Build release trigger: v1\.0\.39/)
-  assert.match(workflow, /default: '1\.0\.39-nexus'/)
-  assert.match(workflow, /inputs\.version \|\| '1\.0\.39-nexus'/)
-  assert.match(bootGate, /:\s*'v1\.0\.39'/)
+  // 8) Triple version sync to v1.0.40 across workflow and boot gate
+  assert.match(workflow, /# Build release trigger: v1\.0\.40/)
+  assert.match(workflow, /default: '1\.0\.40-nexus'/)
+  assert.match(workflow, /inputs\.version \|\| '1\.0\.40-nexus'/)
+  assert.match(bootGate, /:\s*'v1\.0\.40'/)
 
   // 9) Bulk install & Portainer hardening checks (real sequential wait + port collision resolution + catalog port uniqueness + live progress polling)
   const [bulkModal, supplyDepot, portainerSvc, seeder, systemSvc] = await Promise.all([
@@ -739,9 +739,11 @@ test('stack blueprints, starter configs, multi-port and 8080 container port fixe
     const req = createRequire(import.meta.url)
     const yamlLib = req('js-yaml')
     const parsed = yamlLib.load(
-      `services:\n  ${sName}:\n    image: test:latest\n${bp.dependsOnYaml || ''}    ports:\n      - "8510:3000"\n    volumes:\n      - nomad-${sName}-data:/data\n    environment:\n      - "TZ=America/Sao_Paulo"\n\n${yamlStr}\n\nvolumes:\n${['nomad-' + sName + '-data', ...bp.sidecarVolumeNames(sName)].map((v) => `  ${v}:\n    name: ${v}`).join('\n')}\n`
+      `services:\n  ${sName}:\n    image: test:latest\n${bp.dependsOnYaml || ''}    ports:\n      - "8510:3000"\n    volumes:\n      - nomad-${sName}-data:/data\n    environment:\n      - "TZ=America/Sao_Paulo"\n\n${yamlStr}\n\nvolumes:\n${['nomad-' + sName + '-data', ...bp.sidecarVolumeNames(sName)].map((v) => `  ${v}:\n    name: ${v}`).join('\n')}\n\nnetworks:\n  default:\n    name: nomad-shared-net\n    external: true\n`
     )
     assert.ok(parsed?.services?.[sName], `Parsed YAML missing main service for ${sName}`)
+    assert.equal(parsed?.networks?.default?.name, 'nomad-shared-net')
+    assert.equal(parsed?.networks?.default?.external, true)
   }
 
   for (const cfgApp of ['nomad_blocky', 'nomad_headscale', 'nomad_frigate', 'nomad_weewx']) {
@@ -749,19 +751,37 @@ test('stack blueprints, starter configs, multi-port and 8080 container port fixe
     assert.ok(cfg && cfg.content.trim().length > 10, `Missing starter config for ${cfgApp}`)
   }
 
-  // Verify fixed container ports, Orthanc jodogne replacement, 3x pull retry, 304 ignore, and animation onAnimationEnd
+  // Verify single-service blueprints solving all 13 batch install failures
+  const invBp = bpMod.getStackBlueprint('nomad_inventree')
+  assert.ok(invBp?.composeEntrypointOverride?.join(' ').includes('invoke migrate'))
+  assert.doesNotMatch(invBp!.composeEntrypointOverride!.join(' '), /\$/)
+  assert.equal(invBp?.initUidGid, '1000:1000')
+  assert.ok(bpMod.getStackBlueprint('nomad_woodpecker')?.extraEnv('192.168.1.10', '8880').includes('WOODPECKER_GITHUB=true'))
+  assert.ok(bpMod.getStackBlueprint('nomad_vikunja')?.extraEnv('192.168.1.10', '8950').includes('VIKUNJA_SERVICE_PUBLICURL=http://192.168.1.10:8950/'))
+  assert.ok(bpMod.getStackBlueprint('nomad_netalertx')?.extraEnv('192.168.1.10', '8610').includes('PORT=8610'))
+  assert.equal(bpMod.getStackBlueprint('nomad_weewx')?.initUidGid, '1000:1000')
+
+  // Verify fixed container ports, Orthanc jodogne replacement, 3x pull retry, 304 ignore, shared bridge net, fallback entrypoint, and animation onAnimationEnd
   const homeTsx = await readFile(new URL('../../inertia/pages/home.tsx', import.meta.url), 'utf8')
   assert.match(homeTsx, /onAnimationEnd=\{\(e\) =>/)
   assert.match(homeTsx, /advanceDiskPhase/)
   assert.match(seeder, /BLOCKY_CONFIG_FILE=\/app\/config\/config\.yml/)
   assert.match(seeder, /jbtronics\/part-db1:latest/)
   assert.match(seeder, /jodogne\/orthanc-plugins:latest/)
+  assert.match(seeder, /NetworkMode:\s*'host'/)
+  assert.match(seeder, /ADMIN_PASSWORD=nomad/)
+  assert.match(seeder, /gui --addr=0\.0\.0\.0:5572 --user=admin --pass=nomad --no-open-browser/)
   assert.doesNotMatch(seeder.slice(0, seeder.indexOf('DEFUNCT_CONTAINER_IMAGES')), /mhubig\/partkeepr:latest/)
   assert.doesNotMatch(seeder.slice(0, seeder.indexOf('DEFUNCT_CONTAINER_IMAGES')), /orthancteam\/orthanc:latest/)
   assert.match(portainerSvc, /hasMultiServiceSidecars/)
   assert.match(portainerSvc, /primaryBindingKey/)
+  assert.match(portainerSvc, /SHARED_NOMAD_NETWORK/)
+  assert.match(portainerSvc, /ensureSharedNomadNetwork/)
+  assert.match(portainerSvc, /ensureStorageOwnershipAndStarterConfig/)
+  assert.match(portainerSvc, /composeEntrypointOverride/)
+  assert.match(portainerSvc, /port is already allocated/)
   assert.match(portainerSvc, /maxPullAttempts = 3/)
   assert.match(portainerSvc, /httpStatus === 304/)
   assert.match(portainerSvc, /createdStack\?\.Status === 4/)
-  assert.match(portainerSvc, /iAttempt < 11/)
+  assert.match(portainerSvc, /iAttempt < 24/)
 })

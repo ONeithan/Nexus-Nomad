@@ -75,6 +75,7 @@ export class PortainerService {
   private static readonly DEFAULT_PORTAINER_URL = ''
   private static readonly DEFAULT_TARGET_HOST = '127.0.0.1'
   private static readonly DEFAULT_ENDPOINT_ID = 1
+  private static readonly SHARED_NOMAD_NETWORK = 'nomad-shared-net'
 
   // Safe ports mapping on remote host (avoiding TCP 8080 conflicts)
   private static readonly PORT_REMAPS: Record<string, string> = {
@@ -1015,10 +1016,15 @@ export class PortainerService {
     cmd: string | null = null,
     hostStorageRoot: string | null = null,
     extraEnv: string[] = [],
-    hostIp = '127.0.0.1'
+    hostIp = '127.0.0.1',
+    sharedNetworkName: string | null = null
   ): string {
     const isKiwix = serviceName.toLowerCase().includes('kiwix')
     const bp = getStackBlueprint(serviceName)
+    const isHostNetwork = config?.HostConfig?.NetworkMode === 'host'
+    const capAddList: string[] = Array.isArray(config?.HostConfig?.CapAdd)
+      ? config.HostConfig.CapAdd.filter((c: any) => typeof c === 'string' && c.trim().length > 0)
+      : []
 
     // 1. Build Ports List accurately (preserving protocol /udp vs /tcp and matching primary UI port)
     const portsList: string[] = []
@@ -1108,11 +1114,12 @@ export class PortainerService {
     }
 
     // 3. Environment Variables (deduplicated by key, avoiding LC_ALL=pt_BR.UTF-8 locale warnings)
+    // Order: catalog defaults -> prepareServicePreinstall static defaults -> stack blueprint dynamic hostIp/hostPort -> TZ
     const blueprintEnv = bp ? bp.extraEnv(hostIp, primaryHostPort) : []
     const rawEnvVars = [
       ...(config?.Env || []),
-      ...blueprintEnv,
       ...extraEnv,
+      ...blueprintEnv,
       'TZ=America/Sao_Paulo',
     ]
     const envMap = new Map<string, string>()
@@ -1125,8 +1132,16 @@ export class PortainerService {
     const envVars = Array.from(envMap.values())
 
     const portsSection =
-      portsList.length > 0
+      !isHostNetwork && portsList.length > 0
         ? `    ports:\n${portsList.map((p) => `      - ${p}`).join('\n')}\n`
+        : ''
+    const networkModeLine = isHostNetwork ? `    network_mode: host\n` : ''
+    const extraHostsBlock = isHostNetwork
+      ? ''
+      : `    extra_hosts:\n      - "host.docker.internal:host-gateway"\n`
+    const capAddBlock =
+      capAddList.length > 0
+        ? `    cap_add:\n${capAddList.map((c) => `      - ${c}`).join('\n')}\n`
         : ''
     const volumesBlock = volumeMounts.map((v) => `      ${v}`).join('\n')
     const envBlock = envVars.map((e) => `      - ${JSON.stringify(e)}`).join('\n')
@@ -1151,6 +1166,7 @@ export class PortainerService {
       lowerSvcName.includes('calibre') ||
       lowerSvcName.includes('vaultwarden') ||
       lowerSvcName.includes('meshcore') ||
+      Boolean(bp?.initUidGid) ||
       Boolean(getStarterConfigFile(serviceName, hostIp, primaryHostPort))
 
     const allVolumeDefs: string[] = Array.from(declaredNamedVolumes).map((v) =>
@@ -1167,6 +1183,10 @@ export class PortainerService {
 
     const sidecarsBlock = bp ? bp.sidecarServicesYaml(serviceName, hostIp, primaryHostPort) : ''
     const sidecarsSection = sidecarsBlock ? `\n${sidecarsBlock}\n` : ''
+    const topLevelNetworksBlock =
+      sharedNetworkName && !isHostNetwork
+        ? `\nnetworks:\n  default:\n    name: ${sharedNetworkName}\n    external: true\n`
+        : ''
 
     const gpuBlock = this.pendingGpuServices.has(serviceName)
       ? `    deploy:
@@ -1184,13 +1204,11 @@ export class PortainerService {
     image: ${image}
     container_name: nomad-${serviceName}
     restart: unless-stopped
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-${gpuBlock}${userLine}${shmLine}${entrypointLine}${dependsOnLine}${portsSection}    volumes:
+${networkModeLine}${extraHostsBlock}${capAddBlock}${gpuBlock}${userLine}${shmLine}${entrypointLine}${dependsOnLine}${portsSection}    volumes:
 ${volumesBlock}
     environment:
 ${envBlock}
-${cmdBlock}${sidecarsSection}${topLevelVolumesBlock}`
+${cmdBlock}${sidecarsSection}${topLevelVolumesBlock}${topLevelNetworksBlock}`
   }
 
   /**
@@ -1377,7 +1395,7 @@ ${cmdBlock}${sidecarsSection}${topLevelVolumesBlock}`
         const networks: any[] = Array.isArray(netResp?.data) ? netResp.data : []
         for (const n of networks) {
           const nName = String(n?.Name || '').toLowerCase()
-          if (targetNets.has(nName) && n?.Id) {
+          if (nName !== PortainerService.SHARED_NOMAD_NETWORK && targetNets.has(nName) && n?.Id) {
             await client
               .delete(`/api/endpoints/${epId}/docker/networks/${n.Id}`, { timeout: 8000 })
               .catch(() => {})
@@ -1399,6 +1417,110 @@ ${cmdBlock}${sidecarsSection}${topLevelVolumesBlock}`
     } catch (err: any) {
       logger.warn(`[PortainerService] Cleanup warning for ${serviceName}: ${err?.message}`)
     }
+  }
+
+  /**
+   * Ensure a shared bridge network (`nomad-shared-net`) exists on the Portainer Docker endpoint.
+   * Reusing a single bridge network across all NOMAD Compose stacks prevents Docker's predefined
+   * address pools (~31 networks limit) from exhausting when deploying dozens of apps.
+   * If default predefined pools are already exhausted on the host, creates `nomad-shared-net`
+   * using a non-overlapping RFC1918 `/22` IPAM subnet directly.
+   */
+  private async ensureSharedNomadNetwork(
+    client: AxiosInstance,
+    endpointId: number
+  ): Promise<string | null> {
+    const netName = PortainerService.SHARED_NOMAD_NETWORK
+    try {
+      const listResp = await client
+        .get(`/api/endpoints/${endpointId}/docker/networks`, { timeout: 10000 })
+        .catch(() => null)
+      let networks: any[] = Array.isArray(listResp?.data) ? listResp.data : []
+      if (networks.some((n) => String(n?.Name || '').toLowerCase() === netName)) {
+        return netName
+      }
+
+      // Safely reclaim idle 0-container orphan `nomad-*_default` stack networks left by failed runs
+      for (const n of networks) {
+        const name = String(n?.Name || '')
+        const attachedCount = n?.Containers ? Object.keys(n.Containers).length : 0
+        if (attachedCount === 0 && /^nomad-.*_default$/i.test(name) && n?.Id) {
+          await client
+            .delete(`/api/endpoints/${endpointId}/docker/networks/${n.Id}`, { timeout: 6000 })
+            .catch(() => {})
+        }
+      }
+
+      // 1st try: standard Docker auto-IPAM
+      try {
+        await client.post(
+          `/api/endpoints/${endpointId}/docker/networks/create`,
+          { Name: netName, Driver: 'bridge', CheckDuplicate: true },
+          { timeout: 10000 }
+        )
+        return netName
+      } catch {
+        // Re-check if concurrent or duplicate
+        const recheck = await client
+          .get(`/api/endpoints/${endpointId}/docker/networks`, { timeout: 8000 })
+          .catch(() => null)
+        networks = Array.isArray(recheck?.data) ? recheck.data : networks
+        if (networks.some((n) => String(n?.Name || '').toLowerCase() === netName)) {
+          return netName
+        }
+      }
+
+      // 2nd try: explicit RFC1918 /22 CIDR bypassing exhausted predefined address pools
+      const usedPrefixes = new Set<string>()
+      for (const n of networks) {
+        const cfgs: any[] = Array.isArray(n?.IPAM?.Config) ? n.IPAM.Config : []
+        for (const cfg of cfgs) {
+          const subnet = String(cfg?.Subnet || '')
+          const match = subnet.match(/^(\d+\.\d+)\./)
+          if (match) usedPrefixes.add(match[1])
+        }
+      }
+
+      const candidateRanges: Array<{ subnet: string; gateway: string; prefix: string }> = []
+      for (let second = 220; second <= 252; second += 4) {
+        candidateRanges.push({
+          subnet: `10.${second}.0.0/22`,
+          gateway: `10.${second}.0.1`,
+          prefix: `10.${second}`,
+        })
+      }
+      candidateRanges.push({
+        subnet: '172.30.224.0/22',
+        gateway: '172.30.224.1',
+        prefix: '172.30',
+      })
+
+      for (const candidate of candidateRanges) {
+        if (usedPrefixes.has(candidate.prefix)) continue
+        try {
+          await client.post(
+            `/api/endpoints/${endpointId}/docker/networks/create`,
+            {
+              Name: netName,
+              Driver: 'bridge',
+              CheckDuplicate: true,
+              IPAM: {
+                Driver: 'default',
+                Config: [{ Subnet: candidate.subnet, Gateway: candidate.gateway }],
+              },
+            },
+            { timeout: 10000 }
+          )
+          logger.info(`[PortainerService] Created shared network ${netName} (${candidate.subnet}) on endpoint ${endpointId}`)
+          return netName
+        } catch {
+          // Try next non-overlapping candidate range
+        }
+      }
+    } catch (err: any) {
+      logger.warn(`[PortainerService] Could not create ${netName}: ${err?.message}`)
+    }
+    return null
   }
 
   /**
@@ -1439,8 +1561,8 @@ ${cmdBlock}${sidecarsSection}${topLevelVolumesBlock}`
     serviceName: string,
     config: any,
     serviceImage: string,
-    hostIp = '127.0.0.1',
-    hostPort = '8080'
+    _hostIp = '127.0.0.1',
+    _hostPort = '8080'
   ): Promise<void> {
     const rawBinds: string[] = config?.HostConfig?.Binds || []
     const volumeDefs: Array<{ volName: string; targetPath: string }> = []
@@ -1476,47 +1598,12 @@ ${cmdBlock}${sidecarsSection}${topLevelVolumesBlock}`
     const isCalibre = lowerName.includes('calibre')
     const isVaultwarden = lowerName.includes('vaultwarden')
     const isMeshcore = lowerName.includes('meshcore')
-    const starterCfg = getStarterConfigFile(serviceName, hostIp, hostPort)
 
-    if (!isKiwix && !isCalibre && !isVaultwarden && !isMeshcore && !starterCfg) return
+    if (!isKiwix && !isCalibre && !isVaultwarden && !isMeshcore) return
 
     const primaryVol = volumeDefs[0]?.volName || `nomad-${serviceName}-data`
     const primaryTarget = volumeDefs[0]?.targetPath || '/data'
     const initContName = `nomad-tmp-init-${Date.now()}`
-
-    if (starterCfg && !isKiwix && !isCalibre && !isVaultwarden && !isMeshcore) {
-      try {
-        await client
-          .post(`/api/endpoints/${endpointId}/docker/images/create?fromImage=alpine%3Alatest`, null, {
-            timeout: 60000,
-          })
-          .catch(() => {})
-        const b64 = Buffer.from(starterCfg.content, 'utf8').toString('base64')
-        const targetFile = `${starterCfg.volumeTargetDir}/${starterCfg.filename}`
-        const cmd = `mkdir -p "${starterCfg.volumeTargetDir}" && [ -s "${targetFile}" ] || echo '${b64}' | base64 -d > "${targetFile}"; chmod 666 "${targetFile}" 2>/dev/null || true`
-        const cResp = await client.post(
-          `/api/endpoints/${endpointId}/docker/containers/create?name=${initContName}`,
-          {
-            Image: 'alpine:latest',
-            Cmd: ['sh', '-c', cmd],
-            HostConfig: { Binds: [`${primaryVol}:${starterCfg.volumeTargetDir}`] },
-          },
-          { timeout: 15000 }
-        )
-        if (cResp.data?.Id) {
-          await client.post(`/api/endpoints/${endpointId}/docker/containers/${cResp.data.Id}/start`, null, { timeout: 15000 })
-          for (let i = 0; i < 10; i++) {
-            await new Promise((r) => setTimeout(r, 800))
-            const insp = await client.get(`/api/endpoints/${endpointId}/docker/containers/${cResp.data.Id}/json`, { timeout: 8000 }).catch(() => null)
-            if (insp?.data?.State?.Running === false) break
-          }
-          await client.delete(`/api/endpoints/${endpointId}/docker/containers/${cResp.data.Id}?force=true`, { timeout: 10000 }).catch(() => {})
-        }
-      } catch (cfgErr: any) {
-        logger.debug(`[PortainerService] Starter config init skipped for ${serviceName}: ${cfgErr?.message}`)
-      }
-      return
-    }
 
     try {
       if (isKiwix) {
@@ -1651,6 +1738,128 @@ ${cmdBlock}${sidecarsSection}${topLevelVolumesBlock}`
       }
     } catch (err: any) {
       logger.debug(`[PortainerService] Remote volume init skipped/failed: ${err?.message}`)
+    }
+  }
+
+  /**
+   * Ensure starter config files (Blocky, Headscale, Frigate, WeeWX) and non-root UID:GID permissions
+   * (e.g. 1000:1000 for WeeWX, Vikunja, InvenTree) are applied inside the mounted volume or host bind
+   * BEFORE container boot — works identically for both shared-host binds and remote named volumes.
+   */
+  private async ensureStorageOwnershipAndStarterConfig(
+    client: AxiosInstance,
+    endpointId: number,
+    serviceName: string,
+    config: any,
+    hostStorageRoot: string | null,
+    hostIp: string,
+    hostPort: string
+  ): Promise<void> {
+    const bp = getStackBlueprint(serviceName)
+    const starterCfg = getStarterConfigFile(serviceName, hostIp, hostPort)
+    const uidGid = bp?.initUidGid
+    if (!starterCfg && !uidGid) return
+
+    const rawBinds: string[] = config?.HostConfig?.Binds || []
+    const { binds: resolvedBinds, usesHostBinds } = this.rewriteBindsForHostStorage(
+      rawBinds,
+      hostStorageRoot
+    )
+
+    const targetBinds: string[] = []
+    const targetDirs: string[] = []
+    if (resolvedBinds.length > 0) {
+      for (const bind of resolvedBinds) {
+        const parts = bind.split(':')
+        const rawTargetPath = parts[1] || '/data'
+        const targetPath =
+          rawTargetPath === '/etc/nginx/conf.d/default.conf' ? '/etc/nginx/conf.d' : rawTargetPath
+        if (usesHostBinds && parts[0]?.startsWith('/')) {
+          targetBinds.push(`${parts[0]}:${targetPath}`)
+        } else {
+          const cleanName =
+            targetPath
+              .replace(/^\//, '')
+              .replace(/[^a-zA-Z0-9_-]/g, '-')
+              .toLowerCase() || 'data'
+          const volName = `nomad-${serviceName}-${cleanName}`
+          await client
+            .post(`/api/endpoints/${endpointId}/docker/volumes/create`, { Name: volName }, { timeout: 10000 })
+            .catch(() => {})
+          targetBinds.push(`${volName}:${targetPath}`)
+        }
+        targetDirs.push(targetPath)
+      }
+    } else {
+      const volName = `nomad-${serviceName}-data`
+      await client
+        .post(`/api/endpoints/${endpointId}/docker/volumes/create`, { Name: volName }, { timeout: 10000 })
+        .catch(() => {})
+      targetBinds.push(`${volName}:${starterCfg?.volumeTargetDir || '/data'}`)
+      targetDirs.push(starterCfg?.volumeTargetDir || '/data')
+    }
+
+    const cmds: string[] = []
+    if (starterCfg) {
+      const b64 = Buffer.from(starterCfg.content, 'utf8').toString('base64')
+      const targetFile = `${starterCfg.volumeTargetDir}/${starterCfg.filename}`
+      cmds.push(
+        `mkdir -p "${starterCfg.volumeTargetDir}" && [ -s "${targetFile}" ] || echo '${b64}' | base64 -d > "${targetFile}"; chmod 666 "${targetFile}" 2>/dev/null || true`
+      )
+    }
+    if (uidGid) {
+      for (const dir of targetDirs) {
+        cmds.push(`mkdir -p "${dir}" && chown -R ${uidGid} "${dir}" && chmod -R u+rwX,g+rwX "${dir}" 2>/dev/null || true`)
+      }
+    }
+
+    try {
+      const alpineCached = await client
+        .get(`/api/endpoints/${endpointId}/docker/images/${encodeURIComponent('alpine:latest')}/json`, {
+          timeout: 8000,
+        })
+        .then(() => true)
+        .catch(() => false)
+      if (!alpineCached) {
+        await client
+          .post(`/api/endpoints/${endpointId}/docker/images/create?fromImage=alpine%3Alatest`, null, {
+            timeout: 60000,
+          })
+          .catch(() => {})
+      }
+      const initContName = `nomad-tmp-prep-${Date.now()}`
+      const cResp = await client.post(
+        `/api/endpoints/${endpointId}/docker/containers/create?name=${initContName}`,
+        {
+          Image: 'alpine:latest',
+          Cmd: ['sh', '-c', cmds.join('; ')],
+          HostConfig: { Binds: targetBinds },
+        },
+        { timeout: 15000 }
+      )
+      if (cResp.data?.Id) {
+        await client
+          .post(`/api/endpoints/${endpointId}/docker/containers/${cResp.data.Id}/start`, null, {
+            timeout: 15000,
+          })
+          .catch(() => {})
+        for (let i = 0; i < 12; i++) {
+          await new Promise((r) => setTimeout(r, 700))
+          const insp = await client
+            .get(`/api/endpoints/${endpointId}/docker/containers/${cResp.data.Id}/json`, {
+              timeout: 8000,
+            })
+            .catch(() => null)
+          if (insp?.data?.State?.Running === false) break
+        }
+        await client
+          .delete(`/api/endpoints/${endpointId}/docker/containers/${cResp.data.Id}?force=true`, {
+            timeout: 10000,
+          })
+          .catch(() => {})
+      }
+    } catch (prepErr: any) {
+      logger.debug(`[PortainerService] Storage prep warning for ${serviceName}: ${prepErr?.message}`)
     }
   }
 
@@ -1791,6 +2000,7 @@ ${cmdBlock}${sidecarsSection}${topLevelVolumesBlock}`
     let targetUrl = `${scheme}://${hostIp}:${hostPort}`
     const stackName = `nomad-${serviceName}`
     const extraEnv = preinstall?.extraEnv || []
+    const occupiedPorts = new Set<number>()
     let createdOrModifiedContainer = false
 
     try {
@@ -1863,7 +2073,6 @@ ${cmdBlock}${sidecarsSection}${topLevelVolumesBlock}`
           }
 
           const requestedPortNum = Number(hostPort)
-          const occupiedPorts = new Set<number>()
           let selfNamesMatches = (c: { name: string; projectName: string }) => {
             const lowerN = c.name.toLowerCase()
             const lowerP = c.projectName.toLowerCase()
@@ -1965,17 +2174,17 @@ ${cmdBlock}${sidecarsSection}${topLevelVolumesBlock}`
         }
       }
 
-      const rawEnvVars = [
-        ...(config?.Env || []),
-        ...extraEnv,
-        'TZ=America/Sao_Paulo',
-      ]
-      const envMap = new Map<string, string>()
-      for (const item of rawEnvVars) {
-        const idx = item.indexOf('=')
-        if (idx > 0) envMap.set(item.slice(0, idx), item)
+      const bp = getStackBlueprint(serviceName)
+      const resolveFallbackEnvVars = (targetPort: string): string[] => {
+        const bpEnv = bp ? bp.extraEnv(hostIp, targetPort) : []
+        const raw = [...(config?.Env || []), ...extraEnv, ...bpEnv, 'TZ=America/Sao_Paulo']
+        const map = new Map<string, string>()
+        for (const item of raw) {
+          const idx = item.indexOf('=')
+          if (idx > 0) map.set(item.slice(0, idx), item)
+        }
+        return Array.from(map.values())
       }
-      const envVars = Array.from(envMap.values())
 
       // 4. Pull Docker image on Portainer endpoint first so stack creation & volume init use it immediately
       this.broadcast(
@@ -2054,11 +2263,12 @@ ${cmdBlock}${sidecarsSection}${topLevelVolumesBlock}`
         }
       }
 
-      // 5. Detect if Portainer shares the same Docker host as NOMAD; if remote-only, seed named volumes
+      // 5. Detect if Portainer shares the same Docker host as NOMAD; if remote-only, seed named volumes,
+      // and ensure starter configs / non-root UID:GID permissions + shared Docker bridge network exist before deploy.
       this.broadcast(
         serviceName,
         'preinstall',
-        `[3/5] Preparando armazenamento e biblioteca de ${service.friendly_name || serviceName}...`
+        `[3/5] Preparando armazenamento, permissões e biblioteca de ${service.friendly_name || serviceName}...`
       )
       const endpointStorageRoot = await this.detectEndpointHostStorageRoot(
         client,
@@ -2078,6 +2288,18 @@ ${cmdBlock}${sidecarsSection}${topLevelVolumesBlock}`
         )
       }
 
+      await this.ensureStorageOwnershipAndStarterConfig(
+        client,
+        endpointId,
+        serviceName,
+        config,
+        endpointStorageRoot,
+        hostIp,
+        hostPort
+      )
+
+      const sharedNetworkName = await this.ensureSharedNomadNetwork(client, endpointId)
+
       // 6. Build single- or multi-service Docker Compose configuration
       const composeContent = this.buildComposeFile(
         serviceName,
@@ -2087,7 +2309,8 @@ ${cmdBlock}${sidecarsSection}${topLevelVolumesBlock}`
         service.container_command,
         endpointStorageRoot,
         extraEnv,
-        hostIp
+        hostIp,
+        sharedNetworkName
       )
       const isMultiService = hasMultiServiceSidecars(serviceName)
 
@@ -2240,56 +2463,159 @@ ${cmdBlock}${sidecarsSection}${topLevelVolumesBlock}`
             : [`nomad-${serviceName}-data:/data`]
 
         const isKiwix = serviceName.toLowerCase().includes('kiwix')
+        const isHostNetwork = config?.HostConfig?.NetworkMode === 'host'
+        const capAddList: string[] = Array.isArray(config?.HostConfig?.CapAdd)
+          ? config.HostConfig.CapAdd.filter((c: any) => typeof c === 'string' && c.trim().length > 0)
+          : []
         const cmdArray = isKiwix
           ? ['--library', '/data/kiwix-library.xml', '--monitorLibrary', '--address=all']
           : service.container_command
             ? service.container_command.trim().split(/\s+/)
             : undefined
 
-        const containerPayload: any = {
-          Image: service.container_image,
-          name: stackName,
-          Env: envVars,
-          ...(config?.User ? { User: config.User } : {}),
-          ...(cmdArray ? { Cmd: cmdArray } : {}),
-          ExposedPorts: {
-            [`${internalPort}/tcp`]: {},
-          },
-          HostConfig: {
-            RestartPolicy: { Name: 'unless-stopped' },
-            PortBindings: {
-              [`${internalPort}/tcp`]: [{ HostPort: String(hostPort) }],
-            },
-            Binds: defaultBinds,
-            ExtraHosts: ['host.docker.internal:host-gateway'],
-            ...(this.pendingGpuServices.has(serviceName)
+        const buildFallbackContainerPayload = (targetHostPort: string) => {
+          const portBindingsConfig = config?.HostConfig?.PortBindings || {}
+          const bindingEntries = Object.entries(portBindingsConfig)
+          const exposedPortsObj: Record<string, any> = {}
+          const portBindingsObj: Record<string, any> = {}
+
+          if (!isHostNetwork) {
+            if (bindingEntries.length > 0) {
+              const exactIdx = bindingEntries.findIndex(
+                ([, arr]) => String((arr as any)?.[0]?.HostPort || '') === String(targetHostPort)
+              )
+              const tcpIdx = bindingEntries.findIndex(([k]) => !k.endsWith('/udp'))
+              const primaryIdx = exactIdx >= 0 ? exactIdx : tcpIdx >= 0 ? tcpIdx : 0
+
+              bindingEntries.forEach(([key, arr], idx) => {
+                const normKey = key.includes('/') ? key : `${key}/tcp`
+                exposedPortsObj[normKey] = {}
+                const boundHostPort =
+                  idx === primaryIdx
+                    ? String(targetHostPort)
+                    : String((arr as any)?.[0]?.HostPort || normKey.split('/')[0])
+                portBindingsObj[normKey] = [{ HostPort: boundHostPort }]
+              })
+            } else {
+              exposedPortsObj[`${internalPort}/tcp`] = {}
+              portBindingsObj[`${internalPort}/tcp`] = [{ HostPort: String(targetHostPort) }]
+            }
+          }
+
+          let shmBytes: number | undefined
+          if (bp?.shmSize) {
+            const m = bp.shmSize.match(/^(\d+)\s*(m|mb|g|gb)$/i)
+            if (m) {
+              const val = Number(m[1])
+              shmBytes = /g/i.test(m[2]) ? val * 1024 * 1024 * 1024 : val * 1024 * 1024
+            }
+          }
+
+          return {
+            Image: service.container_image,
+            name: stackName,
+            Env: resolveFallbackEnvVars(targetHostPort),
+            ...(config?.User ? { User: config.User } : {}),
+            ...(bp?.composeEntrypointOverride ? { Entrypoint: bp.composeEntrypointOverride } : {}),
+            ...(cmdArray ? { Cmd: cmdArray } : {}),
+            ...(!isHostNetwork ? { ExposedPorts: exposedPortsObj } : {}),
+            ...(sharedNetworkName && !isHostNetwork
               ? {
-                  DeviceRequests: [
-                    {
-                      Driver: 'nvidia',
-                      Count: -1,
-                      Capabilities: [['gpu']],
+                  NetworkingConfig: {
+                    EndpointsConfig: {
+                      [sharedNetworkName]: {},
                     },
-                  ],
+                  },
                 }
               : {}),
-          },
+            HostConfig: {
+              RestartPolicy: { Name: 'unless-stopped' },
+              ...(isHostNetwork ? { NetworkMode: 'host' } : { PortBindings: portBindingsObj, ExtraHosts: ['host.docker.internal:host-gateway'] }),
+              ...(capAddList.length > 0 ? { CapAdd: capAddList } : {}),
+              ...(shmBytes ? { ShmSize: shmBytes } : {}),
+              Binds: defaultBinds,
+              ...(this.pendingGpuServices.has(serviceName)
+                ? {
+                    DeviceRequests: [
+                      {
+                        Driver: 'nvidia',
+                        Count: -1,
+                        Capabilities: [['gpu']],
+                      },
+                    ],
+                  }
+                : {}),
+            },
+          }
         }
 
-        const createResp = await client.post(
-          `/api/endpoints/${endpointId}/docker/containers/create?name=${stackName}`,
-          containerPayload,
-          { timeout: 30000 }
-        )
-        const containerId = createResp.data?.Id
+        const extractApiErrMsg = (err: any): string =>
+          String(
+            err?.response?.data?.message ||
+              err?.response?.data?.err ||
+              err?.response?.data?.details ||
+              err?.message ||
+              'Erro interno na API Docker do Portainer'
+          ).trim()
 
-        if (containerId) {
-          this.broadcast(serviceName, 'starting', `Iniciando contêiner no servidor Portainer...`)
-          await client.post(
-            `/api/endpoints/${endpointId}/docker/containers/${containerId}/start`,
-            null,
-            { timeout: 30000 }
-          )
+        let currentPort = hostPort
+        const maxPortHops = 5
+        for (let hop = 0; hop < maxPortHops; hop++) {
+          const payload = buildFallbackContainerPayload(currentPort)
+          let containerId = ''
+          try {
+            const createResp = await client.post(
+              `/api/endpoints/${endpointId}/docker/containers/create?name=${stackName}`,
+              payload,
+              { timeout: 30000 }
+            )
+            containerId = createResp.data?.Id || ''
+          } catch (createErr: any) {
+            throw new Error(extractApiErrMsg(createErr))
+          }
+
+          if (!containerId) break
+
+          try {
+            this.broadcast(serviceName, 'starting', `Iniciando contêiner no servidor Portainer...`)
+            await client.post(
+              `/api/endpoints/${endpointId}/docker/containers/${containerId}/start`,
+              null,
+              { timeout: 30000 }
+            )
+            break
+          } catch (startErr: any) {
+            const startMsg = extractApiErrMsg(startErr)
+            const lowerStart = startMsg.toLowerCase()
+            const isPortBindErr =
+              lowerStart.includes('port is already allocated') ||
+              lowerStart.includes('address already in use')
+
+            if (isPortBindErr && !isHostNetwork && hop < maxPortHops - 1) {
+              await client
+                .delete(`/api/endpoints/${endpointId}/docker/containers/${containerId}?force=true`, {
+                  timeout: 10000,
+                })
+                .catch(() => {})
+              let nextP = (Number(currentPort) || 8500) + 1
+              while (occupiedPorts.has(nextP) && nextP < (Number(currentPort) || 8500) + 50) {
+                nextP++
+              }
+              occupiedPorts.add(Number(currentPort))
+              logger.warn(
+                `[PortainerService] Host port ${currentPort} already bound for ${serviceName}. Retrying on ${nextP}...`
+              )
+              currentPort = String(nextP)
+              hostPort = currentPort
+              targetUrl = `${scheme}://${hostIp}:${hostPort}`
+              if (serviceName !== 'nomad_ollama') {
+                service.ui_location = scheme === 'https' ? `https:${hostPort}` : hostPort
+              }
+              continue
+            }
+
+            throw new Error(startMsg)
+          }
         }
       }
 
@@ -2354,7 +2680,7 @@ ${cmdBlock}${sidecarsSection}${topLevelVolumesBlock}`
       }
 
       let inspectCheck: any = null
-      for (let iAttempt = 0; iAttempt < 12; iAttempt++) {
+      for (let iAttempt = 0; iAttempt < 25; iAttempt++) {
         inspectCheck = await client
           .get(`/api/endpoints/${endpointId}/docker/containers/${runningCont.Id}/json`, {
             timeout: 20000,
@@ -2362,8 +2688,8 @@ ${cmdBlock}${sidecarsSection}${topLevelVolumesBlock}`
           .catch(() => null)
         const healthStatus = inspectCheck?.data?.State?.Health?.Status
         if (inspectCheck?.data?.State) {
-          // If the container defines a Docker HEALTHCHECK and is still 'starting', wait up to ~36s before evaluating
-          if (healthStatus === 'starting' && inspectCheck.data.State.Running && iAttempt < 11) {
+          // If the container defines a Docker HEALTHCHECK and is still 'starting', wait up to ~75s before evaluating
+          if (healthStatus === 'starting' && inspectCheck.data.State.Running && iAttempt < 24) {
             await new Promise((r) => setTimeout(r, 3000))
             continue
           }
@@ -2675,6 +3001,8 @@ ${cmdBlock}${sidecarsSection}${topLevelVolumesBlock}`
       } catch {}
 
       const endpointStorageRoot = await this.detectEndpointHostStorageRoot(client, endpointId)
+      const sharedNetworkName = await this.ensureSharedNomadNetwork(client, endpointId)
+      const hostIp = (await this.getTargetHost()) || PortainerService.DEFAULT_TARGET_HOST
 
       // 2. Build updated compose definition
       const composeContent = this.buildComposeFile(
@@ -2683,7 +3011,10 @@ ${cmdBlock}${sidecarsSection}${topLevelVolumesBlock}`
         hostPort,
         config,
         service.container_command,
-        endpointStorageRoot
+        endpointStorageRoot,
+        [],
+        hostIp,
+        sharedNetworkName
       )
 
       // 3. Clean up old stack/containers and recreate stack in Portainer

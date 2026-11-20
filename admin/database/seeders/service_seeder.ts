@@ -1319,10 +1319,11 @@ export default class ServiceSeeder extends BaseSeeder {
       container_config: JSON.stringify({
         HostConfig: {
           RestartPolicy: { Name: 'unless-stopped' },
-          PortBindings: { '20211/tcp': [{ HostPort: '8610' }] },
+          NetworkMode: 'host',
+          CapAdd: ['NET_RAW', 'NET_ADMIN', 'NET_BIND_SERVICE', 'CHOWN', 'SETUID', 'SETGID'],
           Binds: [`${ServiceSeeder.NOMAD_STORAGE_ABS_PATH}/netalertx:/data`],
         },
-        ExposedPorts: { '20211/tcp': {} },
+        Env: ['PORT=8610', 'LISTEN_ADDR=0.0.0.0'],
       }),
       ui_location: '8610',
       installed: false,
@@ -2534,6 +2535,7 @@ export default class ServiceSeeder extends BaseSeeder {
           Binds: [`${ServiceSeeder.NOMAD_STORAGE_ABS_PATH}/freepbx:/data`],
         },
         ExposedPorts: { '80/tcp': {} },
+        Env: ['ADMIN_PASSWORD=nomad', 'DISABLE_SIGNATURE_CHECK=true', 'FAIL2BAN_ENABLE=false'],
       }),
       ui_location: '8845',
       installed: false,
@@ -2715,6 +2717,7 @@ export default class ServiceSeeder extends BaseSeeder {
       source_repo: 'https://github.com/woodpecker-ci/woodpecker',
       container_command: null,
       container_config: JSON.stringify({
+        User: '0:0',
         HostConfig: {
           RestartPolicy: { Name: 'unless-stopped' },
           PortBindings: { '8000/tcp': [{ HostPort: '8880' }] },
@@ -2794,7 +2797,7 @@ export default class ServiceSeeder extends BaseSeeder {
       icon: 'IconArrowsExchange',
       container_image: 'rclone/rclone:latest',
       source_repo: 'https://github.com/rclone/rclone',
-      container_command: 'rcd --rc-web-gui --rc-addr :5572 --rc-no-auth',
+      container_command: 'gui --addr=0.0.0.0:5572 --user=admin --pass=nomad --no-open-browser',
       container_config: JSON.stringify({
         HostConfig: {
           RestartPolicy: { Name: 'unless-stopped' },

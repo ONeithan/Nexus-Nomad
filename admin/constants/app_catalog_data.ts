@@ -2252,6 +2252,12 @@ const FIXED_OR_SPECIAL_CREDENTIALS: Record<string, AppDefaultCredentials> = {
     password: 'nomad',
     note: 'Login HTTP básico padrão da interface Rclone Web.',
   },
+  nomad_freepbx: {
+    mode: 'fixed',
+    username: 'admin',
+    password: 'nomad',
+    note: 'Credenciais administrativas iniciais do painel web FreePBX.',
+  },
   nomad_kasm_webtop: {
     mode: 'fixed',
     username: 'abc',

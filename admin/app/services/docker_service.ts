@@ -41,7 +41,7 @@ import {
   clearInstallProgress,
   setInstallProgress,
 } from '../utils/install_progress_tracker.js'
-import { getStarterConfigFile } from '../utils/app_stack_blueprints.js'
+import { getStackBlueprint, getStarterConfigFile } from '../utils/app_stack_blueprints.js'
 
 // Written by install_nomad.sh with the host AMD GPU's gfx target.
 const AMD_GFX_MARKER_PATH = '/app/storage/.nomad-amd-gfx'
@@ -1029,29 +1029,37 @@ export class DockerService {
       )
       // Built once and reused, so the AMD fallback below cannot drift from the
       // real payload as this config grows.
-      const buildCreateOptions = (image: string, hostConfig: any, env: string[]) => ({
-        Image: image,
-        name: service.service_name,
-        Labels: {
-          ...(containerConfig?.Labels ?? {}),
-          'com.docker.compose.project': 'project-nomad-managed',
-          'io.project-nomad.managed': 'true',
-        },
-        ...(containerConfig?.User && { User: containerConfig.User }),
-        HostConfig: hostConfig,
-        ...(containerConfig?.WorkingDir && { WorkingDir: containerConfig.WorkingDir }),
-        ...(containerConfig?.ExposedPorts && { ExposedPorts: containerConfig.ExposedPorts }),
-        Env: env,
-        ...(service.container_command ? { Cmd: service.container_command.split(' ') } : {}),
-        // Ensure container is attached to the Nomad docker network in production
-        ...(process.env.NODE_ENV === 'production' && {
-          NetworkingConfig: {
-            EndpointsConfig: {
-              [DockerService.NOMAD_NETWORK]: {},
-            },
+      const blueprint = getStackBlueprint(service.service_name)
+      const isHostNet = containerConfig?.HostConfig?.NetworkMode === 'host'
+      const buildCreateOptions = (image: string, hostConfig: any, env: string[]) => {
+        const sanitizedHostConfig = isHostNet
+          ? (({ PortBindings: _pb, ...rest }) => rest)(hostConfig || {})
+          : hostConfig
+        return {
+          Image: image,
+          name: service.service_name,
+          Labels: {
+            ...(containerConfig?.Labels ?? {}),
+            'com.docker.compose.project': 'project-nomad-managed',
+            'io.project-nomad.managed': 'true',
           },
-        }),
-      })
+          ...(containerConfig?.User && { User: containerConfig.User }),
+          HostConfig: sanitizedHostConfig,
+          ...(containerConfig?.WorkingDir && { WorkingDir: containerConfig.WorkingDir }),
+          ...(!isHostNet && containerConfig?.ExposedPorts && { ExposedPorts: containerConfig.ExposedPorts }),
+          Env: env,
+          ...(blueprint?.composeEntrypointOverride ? { Entrypoint: blueprint.composeEntrypointOverride } : {}),
+          ...(service.container_command ? { Cmd: service.container_command.trim().split(/\s+/) } : {}),
+          // Ensure container is attached to the Nomad docker network in production (unless host network)
+          ...(process.env.NODE_ENV === 'production' && !isHostNet && {
+            NetworkingConfig: {
+              EndpointsConfig: {
+                [DockerService.NOMAD_NETWORK]: {},
+              },
+            },
+          }),
+        }
+      }
 
       let container = await this.docker.createContainer(
         buildCreateOptions(finalImage, gpuHostConfig, [
@@ -1256,11 +1264,19 @@ export class DockerService {
       } else if (serviceName === SERVICE_NAMES.WOODPECKER) {
         extraEnv.push('WOODPECKER_OPEN=true')
         extraEnv.push('WOODPECKER_HOST=http://127.0.0.1:8880')
-        extraEnv.push('WOODPECKER_AGENT_SECRET=nomad-woodpecker-secret-2026')
-        extraEnv.push('WOODPECKER_GITEA=true')
-        extraEnv.push('WOODPECKER_GITEA_URL=http://127.0.0.1:8875')
-        extraEnv.push('WOODPECKER_GITEA_CLIENT=nomad')
-        extraEnv.push('WOODPECKER_GITEA_SECRET=nomad')
+        extraEnv.push('WOODPECKER_ADMIN=admin')
+        extraEnv.push('WOODPECKER_AGENT_SECRET=nomad-woodpecker-agent-secret-2026')
+        extraEnv.push('WOODPECKER_GITHUB=true')
+        extraEnv.push('WOODPECKER_GITHUB_CLIENT=nomad')
+        extraEnv.push('WOODPECKER_GITHUB_SECRET=nomad')
+      } else if (serviceName === SERVICE_NAMES.VIKUNJA) {
+        extraEnv.push('VIKUNJA_SERVICE_PUBLICURL=http://127.0.0.1:8950/')
+        extraEnv.push('VIKUNJA_DATABASE_TYPE=sqlite')
+        extraEnv.push('VIKUNJA_DATABASE_PATH=/app/vikunja/files/vikunja.db')
+      } else if (serviceName === SERVICE_NAMES.FREEPBX) {
+        extraEnv.push('ADMIN_PASSWORD=nomad')
+        extraEnv.push('DISABLE_SIGNATURE_CHECK=true')
+        extraEnv.push('FAIL2BAN_ENABLE=false')
       } else if (serviceName === SERVICE_NAMES.PIHOLE) {
         extraEnv.push('FTLCONF_webserver_api_password=nomad')
       } else if (serviceName === SERVICE_NAMES.N8N) {
@@ -1319,6 +1335,8 @@ export class DockerService {
 
       // Pre-create host bind directories for this service if on local host
       const svc = await Service.query().where('service_name', serviceName).first()
+      const bpCfg = getStackBlueprint(serviceName)
+      const uidGidParts = bpCfg?.initUidGid?.split(':').map(Number)
       if (svc?.container_config) {
         const config = typeof svc.container_config === 'string' ? JSON.parse(svc.container_config) : svc.container_config
         const binds: string[] = config?.HostConfig?.Binds || []
@@ -1328,6 +1346,9 @@ export class DockerService {
           const hostSrc = b.slice(0, firstColon)
           if (!hostSrc.startsWith('/var/run') && !hostSrc.startsWith('/dev')) {
             await mkdir(hostSrc, { recursive: true }).catch(() => {})
+            if (uidGidParts && uidGidParts.length === 2 && Number.isFinite(uidGidParts[0]) && Number.isFinite(uidGidParts[1])) {
+              await chown(hostSrc, uidGidParts[0], uidGidParts[1]).catch(() => {})
+            }
             await chmod(hostSrc, 0o777).catch(() => {})
           }
         }

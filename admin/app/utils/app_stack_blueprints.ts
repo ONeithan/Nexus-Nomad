@@ -17,6 +17,8 @@ export interface StackBlueprint {
   shmSize?: string
   /** Optional shell command wrapper executed before primary entrypoint (e.g. Synapse config gen). */
   composeEntrypointOverride?: string[]
+  /** Optional UID:GID (e.g. '1000:1000') chowned onto mounted storage dirs before container boot. */
+  initUidGid?: string
 }
 
 export interface StarterConfigFile {
@@ -357,6 +359,65 @@ ${buildRedisService(s)}
   [SERVICE_NAMES.SYNAPSE]: {
     extraEnv: () => ['SYNAPSE_SERVER_NAME=nomad.local', 'SYNAPSE_REPORT_STATS=no'],
     composeEntrypointOverride: ['/bin/sh', '-c', '[ -f /data/homeserver.yaml ] || /start.py generate; exec /start.py'],
+    sidecarServicesYaml: () => '',
+    sidecarVolumeNames: () => [],
+  },
+
+  [SERVICE_NAMES.NETALERTX]: {
+    extraEnv: (_hostIp, hostPort) => [`PORT=${hostPort || '8610'}`, 'LISTEN_ADDR=0.0.0.0'],
+    sidecarServicesYaml: () => '',
+    sidecarVolumeNames: () => [],
+  },
+
+  [SERVICE_NAMES.INVENTREE]: {
+    initUidGid: '1000:1000',
+    extraEnv: (hostIp, hostPort) => [
+      'INVENTREE_DB_ENGINE=sqlite3',
+      'INVENTREE_DB_NAME=/home/inventree/data/inventree.sqlite3',
+      `INVENTREE_SITE_URL=http://${hostIp}:${hostPort}`,
+      `INVENTREE_TRUSTED_ORIGINS=http://${hostIp}:${hostPort}`,
+      'INVENTREE_PLUGINS_ENABLED=True',
+      'INVENTREE_DEBUG=False',
+    ],
+    composeEntrypointOverride: [
+      '/bin/bash',
+      './init.sh',
+      'sh',
+      '-c',
+      'if [ ! -s /home/inventree/data/inventree.sqlite3 ]; then invoke migrate || python3 /home/inventree/src/backend/InvenTree/manage.py migrate --noinput; fi; exec gunicorn -c ./gunicorn.conf.py InvenTree.wsgi -b 0.0.0.0:8000 --chdir /home/inventree/src/backend/InvenTree',
+    ],
+    sidecarServicesYaml: () => '',
+    sidecarVolumeNames: () => [],
+  },
+
+  [SERVICE_NAMES.WOODPECKER]: {
+    extraEnv: (hostIp, hostPort) => [
+      'WOODPECKER_OPEN=true',
+      `WOODPECKER_HOST=http://${hostIp}:${hostPort}`,
+      'WOODPECKER_ADMIN=admin',
+      'WOODPECKER_AGENT_SECRET=nomad-woodpecker-agent-secret-2026',
+      'WOODPECKER_GITHUB=true',
+      'WOODPECKER_GITHUB_CLIENT=nomad',
+      'WOODPECKER_GITHUB_SECRET=nomad',
+    ],
+    sidecarServicesYaml: () => '',
+    sidecarVolumeNames: () => [],
+  },
+
+  [SERVICE_NAMES.WEEWX]: {
+    initUidGid: '1000:1000',
+    extraEnv: () => [],
+    sidecarServicesYaml: () => '',
+    sidecarVolumeNames: () => [],
+  },
+
+  [SERVICE_NAMES.VIKUNJA]: {
+    initUidGid: '1000:1000',
+    extraEnv: (hostIp, hostPort) => [
+      `VIKUNJA_SERVICE_PUBLICURL=http://${hostIp}:${hostPort}/`,
+      'VIKUNJA_DATABASE_TYPE=sqlite',
+      'VIKUNJA_DATABASE_PATH=/app/vikunja/files/vikunja.db',
+    ],
     sidecarServicesYaml: () => '',
     sidecarVolumeNames: () => [],
   },
