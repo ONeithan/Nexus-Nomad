@@ -26,23 +26,23 @@ export interface StarterConfigFile {
   content: string
 }
 
-const pgHealthcheck = `      healthcheck:
-        test: ["CMD-SHELL", "pg_isready -U postgres"]
-        interval: 5s
-        timeout: 3s
-        retries: 12`
+const pgHealthcheck = `    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 12`
 
-const redisHealthcheck = `      healthcheck:
-        test: ["CMD", "redis-cli", "ping"]
-        interval: 5s
-        timeout: 3s
-        retries: 12`
+const redisHealthcheck = `    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 12`
 
-const mariaHealthcheck = `      healthcheck:
-        test: ["CMD-SHELL", "mariadb-admin ping -h localhost -pnomad_db_pass || mysqladmin ping -h localhost -pnomad_db_pass"]
-        interval: 5s
-        timeout: 3s
-        retries: 15`
+const mariaHealthcheck = `    healthcheck:
+      test: ["CMD-SHELL", "mariadb-admin ping -h localhost -pnomad_db_pass || mysqladmin ping -h localhost -pnomad_db_pass"]
+      interval: 5s
+      timeout: 3s
+      retries: 15`
 
 function buildPgService(
   serviceName: string,
@@ -235,7 +235,8 @@ export const STACK_BLUEPRINTS: Record<string, StackBlueprint> = {
       'MEILISEARCH_KEY=nomadMeiliMasterKey2026',
     ],
     dependsOnYaml: `    depends_on:
-      - ${SERVICE_NAMES.BAR_ASSISTANT}-meili\n`,
+      ${SERVICE_NAMES.BAR_ASSISTANT}-meili:
+        condition: service_started\n`,
     sidecarServicesYaml: (s) => `  ${s}-meili:
     image: getmeili/meilisearch:v1.11
     container_name: nomad-${s}-meili
@@ -263,7 +264,8 @@ export const STACK_BLUEPRINTS: Record<string, StackBlueprint> = {
     dependsOnYaml: `    depends_on:
       ${SERVICE_NAMES.TUBEARCHIVIST}-redis:
         condition: service_healthy
-      - ${SERVICE_NAMES.TUBEARCHIVIST}-es\n`,
+      ${SERVICE_NAMES.TUBEARCHIVIST}-es:
+        condition: service_started\n`,
     sidecarServicesYaml: (s) => `${buildRedisService(s)}
   ${s}-es:
     image: elasticsearch:8.15.3
@@ -334,7 +336,7 @@ ${buildRedisService(s)}
             root /var/www/app/public;
             index index.php index.html;
             location / { try_files $$uri $$uri/ /index.php?$$query_string; }
-            location ~ \.php$$ {
+            location ~ \\.php$$ {
                 include fastcgi_params;
                 fastcgi_param SCRIPT_FILENAME $$document_root$$fastcgi_script_name;
                 fastcgi_pass ${s}:9000;

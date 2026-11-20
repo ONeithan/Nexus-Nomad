@@ -562,6 +562,8 @@ export default function Home(props: {
   const [cpuTransitionPhase, setCpuTransitionPhase] = useState<SplitMergePhase>('idle')
   const diskAnimTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const cpuAnimTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const diskPhaseTokenRef = useRef(0)
+  const cpuPhaseTokenRef = useRef(0)
 
   useEffect(() => {
     return () => {
@@ -570,36 +572,67 @@ export default function Home(props: {
     }
   }, [])
 
+  const advanceDiskPhase = (expectedPhase: SplitMergePhase, token: number) => {
+    if (diskPhaseTokenRef.current !== token) return
+    diskPhaseTokenRef.current += 1
+    const nextToken = diskPhaseTokenRef.current
+    if (diskAnimTimerRef.current) {
+      clearTimeout(diskAnimTimerRef.current)
+      diskAnimTimerRef.current = null
+    }
+    if (expectedPhase === 'splitting-out') {
+      saveDashboardConfig({ ...dashboardConfig, poolsCombined: false })
+      setDiskTransitionPhase('split-in')
+      diskAnimTimerRef.current = setTimeout(() => advanceDiskPhase('split-in', nextToken), 1500)
+    } else if (expectedPhase === 'merging-out') {
+      saveDashboardConfig({ ...dashboardConfig, poolsCombined: true })
+      setDiskTransitionPhase('merge-in')
+      diskAnimTimerRef.current = setTimeout(() => advanceDiskPhase('merge-in', nextToken), 1500)
+    } else {
+      setDiskTransitionPhase('idle')
+    }
+  }
+
+  const advanceCpuPhase = (expectedPhase: SplitMergePhase, token: number) => {
+    if (cpuPhaseTokenRef.current !== token) return
+    cpuPhaseTokenRef.current += 1
+    const nextToken = cpuPhaseTokenRef.current
+    if (cpuAnimTimerRef.current) {
+      clearTimeout(cpuAnimTimerRef.current)
+      cpuAnimTimerRef.current = null
+    }
+    if (expectedPhase === 'splitting-out') {
+      saveDashboardConfig({ ...dashboardConfig, cpuCombined: false })
+      setCpuTransitionPhase('split-in')
+      cpuAnimTimerRef.current = setTimeout(() => advanceCpuPhase('split-in', nextToken), 1500)
+    } else if (expectedPhase === 'merging-out') {
+      saveDashboardConfig({ ...dashboardConfig, cpuCombined: true })
+      setCpuTransitionPhase('merge-in')
+      cpuAnimTimerRef.current = setTimeout(() => advanceCpuPhase('merge-in', nextToken), 1500)
+    } else {
+      setCpuTransitionPhase('idle')
+    }
+  }
+
   const handleTogglePoolsCombined = () => {
     if (diskAnimTimerRef.current) clearTimeout(diskAnimTimerRef.current)
     const willSplit = dashboardConfig.poolsCombined
-    setDiskTransitionPhase(willSplit ? 'splitting-out' : 'merging-out')
-    diskAnimTimerRef.current = setTimeout(() => {
-      saveDashboardConfig({
-        ...dashboardConfig,
-        poolsCombined: !willSplit,
-      })
-      setDiskTransitionPhase(willSplit ? 'split-in' : 'merge-in')
-      diskAnimTimerRef.current = setTimeout(() => {
-        setDiskTransitionPhase('idle')
-      }, willSplit ? 700 : 640)
-    }, willSplit ? 360 : 520)
+    const phase: SplitMergePhase = willSplit ? 'splitting-out' : 'merging-out'
+    diskPhaseTokenRef.current += 1
+    const token = diskPhaseTokenRef.current
+    setDiskTransitionPhase(phase)
+    // Fallback generoso: só dispara caso a aba fique em segundo plano; normalmente onAnimationEnd avança no último frame real
+    diskAnimTimerRef.current = setTimeout(() => advanceDiskPhase(phase, token), 1300)
   }
 
   const handleToggleCpuCombined = () => {
     if (cpuAnimTimerRef.current) clearTimeout(cpuAnimTimerRef.current)
     const willSplit = dashboardConfig.cpuCombined
-    setCpuTransitionPhase(willSplit ? 'splitting-out' : 'merging-out')
-    cpuAnimTimerRef.current = setTimeout(() => {
-      saveDashboardConfig({
-        ...dashboardConfig,
-        cpuCombined: !willSplit,
-      })
-      setCpuTransitionPhase(willSplit ? 'split-in' : 'merge-in')
-      cpuAnimTimerRef.current = setTimeout(() => {
-        setCpuTransitionPhase('idle')
-      }, willSplit ? 700 : 640)
-    }, willSplit ? 360 : 520)
+    const phase: SplitMergePhase = willSplit ? 'splitting-out' : 'merging-out'
+    cpuPhaseTokenRef.current += 1
+    const token = cpuPhaseTokenRef.current
+    setCpuTransitionPhase(phase)
+    cpuAnimTimerRef.current = setTimeout(() => advanceCpuPhase(phase, token), 1300)
   }
 
   const handleOpenAiHub = () => {
@@ -938,6 +971,12 @@ export default function Home(props: {
                 ) : dashboardConfig.poolsCombined ? (
                   /* NOVA VISUALIZAÇÃO UNIFICADA REAL (1 ÚNICO CARD COESO) */
                   <div
+                    onAnimationEnd={(e) => {
+                      if (e.target !== e.currentTarget || !e.animationName.startsWith('nomad-')) return
+                      if (diskTransitionPhase === 'splitting-out' || diskTransitionPhase === 'merge-in') {
+                        advanceDiskPhase(diskTransitionPhase, diskPhaseTokenRef.current)
+                      }
+                    }}
                     className={`rounded-xl border border-border-default border-t-2 border-t-desert-tan bg-surface-primary p-4 sm:p-5 shadow-sm transition-colors ${
                       diskTransitionPhase === 'splitting-out'
                         ? 'nomad-split-pre-exit'
@@ -1112,6 +1151,12 @@ export default function Home(props: {
                       return (
                         <div
                           key={target.path}
+                          onAnimationEnd={(e) => {
+                            if (idx !== 0 || e.target !== e.currentTarget || !e.animationName.startsWith('nomad-')) return
+                            if (diskTransitionPhase === 'merging-out' || diskTransitionPhase === 'split-in') {
+                              advanceDiskPhase(diskTransitionPhase, diskPhaseTokenRef.current)
+                            }
+                          }}
                           className={`rounded-xl border border-border-default border-t-2 border-t-desert-tan bg-surface-primary p-4 flex flex-col justify-between shadow-sm ${splitCardAnimClass}`}
                         >
                           <div className="flex items-center justify-between pb-2.5 mb-3 border-b border-border-default/60">
@@ -1193,6 +1238,12 @@ export default function Home(props: {
                   {/* CPU: MODO UNIFICADO EM TEMPO REAL */}
                   {dashboardConfig.cpuCombined ? (
                     <div
+                      onAnimationEnd={(e) => {
+                        if (e.target !== e.currentTarget || !e.animationName.startsWith('nomad-')) return
+                        if (cpuTransitionPhase === 'splitting-out' || cpuTransitionPhase === 'merge-in') {
+                          advanceCpuPhase(cpuTransitionPhase, cpuPhaseTokenRef.current)
+                        }
+                      }}
                       className={`${hwColSpan} rounded-xl border border-border-default bg-surface-primary p-4 flex flex-col justify-between shadow-sm hover:border-desert-tan/70 ${
                         cpuTransitionPhase === 'splitting-out'
                           ? 'nomad-split-pre-exit'
@@ -1301,6 +1352,12 @@ export default function Home(props: {
                     <>
                       {dashboardConfig.cpuUsage && (
                         <div
+                          onAnimationEnd={(e) => {
+                            if (e.target !== e.currentTarget || !e.animationName.startsWith('nomad-')) return
+                            if (cpuTransitionPhase === 'merging-out' || cpuTransitionPhase === 'split-in') {
+                              advanceCpuPhase(cpuTransitionPhase, cpuPhaseTokenRef.current)
+                            }
+                          }}
                           className={`${hwColSpan} rounded-xl border border-border-default bg-surface-primary p-4 flex flex-col justify-between shadow-sm hover:border-desert-tan/70 ${
                             cpuTransitionPhase === 'merging-out'
                               ? 'nomad-merge-pre-left'
@@ -1349,6 +1406,12 @@ export default function Home(props: {
 
                       {dashboardConfig.cpuModel && (
                         <div
+                          onAnimationEnd={(e) => {
+                            if (dashboardConfig.cpuUsage || e.target !== e.currentTarget || !e.animationName.startsWith('nomad-')) return
+                            if (cpuTransitionPhase === 'merging-out' || cpuTransitionPhase === 'split-in') {
+                              advanceCpuPhase(cpuTransitionPhase, cpuPhaseTokenRef.current)
+                            }
+                          }}
                           className={`${hwColSpan} rounded-xl border border-border-default bg-surface-primary p-4 flex flex-col justify-between shadow-sm hover:border-desert-tan/70 ${
                             cpuTransitionPhase === 'merging-out'
                               ? 'nomad-merge-pre-right'

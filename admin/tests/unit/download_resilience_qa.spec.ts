@@ -613,11 +613,11 @@ test('CSS animations, hover cascade, reduced-motion, contrast and release metada
     assert.ok(routes.includes(`documented(${snippet}`), `Missing documented() wrapper for ${snippet}`)
   }
 
-  // 8) Triple version sync to v1.0.38 across workflow and boot gate
-  assert.match(workflow, /# Build release trigger: v1\.0\.38/)
-  assert.match(workflow, /default: '1\.0\.38-nexus'/)
-  assert.match(workflow, /inputs\.version \|\| '1\.0\.38-nexus'/)
-  assert.match(bootGate, /:\s*'v1\.0\.38'/)
+  // 8) Triple version sync to v1.0.39 across workflow and boot gate
+  assert.match(workflow, /# Build release trigger: v1\.0\.39/)
+  assert.match(workflow, /default: '1\.0\.39-nexus'/)
+  assert.match(workflow, /inputs\.version \|\| '1\.0\.39-nexus'/)
+  assert.match(bootGate, /:\s*'v1\.0\.39'/)
 
   // 9) Bulk install & Portainer hardening checks (real sequential wait + port collision resolution + catalog port uniqueness + live progress polling)
   const [bulkModal, supplyDepot, portainerSvc, seeder, systemSvc] = await Promise.all([
@@ -731,8 +731,17 @@ test('stack blueprints, starter configs, multi-port and 8080 container port fixe
     assert.ok(bp, `Missing multi-service stack blueprint for ${sName}`)
     assert.ok(bpMod.hasMultiServiceSidecars(sName), `Expected sidecars for ${sName}`)
     assert.ok(bp.extraEnv('192.168.1.10', '8510').length > 0, `Expected env for ${sName}`)
-    const yaml = bp.sidecarServicesYaml(sName, '192.168.1.10', '8510')
-    assert.ok(yaml.includes(`container_name: nomad-${sName}-`), `Missing named sidecar for ${sName}`)
+    const yamlStr = bp.sidecarServicesYaml(sName, '192.168.1.10', '8510')
+    assert.ok(yamlStr.includes(`container_name: nomad-${sName}-`), `Missing named sidecar for ${sName}`)
+
+    // Strict YAML parse using js-yaml to prevent indentation/mapping bugs (like Portainer stackStatus=4)
+    const { createRequire } = await import('node:module')
+    const req = createRequire(import.meta.url)
+    const yamlLib = req('js-yaml')
+    const parsed = yamlLib.load(
+      `services:\n  ${sName}:\n    image: test:latest\n${bp.dependsOnYaml || ''}    ports:\n      - "8510:3000"\n    volumes:\n      - nomad-${sName}-data:/data\n    environment:\n      - "TZ=America/Sao_Paulo"\n\n${yamlStr}\n\nvolumes:\n${['nomad-' + sName + '-data', ...bp.sidecarVolumeNames(sName)].map((v) => `  ${v}:\n    name: ${v}`).join('\n')}\n`
+    )
+    assert.ok(parsed?.services?.[sName], `Parsed YAML missing main service for ${sName}`)
   }
 
   for (const cfgApp of ['nomad_blocky', 'nomad_headscale', 'nomad_frigate', 'nomad_weewx']) {
@@ -740,11 +749,19 @@ test('stack blueprints, starter configs, multi-port and 8080 container port fixe
     assert.ok(cfg && cfg.content.trim().length > 10, `Missing starter config for ${cfgApp}`)
   }
 
-  // Verify fixed container ports and Part-DB replacement
+  // Verify fixed container ports, Orthanc jodogne replacement, 3x pull retry, 304 ignore, and animation onAnimationEnd
+  const homeTsx = await readFile(new URL('../../inertia/pages/home.tsx', import.meta.url), 'utf8')
+  assert.match(homeTsx, /onAnimationEnd=\{\(e\) =>/)
+  assert.match(homeTsx, /advanceDiskPhase/)
   assert.match(seeder, /BLOCKY_CONFIG_FILE=\/app\/config\/config\.yml/)
   assert.match(seeder, /jbtronics\/part-db1:latest/)
+  assert.match(seeder, /jodogne\/orthanc-plugins:latest/)
   assert.doesNotMatch(seeder.slice(0, seeder.indexOf('DEFUNCT_CONTAINER_IMAGES')), /mhubig\/partkeepr:latest/)
+  assert.doesNotMatch(seeder.slice(0, seeder.indexOf('DEFUNCT_CONTAINER_IMAGES')), /orthancteam\/orthanc:latest/)
   assert.match(portainerSvc, /hasMultiServiceSidecars/)
   assert.match(portainerSvc, /primaryBindingKey/)
+  assert.match(portainerSvc, /maxPullAttempts = 3/)
+  assert.match(portainerSvc, /httpStatus === 304/)
+  assert.match(portainerSvc, /createdStack\?\.Status === 4/)
   assert.match(portainerSvc, /iAttempt < 11/)
 })

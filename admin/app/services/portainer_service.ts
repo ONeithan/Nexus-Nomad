@@ -1995,33 +1995,60 @@ ${cmdBlock}${sidecarsSection}${topLevelVolumesBlock}`
       }
 
       if (!imageAlreadyCached) {
-        this.broadcast(
-          serviceName,
-          'pulling',
-          `Baixando imagem ${service.container_image} no servidor Portainer (pode levar alguns minutos)...`
-        )
-        try {
-          const pullRes = await client.post(
-            `/api/endpoints/${endpointId}/docker/images/create?fromImage=${encodeURIComponent(service.container_image)}`,
-            null,
-            { timeout: 900000, responseType: 'text' }
+        const maxPullAttempts = 3
+        for (let pAttempt = 1; pAttempt <= maxPullAttempts; pAttempt++) {
+          this.broadcast(
+            serviceName,
+            'pulling',
+            pAttempt === 1
+              ? `Baixando imagem ${service.container_image} no servidor Portainer (pode levar alguns minutos)...`
+              : `[2/5] Conexão com registry oscilou — retentando download de ${service.container_image} (${pAttempt}/${maxPullAttempts})...`
           )
-          const rawStream = typeof pullRes.data === 'string' ? pullRes.data : ''
-          if (rawStream.includes('"errorDetail"') || rawStream.includes('"error":')) {
-            const errorMatch = rawStream.match(/"error"\s*:\s*"([^"]+)"/)
-            const errMsg = errorMatch?.[1] || 'Falha ao baixar imagem Docker no Portainer.'
-            throw new Error(errMsg)
-          }
-        } catch (pullErr: any) {
-          // Verify whether daemon finished caching the image despite HTTP proxy timeout
           try {
-            await client.get(
-              `/api/endpoints/${endpointId}/docker/images/${encodeURIComponent(service.container_image)}/json`,
-              { timeout: 10000 }
+            const pullRes = await client.post(
+              `/api/endpoints/${endpointId}/docker/images/create?fromImage=${encodeURIComponent(service.container_image)}`,
+              null,
+              { timeout: 900000, responseType: 'text' }
             )
-          } catch {
+            const rawStream = typeof pullRes.data === 'string' ? pullRes.data : ''
+            if (rawStream.includes('"errorDetail"') || rawStream.includes('"error":')) {
+              const errorMatch = rawStream.match(/"error"\s*:\s*"([^"]+)"/)
+              const errMsg = errorMatch?.[1] || 'Falha ao baixar imagem Docker no Portainer.'
+              throw new Error(errMsg)
+            }
+            break
+          } catch (pullErr: any) {
+            // Verify whether daemon finished caching the image despite HTTP proxy timeout
+            const cachedAfterErr = await client
+              .get(
+                `/api/endpoints/${endpointId}/docker/images/${encodeURIComponent(service.container_image)}/json`,
+                { timeout: 10000 }
+              )
+              .then(() => true)
+              .catch(() => false)
+            if (cachedAfterErr) break
+
+            const rawPullMsg = String(pullErr?.message || pullErr || '')
+            const lowerPull = rawPullMsg.toLowerCase()
+            const isTransientNetworkErr =
+              lowerPull.includes('httpreadseeker') ||
+              lowerPull.includes('failed to copy') ||
+              lowerPull.includes('eof') ||
+              lowerPull.includes('timeout') ||
+              lowerPull.includes('econnreset') ||
+              lowerPull.includes('etimedout') ||
+              lowerPull.includes('tls') ||
+              lowerPull.includes('socket') ||
+              lowerPull.includes('connection reset') ||
+              lowerPull.includes('context canceled')
+
+            if (isTransientNetworkErr && pAttempt < maxPullAttempts) {
+              await new Promise((r) => setTimeout(r, pAttempt * 3000))
+              continue
+            }
+
             throw new Error(
-              `Falha ao baixar a imagem "${service.container_image}" no servidor Portainer: ${translateDockerDeployErrorPtBr(pullErr?.message || pullErr)}`
+              `Falha ao baixar a imagem "${service.container_image}" no servidor Portainer: ${translateDockerDeployErrorPtBr(rawPullMsg)}`
             )
           }
         }
@@ -2087,8 +2114,9 @@ ${cmdBlock}${sidecarsSection}${topLevelVolumesBlock}`
           { timeout: 300000 }
         )
 
-        // Multi-service stacks (Postgres/Redis/ElasticSearch/MariaDB) need extra time for DB init & healthchecks
-        const stackPollAttempts = isMultiService ? 8 : 2
+        // Multi-service stacks (Postgres/Redis/ElasticSearch/MariaDB) need extra time for companion pulls, DB init & healthchecks.
+        // Portainer Stack Status codes: 1 = Active, 2 = Inactive, 3 = Deploying, 4 = Error
+        const stackPollAttempts = isMultiService ? 30 : 3
         let createdStack: any = null
         let spawnedCont: any = null
         for (let sAttempt = 0; sAttempt < stackPollAttempts; sAttempt++) {
@@ -2115,7 +2143,10 @@ ${cmdBlock}${sidecarsSection}${topLevelVolumesBlock}`
                 (c.Labels?.['com.docker.compose.project']?.toLowerCase() === stackName.toLowerCase() ||
                   c.Names?.some((n: string) => n.toLowerCase().includes(stackName.toLowerCase())))
             )
-          if (spawnedCont && spawnedCont.State === 'running' && createdStack?.Status !== 2) {
+          if (spawnedCont && spawnedCont.State === 'running' && createdStack?.Status !== 2 && createdStack?.Status !== 4) {
+            break
+          }
+          if (createdStack?.Status === 4) {
             break
           }
           if (spawnedCont && (spawnedCont.State === 'exited' || spawnedCont.State === 'dead')) {
@@ -2123,16 +2154,27 @@ ${cmdBlock}${sidecarsSection}${topLevelVolumesBlock}`
           }
         }
 
-        if (spawnedCont && spawnedCont.State === 'running' && createdStack?.Status !== 2) {
+        if (spawnedCont && spawnedCont.State === 'running' && createdStack?.Status !== 2 && createdStack?.Status !== 4) {
           deployedViaStack = true
         } else {
-          stackFailureReason = `estado=${spawnedCont?.State || 'não criado'}, stackStatus=${createdStack?.Status ?? '?'}`
+          let portainerStackDetail = ''
+          if (createdStack?.Id) {
+            const stackDetail = await client
+              .get(`/api/stacks/${createdStack.Id}`, { timeout: 8000 })
+              .catch(() => null)
+            const depStatuses = stackDetail?.data?.DeploymentStatus || createdStack?.DeploymentStatus
+            const lastMsg = Array.isArray(depStatuses) && depStatuses.length > 0
+              ? depStatuses[depStatuses.length - 1]?.Message
+              : stackDetail?.data?.StatusMessage || ''
+            if (lastMsg) portainerStackDetail = String(lastMsg).trim()
+          }
+          stackFailureReason = `estado=${spawnedCont?.State || 'não criado'}, stackStatus=${createdStack?.Status ?? '?'}${portainerStackDetail ? `, detalhe=${portainerStackDetail}` : ''}`
           logger.warn(
             `[PortainerService] Stack ${stackName} check (${stackFailureReason}).${isMultiService ? '' : ' Falling back to direct Docker Engine API...'}`
           )
           if (isMultiService) {
             throw new Error(
-              `Stack multi-serviço ${stackName} não iniciou o contêiner principal (${stackFailureReason}). Verifique recursos/logs no Portainer.`
+              `Stack multi-serviço ${stackName} falhou (${stackFailureReason}).`
             )
           }
           await this.cleanupBeforeRemoteDeploy(client, endpointId, serviceName, stackName, hostPort)
@@ -2300,8 +2342,14 @@ ${cmdBlock}${sidecarsSection}${topLevelVolumesBlock}`
           })
           await new Promise((r) => setTimeout(r, 2500))
         } catch (startErr: any) {
-          const dockerMsg = startErr?.response?.data?.message || startErr?.message || 'falha desconhecida ao iniciar'
-          throw new Error(`Contêiner permaneceu parado (${runningCont.State}) e falhou ao iniciar: ${dockerMsg}`)
+          const httpStatus = startErr?.response?.status
+          if (httpStatus === 304) {
+            // Docker Engine 304 means container was already started/restarting; wait briefly and proceed to inspectCheck + logs
+            await new Promise((r) => setTimeout(r, 2500))
+          } else {
+            const dockerMsg = startErr?.response?.data?.message || startErr?.message || 'falha desconhecida ao iniciar'
+            throw new Error(`Contêiner permaneceu parado (${runningCont.State}) e falhou ao iniciar: ${dockerMsg}`)
+          }
         }
       }
 

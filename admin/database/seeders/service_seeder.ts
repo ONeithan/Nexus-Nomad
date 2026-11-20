@@ -1024,8 +1024,8 @@ export default class ServiceSeeder extends BaseSeeder {
       display_order: 50,
       description: 'Visualizador e arquivador médico PACS/DICOM para tomografias, ressonâncias magnéticas e raios-X em altíssima resolução',
       icon: 'IconFirstAidKit',
-      container_image: 'orthancteam/orthanc:latest',
-      source_repo: 'https://github.com/orthancteam/orthanc',
+      container_image: 'jodogne/orthanc-plugins:latest',
+      source_repo: 'https://github.com/orthanc-server/orthanc',
       container_command: null,
       container_config: JSON.stringify({
         HostConfig: {
@@ -3183,6 +3183,7 @@ export default class ServiceSeeder extends BaseSeeder {
 
   private static readonly DEFUNCT_CONTAINER_IMAGES = new Set([
     'openrem/openrem:latest',
+    'orthancteam/orthanc:latest',
     'karlomikus/bar-assistant:latest',
     'ghcr.io/goauthentik/server:latest',
     'jokob-sk/netalertx:latest',

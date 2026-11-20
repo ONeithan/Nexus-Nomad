@@ -957,19 +957,19 @@ body {
 }
 
 .nomad-split-wing-left {
-  animation: nomad-split-wing-left 0.68s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: nomad-split-wing-left 0.76s cubic-bezier(0.22, 1, 0.36, 1) both;
   will-change: transform, opacity;
 }
 
 .nomad-split-wing-right {
-  animation: nomad-split-wing-right 0.68s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: nomad-split-wing-right 0.76s cubic-bezier(0.22, 1, 0.36, 1) both;
   will-change: transform, opacity;
 }
 
 .nomad-split-pre-exit {
   position: relative;
   overflow: hidden;
-  animation: nomad-split-pre-exit 0.36s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  animation: nomad-split-pre-exit 0.4s cubic-bezier(0.4, 0, 0.2, 1) forwards;
   will-change: transform, opacity;
 }
 
@@ -984,24 +984,24 @@ body {
   background: linear-gradient(180deg, transparent, #f59e0b 25%, #fde68a 50%, #f59e0b 75%, transparent);
   box-shadow: 0 0 18px 4px rgba(245, 158, 11, 0.6);
   transform-origin: top center;
-  animation: nomad-cleave-beam-down 0.34s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: nomad-cleave-beam-down 0.38s cubic-bezier(0.22, 1, 0.36, 1) both;
   pointer-events: none;
   z-index: 20;
 }
 
 .nomad-merge-pre-left {
-  animation: nomad-merge-pre-left 0.52s cubic-bezier(0.32, 0, 0.25, 1) forwards;
+  animation: nomad-merge-pre-left 0.58s cubic-bezier(0.32, 0, 0.25, 1) forwards;
   will-change: transform, opacity;
 }
 
 .nomad-merge-pre-right {
-  animation: nomad-merge-pre-right 0.52s cubic-bezier(0.32, 0, 0.25, 1) forwards;
+  animation: nomad-merge-pre-right 0.58s cubic-bezier(0.32, 0, 0.25, 1) forwards;
   will-change: transform, opacity;
 }
 
 .nomad-merge-lock {
   transform-origin: center center;
-  animation: nomad-merge-lock 0.62s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: nomad-merge-lock 0.72s cubic-bezier(0.22, 1, 0.36, 1) both;
   will-change: transform, opacity;
 }
 
