@@ -31,6 +31,22 @@ interface ItemStatus {
   message?: string
 }
 
+function estimateStepProgress(msg?: string): number {
+  if (!msg) return 8
+  const stepMatch = msg.match(/\[(\d+)\/(\d+)\]/)
+  if (stepMatch) {
+    const cur = Number(stepMatch[1])
+    const total = Math.max(1, Number(stepMatch[2]))
+    return Math.min(92, Math.max(12, Math.round((cur / total) * 90)))
+  }
+  const lower = msg.toLowerCase()
+  if (lower.includes('verificando') || lower.includes('saúde') || lower.includes('iniciando')) return 82
+  if (lower.includes('implantando') || lower.includes('stack') || lower.includes('criando')) return 65
+  if (lower.includes('preparando') || lower.includes('armazenamento') || lower.includes('volume')) return 48
+  if (lower.includes('baixando') || lower.includes('imagem') || lower.includes('pull')) return 30
+  return 15
+}
+
 export default function BulkInstallModal({
   isOpen,
   onClose,
@@ -44,10 +60,14 @@ export default function BulkInstallModal({
   const [target, setTarget] = useState<'local' | 'portainer'>(
     isPortainerConfigured ? defaultTarget : 'local'
   )
+  // Congela a lista da fila enquanto o modal estiver ativo para que atualizações de status
+  // em background (installed: true) não encolham `selectedServices` durante o loop.
+  const [queueItems, setQueueItems] = useState<ServiceSlim[]>([])
   const [isRunning, setIsRunning] = useState(false)
   const [isFinished, setIsFinished] = useState(false)
   const [currentIndex, setCurrentIndex] = useState<number>(-1)
   const [statuses, setStatuses] = useState<Record<string, ItemStatus>>({})
+  const [elapsedSeconds, setElapsedSeconds] = useState(0)
 
   useEffect(() => {
     if (isOpen && !isRunning) {
@@ -57,31 +77,76 @@ export default function BulkInstallModal({
 
   const cancelRequestedRef = useRef(false)
   const installActivityRef = useRef(installActivity)
+  const activeItemRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
     installActivityRef.current = installActivity
   }, [installActivity])
 
-  // Helper to wait for a local background installation to complete or fail
-  const waitForLocalCompletion = async (
-    serviceName: string
+  // Contador de segundos do app atual + scroll suave para manter o item em destaque visível
+  useEffect(() => {
+    if (!isRunning || currentIndex < 0) {
+      setElapsedSeconds(0)
+      return
+    }
+    setElapsedSeconds(0)
+    activeItemRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+    const timer = setInterval(() => {
+      setElapsedSeconds((s) => s + 1)
+    }, 1000)
+    return () => clearInterval(timer)
+  }, [isRunning, currentIndex])
+
+  // Inicializa fila congelada quando o modal abre sem estar rodando
+  useEffect(() => {
+    if (isOpen && !isRunning && !isFinished) {
+      setQueueItems(selectedServices)
+      const init: Record<string, ItemStatus> = {}
+      selectedServices.forEach((svc) => {
+        init[svc.service_name] = { state: 'pending', message: 'Aguardando fila...' }
+      })
+      setStatuses(init)
+      setCurrentIndex(-1)
+      cancelRequestedRef.current = false
+    }
+  }, [isOpen, selectedServices, isRunning, isFinished])
+
+  /**
+   * Aguarda a conclusão REAL da instalação (tanto no Docker Local quanto no Portainer),
+   * lendo eventos SSE emitidos APÓS `baselineActivityIdx` e confirmando pelo `/api/services`
+   * antes de marcar `completed` ou `error`.
+   */
+  const waitForServiceCompletion = async (
+    serviceName: string,
+    deployTarget: 'local' | 'portainer',
+    baselineActivityIdx: number
   ): Promise<{ success: boolean; message: string }> => {
-    const maxAttempts = 300 // up to 10 minutes (300 * 2000ms)
+    const maxAttempts = 240 // Até 12 minutos (240 * 3000ms) para imagens grandes
+    let lastProgressMsg =
+      deployTarget === 'portainer'
+        ? 'Enviando stack e baixando imagem no Servidor Portainer...'
+        : 'Baixando imagem e configurando contêiner local...'
+
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       if (cancelRequestedRef.current) {
-        return { success: false, message: 'Instalação cancelada pelo usuário' }
+        return { success: false, message: 'Fila interrompida pelo operador' }
       }
 
-      // Check SSE activities
-      const activities = installActivityRef.current || []
-      const matching = activities.filter((a: any) => a?.service_name === serviceName)
-      if (matching.length > 0) {
-        const last = matching[matching.length - 1]
+      // Ler apenas eventos novos desta tentativa específica
+      const recentEvents = (installActivityRef.current || [])
+        .slice(baselineActivityIdx)
+        .filter((a: any) => a?.service_name === serviceName)
+
+      if (recentEvents.length > 0) {
+        const last = recentEvents[recentEvents.length - 1]
+        if (last.message) {
+          lastProgressMsg = last.message
+        }
         if (last.type === 'completed' || last.type === 'update-complete') {
-          return { success: true, message: last.message || 'Instalado com sucesso' }
+          return { success: true, message: last.message || 'Instalado e em execução!' }
         }
         if (last.type === 'error') {
-          return { success: false, message: last.message || 'Falha na instalação' }
+          return { success: false, message: last.message || 'Falha na implantação do serviço' }
         }
         if (last.message) {
           setStatuses((prev) => ({
@@ -94,93 +159,80 @@ export default function BulkInstallModal({
         }
       }
 
-      // Every 5 checks (~10s), verify via API in case SSE was missed
-      if (attempt > 0 && attempt % 5 === 0) {
+      // Polling de segurança a cada ~6s (garante detecção mesmo se SSE falhar)
+      if (attempt > 0 && attempt % 2 === 0) {
         try {
-          const sysServices = await api.getSystemServices()
+          const sysServices = await api.getSystemServices(true)
           const found = sysServices?.find((s: any) => s.service_name === serviceName)
-          if (found && (found as any).installed) {
-            return { success: true, message: 'Instalado com sucesso' }
+          if (found) {
+            if (found.installation_status === 'error') {
+              return {
+                success: false,
+                message:
+                  lastProgressMsg && lastProgressMsg.toLowerCase().includes('falha')
+                    ? lastProgressMsg
+                    : 'Falha ao iniciar o contêiner no servidor (verifique portas/recursos/imagem).',
+              }
+            }
+            if (found.installed && found.installation_status !== 'installing') {
+              if (found.status === 'running') {
+                return {
+                  success: true,
+                  message:
+                    deployTarget === 'portainer'
+                      ? 'Contêiner ativo e em execução no Servidor Portainer!'
+                      : 'Contêiner instalado e em execução!',
+                }
+              }
+              // Se marcou installed mas ainda não aparece como running, dá mais 2 ciclos antes de reprovar
+              if (attempt >= 4 && (found.status === 'stopped' || found.status === 'exited' || found.status === 'created')) {
+                return {
+                  success: false,
+                  message: `Contêiner criado mas não permaneceu em execução (estado atual: ${found.status}).`,
+                }
+              }
+            }
           }
-        } catch {}
+        } catch {
+          // Erro transitório de rede durante polling; tenta próximo ciclo
+        }
       }
 
-      await new Promise((resolve) => setTimeout(resolve, 2000))
+      await new Promise((resolve) => setTimeout(resolve, 3000))
     }
 
-    return { success: false, message: 'Tempo limite de instalação excedido' }
+    return { success: false, message: 'Tempo limite excedido aguardando resposta do servidor.' }
   }
 
-  // Initialize status map when modal opens or selection changes
-  useEffect(() => {
-    if (isOpen && !isRunning && !isFinished) {
-      const init: Record<string, ItemStatus> = {}
-      selectedServices.forEach((svc) => {
-        init[svc.service_name] = { state: 'pending', message: 'Aguardando fila...' }
-      })
-      setStatuses(init)
-      setCurrentIndex(-1)
-      setIsFinished(false)
-      cancelRequestedRef.current = false
-    }
-  }, [isOpen, selectedServices])
-
-  // Track live progress message from transmit/installActivity for the currently installing app
-  useEffect(() => {
-    if (!isRunning || currentIndex < 0 || currentIndex >= selectedServices.length) return
-    const currentSvc = selectedServices[currentIndex]
-    if (!currentSvc) return
-
-    const last = installActivity[installActivity.length - 1]
-    if (last && last.service_name === currentSvc.service_name) {
-      if (last.type === 'error') {
-        setStatuses((prev) => ({
-          ...prev,
-          [currentSvc.service_name]: {
-            state: 'error',
-            message: last.message || 'Falha na instalação',
-          },
-        }))
-      } else if (last.type === 'completed' || last.type === 'update-complete') {
-        setStatuses((prev) => ({
-          ...prev,
-          [currentSvc.service_name]: {
-            state: 'completed',
-            message: 'Instalado com sucesso',
-          },
-        }))
-      } else if (last.message) {
-        setStatuses((prev) => ({
-          ...prev,
-          [currentSvc.service_name]: {
-            state: 'installing',
-            message: last.message,
-          },
-        }))
-      }
-    }
-  }, [installActivity, isRunning, currentIndex, selectedServices])
-
   const startBulkInstall = async () => {
-    if (selectedServices.length === 0) return
+    const itemsToInstall = queueItems.length > 0 ? queueItems : selectedServices
+    if (itemsToInstall.length === 0) return
+    if (queueItems.length === 0) {
+      setQueueItems(itemsToInstall)
+    }
+
     onTargetSelected?.(target)
     setIsRunning(true)
     setIsFinished(false)
     cancelRequestedRef.current = false
 
-    for (let i = 0; i < selectedServices.length; i++) {
+    for (let i = 0; i < itemsToInstall.length; i++) {
       if (cancelRequestedRef.current) {
         break
       }
 
-      const svc = selectedServices[i]
+      const svc = itemsToInstall[i]
       setCurrentIndex(i)
 
+      const baselineActivityIdx = (installActivityRef.current || []).length
       setStatuses((prev) => ({
         ...prev,
         [svc.service_name]: {
           state: 'installing',
-          message: `Iniciando implantação de ${svc.friendly_name || svc.service_name}...`,
+          message:
+            target === 'portainer'
+              ? `Despachando "${svc.friendly_name || svc.service_name}" para o Servidor Portainer...`
+              : `Iniciando implantação local de "${svc.friendly_name || svc.service_name}"...`,
         },
       }))
 
@@ -194,26 +246,23 @@ export default function BulkInstallModal({
               message: res?.message || 'Falha ao despachar instalação',
             },
           }))
-        } else if (target === 'portainer') {
-          // Portainer is synchronous on backend
-          setStatuses((prev) => ({
-            ...prev,
-            [svc.service_name]: {
-              state: 'completed',
-              message: res.message || 'Instalação no Portainer concluída com sucesso',
-            },
-          }))
         } else {
-          // Local installation is async via Docker pull & run
           setStatuses((prev) => ({
             ...prev,
             [svc.service_name]: {
               state: 'installing',
-              message: 'Baixando imagem e configurando contêiner...',
+              message:
+                target === 'portainer'
+                  ? 'Aguardando pull da imagem e inicialização real no Portainer...'
+                  : 'Baixando imagem e configurando contêiner local...',
             },
           }))
 
-          const outcome = await waitForLocalCompletion(svc.service_name)
+          const outcome = await waitForServiceCompletion(
+            svc.service_name,
+            target,
+            baselineActivityIdx
+          )
           setStatuses((prev) => ({
             ...prev,
             [svc.service_name]: {
@@ -227,13 +276,32 @@ export default function BulkInstallModal({
           ...prev,
           [svc.service_name]: {
             state: 'error',
-            message: err?.message || 'Erro de comunicação',
+            message: err?.message || 'Erro de comunicação com o servidor',
           },
         }))
       }
 
-      // Small breather pause between sequential service dispatches to keep system responsive
-      await new Promise((resolve) => setTimeout(resolve, 800))
+      if (cancelRequestedRef.current) {
+        break
+      }
+
+      // Pausa breve entre instalações reais concluídas para aliviar I/O do daemon
+      await new Promise((resolve) => setTimeout(resolve, 600))
+    }
+
+    if (cancelRequestedRef.current) {
+      setStatuses((prev) => {
+        const next = { ...prev }
+        for (const svc of itemsToInstall) {
+          if (next[svc.service_name]?.state === 'pending') {
+            next[svc.service_name] = {
+              state: 'error',
+              message: 'Não iniciado (fila interrompida pelo operador)',
+            }
+          }
+        }
+        return next
+      })
     }
 
     setIsRunning(false)
@@ -246,29 +314,36 @@ export default function BulkInstallModal({
       setIsRunning(false)
       setIsFinished(true)
     } else {
+      setIsFinished(false)
       onClose()
     }
   }
 
-  const completedCount = Object.values(statuses).filter(
-    (s) => s.state === 'completed'
-  ).length
-  const errorCount = Object.values(statuses).filter(
-    (s) => s.state === 'error'
-  ).length
+  const displayList = queueItems.length > 0 ? queueItems : selectedServices
+  const completedCount = Object.values(statuses).filter((s) => s.state === 'completed').length
+  const errorCount = Object.values(statuses).filter((s) => s.state === 'error').length
+  const settledCount = completedCount + errorCount
+
+  const currentService =
+    isRunning && currentIndex >= 0 && currentIndex < displayList.length
+      ? displayList[currentIndex]
+      : null
+  const currentStepFraction =
+    currentService && statuses[currentService.service_name]?.state === 'installing'
+      ? estimateStepProgress(statuses[currentService.service_name]?.message) / 100
+      : 0
+
   const progressPct =
-    selectedServices.length > 0
-      ? Math.round(
-          ((Math.max(0, currentIndex) + (isFinished ? 1 : 0)) /
-            selectedServices.length) *
-            100
-        )
+    displayList.length > 0
+      ? isFinished
+        ? Math.min(100, Math.round((settledCount / displayList.length) * 100))
+        : Math.min(99, Math.round(((settledCount + currentStepFraction) / displayList.length) * 100))
       : 0
 
   if (!isOpen) return null
 
   return (
-    <Dialog open={isOpen} onClose={isRunning ? () => {} : onClose} className="relative z-50">
+    <Dialog open={isOpen} onClose={isRunning ? () => {} : () => { setIsFinished(false); onClose() }} className="relative z-50">
       <DialogBackdrop
         transition
         className="fixed inset-0 bg-black/70 backdrop-blur-sm transition-opacity data-[closed]:opacity-0 data-[enter]:duration-300 data-[leave]:duration-200 data-[enter]:ease-out data-[leave]:ease-in"
@@ -281,239 +356,256 @@ export default function BulkInstallModal({
         >
           {/* Header */}
           <div className="px-6 py-4 border-b border-border-subtle bg-surface-secondary/70 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-desert-orange/15 border border-desert-orange/30 flex items-center justify-center text-desert-orange">
-              <IconBolt size={22} />
-            </div>
-            <div>
-              <h2 className="text-base sm:text-lg font-bold font-mono-mil tracking-wide uppercase text-text-primary flex items-center gap-2">
-                <span>Instalação em Massa</span>
-                <span className="text-xs px-2 py-0.5 rounded-full font-mono bg-desert-orange/15 text-desert-orange border border-desert-orange/30 font-semibold">
-                  {selectedServices.length} Selecionados
-                </span>
-              </h2>
-              <p className="text-xs text-text-muted mt-0.5">
-                Implantação sequencial e controlada para prevenir sobrecarga de CPU e rede.
-              </p>
-            </div>
-          </div>
-
-          {!isRunning && (
-            <button
-              onClick={onClose}
-              className="p-1.5 rounded-lg hover:bg-surface-secondary text-text-muted hover:text-text-primary transition-colors cursor-pointer"
-            >
-              <IconX size={20} />
-            </button>
-          )}
-        </div>
-
-        {/* Target Destination Selector (when not running) */}
-        {!isRunning && !isFinished && isPortainerConfigured && (
-          <div className="p-4 border-b border-border-subtle bg-surface-secondary/30">
-            <label className="text-xs font-mono-mil font-semibold uppercase text-text-secondary block mb-2">
-              Destino da Implantação em Massa:
-            </label>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => setTarget('local')}
-                className={`p-3 rounded-lg border text-left flex items-center gap-3 transition-colors cursor-pointer ${
-                  target === 'local'
-                    ? 'border-desert-green bg-desert-green/10 text-desert-green-darker'
-                    : 'border-border-subtle bg-surface-secondary hover:border-desert-stone-light text-text-muted'
-                }`}
-              >
-                <IconDeviceDesktop size={20} className="shrink-0" />
-                <div>
-                  <div className="font-semibold text-xs text-text-primary">
-                    Local (NOMAD)
-                  </div>
-                  <div className="text-[0.625rem] text-text-muted">
-                    Executar no contêiner local deste dispositivo
-                  </div>
-                </div>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setTarget('portainer')}
-                className={`p-3 rounded-lg border text-left flex items-center gap-3 transition-colors cursor-pointer ${
-                  target === 'portainer'
-                    ? 'border-emerald-500 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
-                    : 'border-border-subtle bg-surface-secondary hover:border-desert-stone-light text-text-muted'
-                }`}
-              >
-                <IconServer size={20} className="shrink-0 text-emerald-500" />
-                <div>
-                  <div className="font-semibold text-xs text-text-primary">
-                    Servidor Remoto (Portainer)
-                  </div>
-                  <div className="text-[0.625rem] text-text-muted">
-                    Implantar como Stacks no servidor dedicado
-                  </div>
-                </div>
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Progress Bar (when running or finished) */}
-        {(isRunning || isFinished) && (
-          <div className="p-4 border-b border-border-subtle bg-surface-secondary/40 space-y-2">
-            <div className="flex items-center justify-between text-xs font-mono-mil">
-              <span className="text-text-primary font-bold">
-                {isRunning
-                  ? `Instalando ${currentIndex + 1} de ${selectedServices.length}...`
-                  : `Fila finalizada: ${completedCount} instalados com sucesso`}
-              </span>
-              <span className="text-desert-orange font-bold font-mono">
-                {progressPct}%
-              </span>
-            </div>
-            <div className="w-full h-2 bg-surface-secondary rounded-full overflow-hidden border border-border-subtle">
-              <div
-                className="h-full bg-desert-orange rounded-full transition-all duration-300"
-                style={{ width: `${Math.min(100, progressPct)}%` }}
-              />
-            </div>
-          </div>
-        )}
-
-        {/* Services List with Status */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-2 max-h-[50vh]">
-          {selectedServices.map((svc, idx) => {
-            const st = statuses[svc.service_name] || {
-              state: 'pending',
-              message: 'Pendente',
-            }
-            const isCurrent = isRunning && currentIndex === idx
-
-            return (
-              <div
-                key={svc.service_name}
-                className={`p-3 rounded-lg border flex items-center justify-between gap-3 transition-all ${
-                  isCurrent
-                    ? 'border-desert-orange bg-desert-orange/10 shadow-sm'
-                    : st.state === 'completed'
-                      ? 'border-emerald-500/30 bg-emerald-500/5'
-                      : st.state === 'error'
-                        ? 'border-desert-red/30 bg-desert-red/5'
-                        : 'border-border-subtle bg-surface-secondary/40'
-                }`}
-              >
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className="w-9 h-9 rounded-md bg-surface-secondary border border-border-subtle flex items-center justify-center text-desert-green shrink-0">
-                    <DynamicIcon
-                      icon={(svc.icon as DynamicIconName) || 'IconBrandDocker'}
-                      className="w-5 h-5"
-                    />
-                  </div>
-                  <div className="min-w-0">
-                    <div className="font-semibold text-xs text-text-primary truncate">
-                      {svc.friendly_name || svc.service_name}
-                    </div>
-                    <div className="text-[0.6875rem] text-text-muted truncate mt-0.5">
-                      {st.message}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="shrink-0 flex items-center gap-2">
-                  {st.state === 'installing' && (
-                    <span className="flex items-center gap-1.5 text-xs text-desert-orange font-medium">
-                      <span className="animate-spin inline-block w-3.5 h-3.5 border-2 border-desert-orange border-t-transparent rounded-full" />
-                      <span>Instalando</span>
-                    </span>
-                  )}
-                  {st.state === 'completed' && (
-                    <span className="flex items-center gap-1 text-xs text-emerald-600 font-semibold">
-                      <IconCheck size={16} />
-                      <span className="hidden sm:inline">Pronto</span>
-                    </span>
-                  )}
-                  {st.state === 'error' && (
-                    <span className="flex items-center gap-1 text-xs text-desert-red font-semibold">
-                      <IconAlertTriangle size={16} />
-                      <span className="hidden sm:inline">Erro</span>
-                    </span>
-                  )}
-                  {st.state === 'pending' && (
-                    <span className="text-[0.6875rem] font-mono text-text-muted px-2 py-0.5 rounded bg-surface-secondary">
-                      Na fila
-                    </span>
-                  )}
-                </div>
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-desert-orange/15 border border-desert-orange/30 flex items-center justify-center text-desert-orange">
+                <IconBolt size={22} />
               </div>
-            )
-          })}
-        </div>
+              <div>
+                <h2 className="text-base sm:text-lg font-bold font-mono-mil tracking-wide uppercase text-text-primary flex items-center gap-2">
+                  <span>Instalação em Massa</span>
+                  <span className="text-xs px-2 py-0.5 rounded-full font-mono bg-desert-orange/15 text-desert-orange border border-desert-orange/30 font-semibold">
+                    {displayList.length} Selecionados
+                  </span>
+                </h2>
+                <p className="text-xs text-text-muted mt-0.5">
+                  Execução sequencial real — cada app aguarda o download da imagem e a confirmação de inicialização saudável.
+                </p>
+              </div>
+            </div>
 
-        {/* Footer Actions */}
-        <div className="px-6 py-4 border-t border-border-subtle bg-surface-secondary/70 flex flex-wrap items-center justify-between gap-3">
-          <div className="text-xs text-text-muted">
-            {isFinished ? (
-              <span>
-                Concluídos: <strong>{completedCount}</strong> | Erros:{' '}
-                <strong>{errorCount}</strong>
-              </span>
-            ) : (
-              <span>
-                Pronto para instalar <strong>{selectedServices.length}</strong>{' '}
-                aplicativos sequencialmente.
-              </span>
+            {!isRunning && (
+              <button
+                onClick={() => { setIsFinished(false); onClose() }}
+                className="p-1.5 rounded-lg hover:bg-surface-secondary text-text-muted hover:text-text-primary transition-colors cursor-pointer"
+              >
+                <IconX size={20} />
+              </button>
             )}
           </div>
 
-          <div className="flex items-center gap-2">
-            {!isRunning && !isFinished && (
-              <>
-                <StyledButton variant="outline" size="sm" onClick={onClose}>
-                  Cancelar
+          {/* Target Destination Selector */}
+          {!isRunning && !isFinished && isPortainerConfigured && (
+            <div className="p-4 border-b border-border-subtle bg-surface-secondary/30">
+              <label className="text-xs font-mono-mil font-semibold uppercase text-text-secondary block mb-2">
+                Destino da Implantação em Massa:
+              </label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setTarget('local')}
+                  className={`p-3 rounded-lg border text-left flex items-center gap-3 transition-colors cursor-pointer ${
+                    target === 'local'
+                      ? 'border-desert-green bg-desert-green/10 text-desert-green-darker'
+                      : 'border-border-subtle bg-surface-secondary hover:border-desert-stone-light text-text-muted'
+                  }`}
+                >
+                  <IconDeviceDesktop size={20} className="shrink-0" />
+                  <div>
+                    <div className="font-semibold text-xs text-text-primary">
+                      Local (NOMAD)
+                    </div>
+                    <div className="text-[0.625rem] text-text-muted">
+                      Executar no contêiner local deste dispositivo
+                    </div>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setTarget('portainer')}
+                  className={`p-3 rounded-lg border text-left flex items-center gap-3 transition-colors cursor-pointer ${
+                    target === 'portainer'
+                      ? 'border-emerald-500 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+                      : 'border-border-subtle bg-surface-secondary hover:border-desert-stone-light text-text-muted'
+                  }`}
+                >
+                  <IconServer size={20} className="shrink-0 text-emerald-500" />
+                  <div>
+                    <div className="font-semibold text-xs text-text-primary">
+                      Servidor Remoto (Portainer)
+                    </div>
+                    <div className="text-[0.625rem] text-text-muted">
+                      Implantar 1 por vez aguardando subida real no servidor
+                    </div>
+                  </div>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Progress Bar (when running or finished) */}
+          {(isRunning || isFinished) && (
+            <div className="p-4 border-b border-border-subtle bg-surface-secondary/40 space-y-2">
+              <div className="flex items-center justify-between text-xs font-mono-mil gap-2">
+                <span className="text-text-primary font-bold truncate">
+                  {isRunning
+                    ? `Instalando ${Math.min(currentIndex + 1, displayList.length)} de ${displayList.length} (${completedCount} pronto(s), ${errorCount} erro(s))...`
+                    : `Fila finalizada: ${completedCount} ativo(s) no servidor | ${errorCount} erro(s)`}
+                </span>
+                <span className="text-desert-orange font-bold font-mono shrink-0">
+                  {progressPct}%
+                </span>
+              </div>
+              <div className="w-full h-2.5 bg-surface-secondary rounded-full overflow-hidden border border-border-subtle">
+                <div
+                  className="h-full bg-desert-orange nomad-progress-shimmer rounded-full transition-all duration-500"
+                  style={{ width: `${Math.min(100, Math.max(isRunning ? 2 : 0, progressPct))}%` }}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Services List with Status */}
+          <div className="flex-1 overflow-y-auto p-4 space-y-2 max-h-[50vh]">
+            {displayList.map((svc, idx) => {
+              const st = statuses[svc.service_name] || {
+                state: 'pending',
+                message: 'Aguardando fila...',
+              }
+              const isCurrent = isRunning && currentIndex === idx
+
+              return (
+                <div
+                  key={svc.service_name}
+                  ref={isCurrent ? activeItemRef : undefined}
+                  className={`p-3 rounded-lg border flex items-center justify-between gap-3 transition-colors duration-300 ${
+                    isCurrent
+                      ? 'border-desert-orange bg-desert-orange/10 shadow-sm'
+                      : st.state === 'completed'
+                        ? 'border-emerald-500/35 bg-emerald-500/5'
+                        : st.state === 'error'
+                          ? 'border-desert-red/40 bg-desert-red/5'
+                          : 'border-border-subtle bg-surface-secondary/40'
+                  }`}
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-9 h-9 rounded-md bg-surface-secondary border border-border-subtle flex items-center justify-center text-desert-green shrink-0">
+                      <DynamicIcon
+                        icon={(svc.icon as DynamicIconName) || 'IconBrandDocker'}
+                        className="w-5 h-5"
+                      />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="font-semibold text-xs text-text-primary truncate flex items-center gap-2">
+                        <span>{svc.friendly_name || svc.service_name}</span>
+                        {isCurrent && elapsedSeconds > 0 && (
+                          <span className="text-[0.625rem] font-mono text-desert-tan tabular-nums">
+                            ({Math.floor(elapsedSeconds / 60)}:{String(elapsedSeconds % 60).padStart(2, '0')})
+                          </span>
+                        )}
+                      </div>
+                      <div
+                        className={`text-[0.6875rem] mt-0.5 ${
+                          st.state === 'error'
+                            ? 'text-desert-red line-clamp-2'
+                            : 'text-text-muted truncate'
+                        }`}
+                        title={st.message}
+                      >
+                        {st.message}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="shrink-0 flex items-center gap-2">
+                    {st.state === 'installing' && (
+                      <span className="flex items-center gap-1.5 text-xs text-desert-orange font-medium">
+                        <span className="animate-spin inline-block w-3.5 h-3.5 border-2 border-desert-orange border-t-transparent rounded-full" />
+                        <span>{estimateStepProgress(st.message)}%</span>
+                      </span>
+                    )}
+                    {st.state === 'completed' && (
+                      <span className="flex items-center gap-1 text-xs text-emerald-500 font-semibold">
+                        <IconCheck size={16} />
+                        <span className="hidden sm:inline">Ativo</span>
+                      </span>
+                    )}
+                    {st.state === 'error' && (
+                      <span className="flex items-center gap-1 text-xs text-desert-red font-semibold">
+                        <IconAlertTriangle size={16} />
+                        <span className="hidden sm:inline">Falhou</span>
+                      </span>
+                    )}
+                    {st.state === 'pending' && (
+                      <span className="text-[0.6875rem] font-mono text-text-muted px-2 py-0.5 rounded bg-surface-secondary">
+                        Na fila
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+
+          {/* Footer Actions */}
+          <div className="px-6 py-4 border-t border-border-subtle bg-surface-secondary/70 flex flex-wrap items-center justify-between gap-3">
+            <div className="text-xs text-text-muted">
+              {isFinished ? (
+                <span>
+                  Concluídos: <strong className="text-emerald-500">{completedCount}</strong> | Erros:{' '}
+                  <strong className={errorCount > 0 ? 'text-desert-red' : ''}>{errorCount}</strong>
+                </span>
+              ) : isRunning ? (
+                <span>
+                  Verificando em tempo real ({target === 'portainer' ? 'Portainer Remoto' : 'Docker Local'}) — aguarde a inicialização...
+                </span>
+              ) : (
+                <span>
+                  Pronto para instalar <strong>{displayList.length}</strong> aplicativos sequencialmente.
+                </span>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2">
+              {!isRunning && !isFinished && (
+                <>
+                  <StyledButton variant="outline" size="sm" onClick={() => { setIsFinished(false); onClose() }}>
+                    Cancelar
+                  </StyledButton>
+                  <StyledButton
+                    variant="primary"
+                    size="sm"
+                    icon="IconPlayerPlay"
+                    onClick={startBulkInstall}
+                  >
+                    Iniciar Instalação em Massa
+                  </StyledButton>
+                </>
+              )}
+
+              {isRunning && (
+                <StyledButton
+                  variant="danger"
+                  size="sm"
+                  icon="IconPlayerStop"
+                  onClick={handleCancel}
+                >
+                  Interromper Fila
                 </StyledButton>
+              )}
+
+              {isFinished && (
                 <StyledButton
                   variant="primary"
                   size="sm"
-                  icon="IconPlayerPlay"
-                  onClick={startBulkInstall}
+                  icon="IconCheck"
+                  onClick={() => {
+                    setIsFinished(false)
+                    onClose()
+                    if (onCompletedAll) {
+                      onCompletedAll()
+                    } else {
+                      window.location.reload()
+                    }
+                  }}
                 >
-                  Iniciar Instalação em Massa
+                  Concluir e Atualizar
                 </StyledButton>
-              </>
-            )}
-
-            {isRunning && (
-              <StyledButton
-                variant="danger"
-                size="sm"
-                icon="IconPlayerStop"
-                onClick={handleCancel}
-              >
-                Interromper Fila
-              </StyledButton>
-            )}
-
-            {isFinished && (
-              <StyledButton
-                variant="primary"
-                size="sm"
-                icon="IconCheck"
-                onClick={() => {
-                  onClose()
-                  if (onCompletedAll) {
-                    onCompletedAll()
-                  } else {
-                    window.location.reload()
-                  }
-                }}
-              >
-                Concluir e Atualizar
-              </StyledButton>
-            )}
+              )}
+            </div>
           </div>
-        </div>
-      </DialogPanel>
-    </div>
-  </Dialog>
-)
+        </DialogPanel>
+      </div>
+    </Dialog>
+  )
 }

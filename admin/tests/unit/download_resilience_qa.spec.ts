@@ -565,10 +565,13 @@ test('CSS animations, hover cascade, reduced-motion, contrast and release metada
     'nomad-progress-shimmer',
     'nomad-stagger-grid',
     'nomad-interactive-card',
+    'nomad-telemetry-panel',
     'nomad-status-online-text',
   ]) {
     assert.ok(css.includes(`.${cls}`), `Expected .${cls} class definition in app.css`)
   }
+  assert.doesNotMatch(css, /\.nomad-interactive-card::before/, 'Fast bright sheen sweep on hover must be removed')
+  assert.match(css, /translateX\(54%\)/, 'Split wing animation must visibly slide from center outward')
 
   // 4) Avoid double nomad-page-enter animation inside home.tsx (already provided by AppLayout.tsx)
   assert.match(appLayout, /nomad-page-enter/)
@@ -614,9 +617,26 @@ test('CSS animations, hover cascade, reduced-motion, contrast and release metada
     assert.ok(routes.includes(`documented(${snippet}`), `Missing documented() wrapper for ${snippet}`)
   }
 
-  // 8) Triple version sync to v1.0.36 across workflow and boot gate
-  assert.match(workflow, /# Build release trigger: v1\.0\.36/)
-  assert.match(workflow, /default: '1\.0\.36-nexus'/)
-  assert.match(workflow, /inputs\.version \|\| '1\.0\.36-nexus'/)
-  assert.match(bootGate, /:\s*'v1\.0\.36'/)
+  // 8) Triple version sync to v1.0.37 across workflow and boot gate
+  assert.match(workflow, /# Build release trigger: v1\.0\.37/)
+  assert.match(workflow, /default: '1\.0\.37-nexus'/)
+  assert.match(workflow, /inputs\.version \|\| '1\.0\.37-nexus'/)
+  assert.match(bootGate, /:\s*'v1\.0\.37'/)
+
+  // 9) Bulk install & Portainer hardening checks (real sequential wait + port collision resolution + catalog port uniqueness)
+  const [bulkModal, supplyDepot, portainerSvc, seeder] = await Promise.all([
+    readFile(new URL('../../inertia/components/BulkInstallModal.tsx', import.meta.url), 'utf8'),
+    readFile(new URL('../../inertia/pages/supply-depot.tsx', import.meta.url), 'utf8'),
+    readFile(new URL('../../app/services/portainer_service.ts', import.meta.url), 'utf8'),
+    readFile(new URL('../../database/seeders/service_seeder.ts', import.meta.url), 'utf8'),
+  ])
+
+  assert.doesNotMatch(bulkModal, /Portainer is synchronous on backend/)
+  assert.match(bulkModal, /waitForServiceCompletion/)
+  assert.match(supplyDepot, /if \(bulkModalOpen \|\| !installActivity\.length\) return/)
+  assert.match(portainerSvc, /occupiedPorts\.has\(requestedPortNum\)/)
+  assert.match(portainerSvc, /healthStatus === 'unhealthy'/)
+  assert.match(portainerSvc, /if \(createdOrModifiedContainer\)/)
+  assert.match(seeder, /HostPort:\s*'8502'/)
+  assert.match(seeder, /HostPort:\s*'8492'/)
 })

@@ -1050,7 +1050,12 @@ export class PortainerService {
           volumeMounts.push(`- ${bind}`)
         } else {
           const parts = bind.split(':')
-          const targetPath = parts[1] || '/data'
+          const rawTargetPath = parts[1] || '/data'
+          // Convert single nginx file bind (`/etc/nginx/conf.d/default.conf`) to its parent directory when using named Docker volumes
+          const targetPath =
+            rawTargetPath === '/etc/nginx/conf.d/default.conf'
+              ? '/etc/nginx/conf.d'
+              : rawTargetPath
           const mode = parts[2] ? `:${parts[2]}` : ''
           const cleanName =
             targetPath
@@ -1394,7 +1399,11 @@ ${cmdBlock}${topLevelVolumesBlock}`
     if (rawBinds.length > 0) {
       for (const bind of rawBinds) {
         const parts = bind.split(':')
-        const targetPath = parts[1] || '/data'
+        const rawTargetPath = parts[1] || '/data'
+        const targetPath =
+          rawTargetPath === '/etc/nginx/conf.d/default.conf'
+            ? '/etc/nginx/conf.d'
+            : rawTargetPath
         const cleanName =
           targetPath
             .replace(/^\//, '')
@@ -1497,10 +1506,24 @@ ${cmdBlock}${topLevelVolumesBlock}`
         .catch(() => {})
 
       const booksVol = volumeDefs.find((v) => v.targetPath === '/books')?.volName || primaryVol
-      const mountSpec = isCalibre ? `${booksVol}:/books` : `${primaryVol}:${primaryTarget}`
+      const certsVol = volumeDefs.find((v) => v.targetPath === '/certs')?.volName || primaryVol
+      const nginxConfVol = volumeDefs.find((v) => v.targetPath === '/etc/nginx/conf.d')?.volName
+
+      const mountBinds: string[] = isCalibre
+        ? [`${booksVol}:/books`]
+        : isMeshcore && nginxConfVol
+          ? [`${certsVol}:/certs`, `${nginxConfVol}:/etc/nginx/conf.d`]
+          : [`${primaryVol}:${primaryTarget}`]
+
+      const certDirTarget = isMeshcore ? '/certs' : primaryTarget
+      const meshcoreNginxCmd =
+        isMeshcore && nginxConfVol
+          ? `; printf 'server {\\n    listen 443 ssl;\\n    server_name _;\\n    ssl_certificate     /certs/cert.pem;\\n    ssl_certificate_key /certs/key.pem;\\n    root /usr/share/nginx/html;\\n    index index.html;\\n    location / {\\n        try_files $uri $uri/ /index.html;\\n    }\\n}\\n' > /etc/nginx/conf.d/default.conf; chmod 644 /etc/nginx/conf.d/default.conf`
+          : ''
+
       const shellCmd = isCalibre
         ? 'chown -R 1000:1000 /books && chmod -R u+rwX /books'
-        : `apk add --no-cache openssl >/dev/null 2>&1; if [ ! -f ${primaryTarget}/cert.pem ] || [ ! -f ${primaryTarget}/key.pem ]; then openssl req -x509 -newkey rsa:2048 -nodes -keyout ${primaryTarget}/key.pem -out ${primaryTarget}/cert.pem -days 3650 -subj '/CN=${lowerName}'; chmod 644 ${primaryTarget}/cert.pem ${primaryTarget}/key.pem; fi`
+        : `apk add --no-cache openssl >/dev/null 2>&1; if [ ! -f ${certDirTarget}/cert.pem ] || [ ! -f ${certDirTarget}/key.pem ]; then openssl req -x509 -newkey rsa:2048 -nodes -keyout ${certDirTarget}/key.pem -out ${certDirTarget}/cert.pem -days 3650 -subj '/CN=${lowerName}'; chmod 644 ${certDirTarget}/cert.pem ${certDirTarget}/key.pem; fi${meshcoreNginxCmd}`
 
       const createResp = await client.post(
         `/api/endpoints/${endpointId}/docker/containers/create?name=${initContName}`,
@@ -1508,7 +1531,7 @@ ${cmdBlock}${topLevelVolumesBlock}`
           Image: 'alpine:latest',
           Cmd: ['sh', '-c', shellCmd],
           HostConfig: {
-            Binds: [mountSpec],
+            Binds: mountBinds,
           },
         },
         { timeout: 15000 }
@@ -1679,9 +1702,10 @@ ${cmdBlock}${topLevelVolumesBlock}`
   ): Promise<void> {
     const serviceName = service.service_name
     const scheme = /^https:/i.test(service.ui_location || '') ? 'https' : 'http'
-    const targetUrl = `${scheme}://${hostIp}:${hostPort}`
+    let targetUrl = `${scheme}://${hostIp}:${hostPort}`
     const stackName = `nomad-${serviceName}`
     const extraEnv = preinstall?.extraEnv || []
+    let createdOrModifiedContainer = false
 
     try {
       // 1. Resolve real active endpointId FIRST before checking GPU or containers
@@ -1753,18 +1777,51 @@ ${cmdBlock}${topLevelVolumesBlock}`
           }
 
           const requestedPortNum = Number(hostPort)
-          const portHolder =
-            requestedPortNum > 0
-              ? mappedPre.find(
-                  (c) =>
-                    !isNomadManagedContainer(c.name, c.projectName) &&
-                    c.allPublicPorts.includes(requestedPortNum)
-                )
-              : undefined
-          if (portHolder) {
-            throw new Error(
-              `A porta ${hostPort} já está em uso no Portainer pelo contêiner "${portHolder.name}". Libere esta porta ou adicione um App Personalizado em outra porta.`
+          const occupiedPorts = new Set<number>()
+          let selfNamesMatches = (c: { name: string; projectName: string }) => {
+            const lowerN = c.name.toLowerCase()
+            const lowerP = c.projectName.toLowerCase()
+            return (
+              lowerN === stackName.toLowerCase() ||
+              lowerN === serviceName.toLowerCase() ||
+              lowerP === stackName.toLowerCase()
             )
+          }
+          for (const c of mappedPre) {
+            if (!selfNamesMatches(c)) {
+              for (const p of c.allPublicPorts) {
+                occupiedPorts.add(p)
+              }
+            }
+          }
+
+          if (requestedPortNum > 0 && occupiedPorts.has(requestedPortNum)) {
+            const holder = mappedPre.find(
+              (c) => !selfNamesMatches(c) && c.allPublicPorts.includes(requestedPortNum)
+            )
+            let nextPort = requestedPortNum + 1
+            while (occupiedPorts.has(nextPort) && nextPort < requestedPortNum + 200) {
+              nextPort++
+            }
+            if (!occupiedPorts.has(nextPort)) {
+              logger.warn(
+                `[PortainerService] Port ${hostPort} already held by "${holder?.name || 'another container'}". Auto-remapping ${serviceName} to free port ${nextPort}.`
+              )
+              this.broadcast(
+                serviceName,
+                'initializing',
+                `Porta ${hostPort} já ocupada por "${holder?.name || 'outro contêiner'}"; remapeando ${service.friendly_name || serviceName} para porta livre ${nextPort}...`
+              )
+              hostPort = String(nextPort)
+              targetUrl = `${scheme}://${hostIp}:${hostPort}`
+              if (serviceName !== 'nomad_ollama') {
+                service.ui_location = scheme === 'https' ? `https:${hostPort}` : hostPort
+              }
+            } else {
+              throw new Error(
+                `A porta ${hostPort} já está em uso no Portainer pelo contêiner "${holder?.name || 'desconhecido'}" e não foi possível encontrar porta alternativa.`
+              )
+            }
           }
         }
       } catch (preErr: any) {
@@ -1774,6 +1831,7 @@ ${cmdBlock}${topLevelVolumesBlock}`
       }
 
       // 2. Clean up any existing conflicting containers or broken stacks BEFORE deploying
+      createdOrModifiedContainer = true
       this.broadcast(
         serviceName,
         'initializing',
@@ -2002,7 +2060,11 @@ ${cmdBlock}${topLevelVolumesBlock}`
                 }
                 if (!usesHostBinds && b.startsWith('/')) {
                   const parts = b.split(':')
-                  const targetPath = parts[1] || '/data'
+                  const rawTargetPath = parts[1] || '/data'
+                  const targetPath =
+                    rawTargetPath === '/etc/nginx/conf.d/default.conf'
+                      ? '/etc/nginx/conf.d'
+                      : rawTargetPath
                   const mode = parts[2] ? `:${parts[2]}` : ''
                   const cleanName =
                     targetPath
@@ -2103,33 +2165,46 @@ ${cmdBlock}${topLevelVolumesBlock}`
       }
 
       if (runningCont.State !== 'running') {
-        await client
-          .post(`/api/endpoints/${endpointId}/docker/containers/${runningCont.Id}/start`, null, {
+        try {
+          await client.post(`/api/endpoints/${endpointId}/docker/containers/${runningCont.Id}/start`, null, {
             timeout: 15000,
           })
-          .catch(() => {})
-        await new Promise((r) => setTimeout(r, 2500))
+          await new Promise((r) => setTimeout(r, 2500))
+        } catch (startErr: any) {
+          const dockerMsg = startErr?.response?.data?.message || startErr?.message || 'falha desconhecida ao iniciar'
+          throw new Error(`Contêiner permaneceu parado (${runningCont.State}) e falhou ao iniciar: ${dockerMsg}`)
+        }
       }
 
       let inspectCheck: any = null
-      for (let iAttempt = 0; iAttempt < 3; iAttempt++) {
+      for (let iAttempt = 0; iAttempt < 6; iAttempt++) {
         inspectCheck = await client
           .get(`/api/endpoints/${endpointId}/docker/containers/${runningCont.Id}/json`, {
             timeout: 20000,
           })
           .catch(() => null)
-        if (inspectCheck?.data?.State) break
+        const healthStatus = inspectCheck?.data?.State?.Health?.Status
+        if (inspectCheck?.data?.State) {
+          // If the container defines a Docker HEALTHCHECK and is still 'starting', wait briefly before evaluating
+          if (healthStatus === 'starting' && inspectCheck.data.State.Running && iAttempt < 5) {
+            await new Promise((r) => setTimeout(r, 3000))
+            continue
+          }
+          break
+        }
         await new Promise((r) => setTimeout(r, 2000))
       }
 
       const cState = inspectCheck?.data?.State
       const restartCount = inspectCheck?.data?.RestartCount ?? 0
-      // If inspect timed out transiently, trust the verified `runningCont.State === 'running'` instead of killing a healthy container!
+      const healthStatus = cState?.Health?.Status
       const isHealthyRunning = cState
         ? Boolean(cState.Running) &&
+          cState.Status !== 'created' &&
           cState.Status !== 'exited' &&
           cState.Status !== 'dead' &&
           !cState.Restarting &&
+          healthStatus !== 'unhealthy' &&
           restartCount <= 2
         : runningCont.State === 'running'
 
@@ -2146,7 +2221,9 @@ ${cmdBlock}${topLevelVolumesBlock}`
         throw new Error(
           oomDetected
             ? `Contêiner encerrado por falta de memória RAM (OOMKilled) no servidor Portainer.`
-            : `Contêiner não permaneceu ativo (estado: ${cState?.Status || runningCont.State}, código: ${cState?.ExitCode ?? '?'}, reinícios: ${restartCount}). ${logs ? `Logs: ${logs.replace(/[^\x20-\x7E\n]/g, '').slice(0, 220)}` : ''}`
+            : healthStatus === 'unhealthy'
+              ? `Contêiner iniciou mas falhou no Healthcheck (unhealthy) no Portainer.${logs ? ` Logs: ${logs.replace(/[^\x20-\x7E\n]/g, '').slice(0, 220)}` : ''}`
+              : `Contêiner não permaneceu ativo (estado: ${cState?.Status || runningCont.State}, código: ${cState?.ExitCode ?? '?'}, reinícios: ${restartCount}). ${logs ? `Logs: ${logs.replace(/[^\x20-\x7E\n]/g, '').slice(0, 220)}` : ''}`
         )
       }
 
@@ -2214,6 +2291,10 @@ ${cmdBlock}${topLevelVolumesBlock}`
     } catch (apiErr: any) {
       this.pendingGpuServices.delete(serviceName)
       logger.error(`Portainer remote deploy failed for ${serviceName}: ${apiErr.message}`)
+      if (createdOrModifiedContainer) {
+        // Remove failed/zombie `created`/`exited`/`unhealthy` container left behind by this attempt
+        await this.cleanupBeforeRemoteDeploy(client, endpointId, serviceName, stackName).catch(() => {})
+      }
       await this.unmarkDeployedRemotely(serviceName)
       service.installed = false
       service.installation_status = 'error'

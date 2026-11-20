@@ -582,8 +582,8 @@ export default function Home(props: {
       setDiskTransitionPhase(willSplit ? 'split-in' : 'merge-in')
       diskAnimTimerRef.current = setTimeout(() => {
         setDiskTransitionPhase('idle')
-      }, 480)
-    }, 170)
+      }, 740)
+    }, willSplit ? 420 : 480)
   }
 
   const handleToggleCpuCombined = () => {
@@ -598,8 +598,8 @@ export default function Home(props: {
       setCpuTransitionPhase(willSplit ? 'split-in' : 'merge-in')
       cpuAnimTimerRef.current = setTimeout(() => {
         setCpuTransitionPhase('idle')
-      }, 480)
-    }, 170)
+      }, 740)
+    }, willSplit ? 420 : 480)
   }
 
   const handleOpenAiHub = () => {
@@ -877,7 +877,7 @@ export default function Home(props: {
           )}
 
           {/* 2. TELEMETRIA EM TEMPO REAL & ARMAZENAMENTO CONSOLIDADO */}
-          <section className="space-y-4">
+          <section className="space-y-4 overflow-x-clip">
             {/* Pools & Discos Físicos */}
             {dashboardConfig.pools && (
               <div className="space-y-2.5">
@@ -892,22 +892,32 @@ export default function Home(props: {
                     <button
                       type="button"
                       onClick={handleTogglePoolsCombined}
-                      disabled={diskTransitionPhase === 'splitting-out' || diskTransitionPhase === 'merging-out'}
+                      disabled={diskTransitionPhase !== 'idle'}
                       title={
                         dashboardConfig.poolsCombined
                           ? 'Separar os discos físicos em cartões individuais com animação'
                           : 'Unificar todos os discos em uma única visualização'
                       }
-                      className="group px-3 py-1 rounded-md text-xs font-semibold border border-border-default bg-surface-secondary hover:border-desert-tan text-text-secondary hover:text-text-primary transition-all cursor-pointer inline-flex items-center gap-1.5"
+                      className="group px-3 py-1 rounded-md text-xs font-semibold border border-border-default bg-surface-secondary hover:border-desert-tan text-text-secondary hover:text-text-primary transition-all cursor-pointer inline-flex items-center gap-1.5 disabled:opacity-75"
                     >
-                      {dashboardConfig.poolsCombined ? (
+                      {diskTransitionPhase === 'splitting-out' || diskTransitionPhase === 'split-in' ? (
                         <>
-                          <IconLayoutGrid size={14} className="text-desert-tan group-hover:scale-110 transition-transform duration-300" />
+                          <IconLayoutGrid size={14} className="text-desert-tan" />
+                          <span>Separando...</span>
+                        </>
+                      ) : diskTransitionPhase === 'merging-out' || diskTransitionPhase === 'merge-in' ? (
+                        <>
+                          <IconBox size={14} className="text-desert-tan" />
+                          <span>Unificando...</span>
+                        </>
+                      ) : dashboardConfig.poolsCombined ? (
+                        <>
+                          <IconLayoutGrid size={14} className="text-desert-tan" />
                           <span>Ver Separados</span>
                         </>
                       ) : (
                         <>
-                          <IconBox size={14} className="text-desert-tan group-hover:scale-110 transition-transform duration-300" />
+                          <IconBox size={14} className="text-desert-tan" />
                           <span>Unificar Discos</span>
                         </>
                       )}
@@ -928,12 +938,12 @@ export default function Home(props: {
                 ) : dashboardConfig.poolsCombined ? (
                   /* NOVA VISUALIZAÇÃO UNIFICADA REAL (1 ÚNICO CARD COESO) */
                   <div
-                    className={`rounded-xl border border-border-default border-t-2 border-t-desert-tan bg-surface-primary p-4 sm:p-5 shadow-sm transition-all ${
+                    className={`rounded-xl border border-border-default border-t-2 border-t-desert-tan bg-surface-primary p-4 sm:p-5 shadow-sm transition-colors ${
                       diskTransitionPhase === 'splitting-out'
                         ? 'nomad-split-pre-exit'
                         : diskTransitionPhase === 'merge-in'
                           ? 'nomad-merge-lock'
-                          : 'nomad-interactive-card'
+                          : 'nomad-telemetry-panel'
                     }`}
                   >
                     <div className="flex flex-col lg:flex-row lg:items-center gap-5">
@@ -1094,7 +1104,7 @@ export default function Home(props: {
                             ? idx % 2 === 0
                               ? 'nomad-split-wing-left'
                               : 'nomad-split-wing-right'
-                            : 'nomad-interactive-card'
+                            : 'nomad-telemetry-panel'
 
                       return (
                         <div
@@ -1180,12 +1190,12 @@ export default function Home(props: {
                   {/* CPU: MODO UNIFICADO EM TEMPO REAL */}
                   {dashboardConfig.cpuCombined ? (
                     <div
-                      className={`${hwColSpan} rounded-xl border border-border-default bg-surface-primary p-4 flex flex-col justify-between shadow-sm hover:border-desert-tan/70 transition-all ${
+                      className={`${hwColSpan} rounded-xl border border-border-default bg-surface-primary p-4 flex flex-col justify-between shadow-sm hover:border-desert-tan/70 ${
                         cpuTransitionPhase === 'splitting-out'
                           ? 'nomad-split-pre-exit'
                           : cpuTransitionPhase === 'merge-in'
                             ? 'nomad-merge-lock'
-                            : 'nomad-interactive-card'
+                            : 'nomad-telemetry-panel'
                       }`}
                     >
                       <div className="flex items-center justify-between pb-2.5 mb-3 border-b border-border-default/60">
@@ -1202,11 +1212,13 @@ export default function Home(props: {
                         <button
                           type="button"
                           onClick={handleToggleCpuCombined}
-                          disabled={cpuTransitionPhase === 'splitting-out' || cpuTransitionPhase === 'merging-out'}
+                          disabled={cpuTransitionPhase !== 'idle'}
                           title="Separar carga e modelo em 2 cards com animação"
-                          className="text-xs text-text-muted hover:text-desert-tan cursor-pointer font-medium transition-colors"
+                          className="text-xs text-text-muted hover:text-desert-tan cursor-pointer font-medium transition-colors disabled:opacity-75"
                         >
-                          Separar
+                          {cpuTransitionPhase === 'splitting-out' || cpuTransitionPhase === 'split-in'
+                            ? 'Separando...'
+                            : 'Separar'}
                         </button>
                       </div>
 
@@ -1283,12 +1295,12 @@ export default function Home(props: {
                     <>
                       {dashboardConfig.cpuUsage && (
                         <div
-                          className={`${hwColSpan} rounded-xl border border-border-default bg-surface-primary p-4 flex flex-col justify-between shadow-sm hover:border-desert-tan/70 transition-all ${
+                          className={`${hwColSpan} rounded-xl border border-border-default bg-surface-primary p-4 flex flex-col justify-between shadow-sm hover:border-desert-tan/70 ${
                             cpuTransitionPhase === 'merging-out'
                               ? 'nomad-merge-pre-left'
                               : cpuTransitionPhase === 'split-in'
                                 ? 'nomad-split-wing-left'
-                                : 'nomad-interactive-card'
+                                : 'nomad-telemetry-panel'
                           }`}
                         >
                           <div className="flex items-center justify-between pb-2.5 mb-3 border-b border-border-default/60">
@@ -1301,11 +1313,13 @@ export default function Home(props: {
                             <button
                               type="button"
                               onClick={handleToggleCpuCombined}
-                              disabled={cpuTransitionPhase === 'splitting-out' || cpuTransitionPhase === 'merging-out'}
+                              disabled={cpuTransitionPhase !== 'idle'}
                               title="Unificar carga e modelo com animação"
-                              className="text-xs text-text-muted hover:text-desert-tan cursor-pointer font-medium transition-colors"
+                              className="text-xs text-text-muted hover:text-desert-tan cursor-pointer font-medium transition-colors disabled:opacity-75"
                             >
-                              Unificar
+                              {cpuTransitionPhase === 'merging-out' || cpuTransitionPhase === 'merge-in'
+                                ? 'Unificando...'
+                                : 'Unificar'}
                             </button>
                           </div>
                           <div className="flex items-center justify-center py-2">
@@ -1329,12 +1343,12 @@ export default function Home(props: {
 
                       {dashboardConfig.cpuModel && (
                         <div
-                          className={`${hwColSpan} rounded-xl border border-border-default bg-surface-primary p-4 flex flex-col justify-between shadow-sm hover:border-desert-tan/70 transition-all ${
+                          className={`${hwColSpan} rounded-xl border border-border-default bg-surface-primary p-4 flex flex-col justify-between shadow-sm hover:border-desert-tan/70 ${
                             cpuTransitionPhase === 'merging-out'
                               ? 'nomad-merge-pre-right'
                               : cpuTransitionPhase === 'split-in'
                                 ? 'nomad-split-wing-right'
-                                : 'nomad-interactive-card'
+                                : 'nomad-telemetry-panel'
                           }`}
                         >
                           <div className="flex items-center justify-between pb-2.5 mb-3 border-b border-border-default/60">
@@ -1372,7 +1386,7 @@ export default function Home(props: {
 
                   {/* MEMÓRIA RAM REAL (CORRIGIDA: Em Uso Real = Total - Disponível) */}
                   {dashboardConfig.memory && (
-                    <div className={`${hwColSpan} nomad-interactive-card rounded-xl border border-border-default bg-surface-primary p-4 flex flex-col justify-between shadow-sm hover:border-desert-tan/70 transition-colors`}>
+                    <div className={`${hwColSpan} nomad-telemetry-panel rounded-xl border border-border-default bg-surface-primary p-4 flex flex-col justify-between shadow-sm hover:border-desert-tan/70`}>
                       <div className="flex items-center justify-between pb-2.5 mb-3 border-b border-border-default/60">
                         <div className="flex items-center gap-2">
                           <IconActivity size={16} className="text-emerald-400" />
@@ -1450,7 +1464,7 @@ export default function Home(props: {
 
                   {/* LOG DE EVENTOS & FILA DE DOWNLOADS */}
                   {dashboardConfig.eventLog && (
-                    <div className={`${hwColSpan} nomad-interactive-card rounded-xl border border-border-default bg-surface-primary p-4 flex flex-col justify-between shadow-sm hover:border-desert-tan/70 transition-colors`}>
+                    <div className={`${hwColSpan} nomad-telemetry-panel rounded-xl border border-border-default bg-surface-primary p-4 flex flex-col justify-between shadow-sm hover:border-desert-tan/70`}>
                       <div className="flex items-center justify-between pb-2.5 mb-3 border-b border-border-default/60">
                         <span className="text-xs font-bold uppercase tracking-wider text-text-primary">
                           Log de Eventos &amp; Fila

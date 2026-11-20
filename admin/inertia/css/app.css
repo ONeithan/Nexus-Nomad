@@ -805,15 +805,15 @@ body {
   }
 }
 
-/* Física de Separação & União dos Discos / CPU */
+/* Física de Separação & União Cinematográfica dos Discos / CPU */
 @keyframes nomad-split-wing-left {
   0% {
-    opacity: 0.15;
-    transform: translateX(36%) scale(0.92);
+    opacity: 0.05;
+    transform: translateX(54%) scale(0.86);
   }
-  68% {
+  72% {
     opacity: 1;
-    transform: translateX(-6px) scale(1.015);
+    transform: translateX(-4px) scale(1.008);
   }
   100% {
     opacity: 1;
@@ -823,12 +823,12 @@ body {
 
 @keyframes nomad-split-wing-right {
   0% {
-    opacity: 0.15;
-    transform: translateX(-36%) scale(0.92);
+    opacity: 0.05;
+    transform: translateX(-54%) scale(0.86);
   }
-  68% {
+  72% {
     opacity: 1;
-    transform: translateX(6px) scale(1.015);
+    transform: translateX(4px) scale(1.008);
   }
   100% {
     opacity: 1;
@@ -842,8 +842,8 @@ body {
     transform: scaleX(1) scaleY(1);
   }
   100% {
-    opacity: 0.25;
-    transform: scaleX(0.94) scaleY(0.97);
+    opacity: 0.06;
+    transform: scaleX(0.84) scaleY(0.95);
   }
 }
 
@@ -853,8 +853,8 @@ body {
     transform: translateX(0) scale(1);
   }
   100% {
-    opacity: 0.2;
-    transform: translateX(32%) scale(0.92);
+    opacity: 0.06;
+    transform: translateX(48%) scale(0.86);
   }
 }
 
@@ -864,21 +864,21 @@ body {
     transform: translateX(0) scale(1);
   }
   100% {
-    opacity: 0.2;
-    transform: translateX(-32%) scale(0.92);
+    opacity: 0.06;
+    transform: translateX(-48%) scale(0.86);
   }
 }
 
 @keyframes nomad-merge-lock {
   0% {
-    opacity: 0.25;
-    transform: scaleX(1.04) scaleY(0.94);
+    opacity: 0.12;
+    transform: scaleX(0.76) scaleY(0.94);
     box-shadow: 0 0 0 0 rgba(52, 211, 153, 0);
   }
-  65% {
+  68% {
     opacity: 1;
-    transform: scaleX(0.992) scaleY(1.01);
-    box-shadow: 0 0 28px -6px color-mix(in srgb, var(--tactical-accent, #c2a677) 55%, transparent);
+    transform: scaleX(1.01) scaleY(1.004);
+    box-shadow: 0 0 26px -6px color-mix(in srgb, var(--tactical-accent, #c2a677) 45%, transparent);
   }
   100% {
     opacity: 1;
@@ -930,27 +930,33 @@ body {
 }
 
 .nomad-split-wing-left {
-  animation: nomad-split-wing-left 0.46s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: nomad-split-wing-left 0.72s cubic-bezier(0.16, 1, 0.3, 1) both;
+  will-change: transform, opacity;
 }
 
 .nomad-split-wing-right {
-  animation: nomad-split-wing-right 0.46s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: nomad-split-wing-right 0.72s cubic-bezier(0.16, 1, 0.3, 1) both;
+  will-change: transform, opacity;
 }
 
 .nomad-split-pre-exit {
-  animation: nomad-split-pre-exit 0.17s cubic-bezier(0.4, 0, 1, 1) forwards;
+  animation: nomad-split-pre-exit 0.42s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  will-change: transform, opacity;
 }
 
 .nomad-merge-pre-left {
-  animation: nomad-merge-pre-left 0.17s cubic-bezier(0.4, 0, 1, 1) forwards;
+  animation: nomad-merge-pre-left 0.48s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  will-change: transform, opacity;
 }
 
 .nomad-merge-pre-right {
-  animation: nomad-merge-pre-right 0.17s cubic-bezier(0.4, 0, 1, 1) forwards;
+  animation: nomad-merge-pre-right 0.48s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  will-change: transform, opacity;
 }
 
 .nomad-merge-lock {
-  animation: nomad-merge-lock 0.44s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: nomad-merge-lock 0.68s cubic-bezier(0.16, 1, 0.3, 1) both;
+  will-change: transform, opacity;
 }
 
 .nomad-progress-shimmer {
@@ -979,58 +985,49 @@ body {
 .nomad-stagger-grid > *:nth-child(8) { animation-delay: 265ms; }
 .nomad-stagger-grid > *:nth-child(n + 9) { animation-delay: 300ms; }
 
-/* Crisp tactile feedback on interactive buttons/links */
+/* Smooth, relaxed hover feedback on buttons/links and cards */
 button:not(:disabled),
 a[href] {
   transition:
-    transform 0.16s cubic-bezier(0.22, 1, 0.36, 1),
-    border-color 0.2s ease,
-    background-color 0.2s ease,
-    color 0.2s ease,
-    box-shadow 0.2s ease;
+    transform 0.28s cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 0.28s ease,
+    background-color 0.28s ease,
+    color 0.28s ease,
+    box-shadow 0.28s ease;
 }
 
 button:not(:disabled):active {
-  transform: scale(0.978);
+  transform: scale(0.985);
 }
 
+/* Large static telemetry cards (Pools, CPU, RAM, Downloads): calm border/shadow glow without jumpy hover */
+.nomad-telemetry-panel {
+  transition:
+    border-color 0.45s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.45s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.nomad-telemetry-panel:hover {
+  box-shadow: 0 8px 20px -12px rgba(0, 0, 0, 0.35);
+}
+
+/* Interactive shortcut / navigation cards: gentle, unhurried micro-elevation without bright sheen flash */
 .nomad-interactive-card {
   position: relative;
-  overflow: hidden;
   transition:
-    transform 0.24s cubic-bezier(0.22, 1, 0.36, 1),
-    border-color 0.22s ease,
-    box-shadow 0.24s ease;
-}
-
-.nomad-interactive-card::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  width: 50%;
-  background: linear-gradient(
-    105deg,
-    transparent 20%,
-    color-mix(in srgb, var(--tactical-accent, #c2a677) 10%, transparent) 50%,
-    transparent 80%
-  );
-  transform: translateX(-140%);
-  transition: transform 0.65s cubic-bezier(0.22, 1, 0.36, 1);
-  pointer-events: none;
-}
-
-.nomad-interactive-card:hover::before {
-  transform: translateX(240%);
+    transform 0.46s cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 0.42s ease,
+    box-shadow 0.46s ease;
 }
 
 .nomad-interactive-card:hover {
-  transform: translateY(-3px);
-  box-shadow: 0 12px 26px -14px rgba(0, 0, 0, 0.45);
+  transform: translateY(-2px);
+  box-shadow: 0 10px 24px -14px rgba(0, 0, 0, 0.4);
 }
 
 .nomad-interactive-card:active,
 button.nomad-interactive-card:not(:disabled):active {
-  transform: translateY(-1px) scale(0.992);
+  transform: translateY(-1px) scale(0.994);
 }
 
 @media (prefers-reduced-motion: reduce) {

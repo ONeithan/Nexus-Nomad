@@ -438,7 +438,7 @@ export default class ServiceSeeder extends BaseSeeder {
           // writes a self-signed cert + an SSL server config into storage/meshcore-web; we bind both
           // in (the config over the image's default.conf) and publish 443. The https: prefix on
           // ui_location builds an https:// Open link (one-time cert warning, same as Vaultwarden).
-          PortBindings: { '443/tcp': [{ HostPort: '8500' }] },
+          PortBindings: { '443/tcp': [{ HostPort: '8502' }] },
           Binds: [
             `${ServiceSeeder.NOMAD_STORAGE_ABS_PATH}/meshcore-web/nginx-ssl.conf:/etc/nginx/conf.d/default.conf:ro`,
             `${ServiceSeeder.NOMAD_STORAGE_ABS_PATH}/meshcore-web/certs:/certs:ro`,
@@ -446,7 +446,7 @@ export default class ServiceSeeder extends BaseSeeder {
         },
         ExposedPorts: { '443/tcp': {} },
       }),
-      ui_location: 'https:8500',
+      ui_location: 'https:8502',
       installed: false,
       installation_status: 'idle',
       is_dependency_service: false,
@@ -723,7 +723,7 @@ export default class ServiceSeeder extends BaseSeeder {
       container_config: JSON.stringify({
         HostConfig: {
           RestartPolicy: { Name: 'unless-stopped' },
-          PortBindings: { '8000/tcp': [{ HostPort: '8490' }] },
+          PortBindings: { '8000/tcp': [{ HostPort: '8492' }] },
           Binds: [
             `${ServiceSeeder.NOMAD_STORAGE_ABS_PATH}/paperless/data:/usr/src/paperless/data`,
             `${ServiceSeeder.NOMAD_STORAGE_ABS_PATH}/paperless/media:/usr/src/paperless/media`,
@@ -733,7 +733,7 @@ export default class ServiceSeeder extends BaseSeeder {
         ExposedPorts: { '8000/tcp': {} },
         Env: ['PAPERLESS_OCR_LANGUAGE=por', 'PAPERLESS_TIME_ZONE=America/Sao_Paulo'],
       }),
-      ui_location: '8490',
+      ui_location: '8492',
       installed: false,
       installation_status: 'idle',
       is_dependency_service: false,

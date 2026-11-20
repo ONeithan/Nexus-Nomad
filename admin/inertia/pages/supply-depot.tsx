@@ -284,9 +284,9 @@ export default function SupplyDepotPage(props: {
 
   const dropdownRef = useRef<HTMLDivElement>(null)
 
-  // Auto-reload when installation completes or show error
+  // Auto-reload when single-app installation completes or show error (suppressed during bulk modal so queue never gets cut mid-run)
   useEffect(() => {
-    if (!installActivity.length) return
+    if (bulkModalOpen || !installActivity.length) return
     const last = installActivity[installActivity.length - 1]
     if (last.type === 'completed' || last.type === 'update-complete') {
       const targetSvc = services.find((s) => s.service_name === last.service_name)

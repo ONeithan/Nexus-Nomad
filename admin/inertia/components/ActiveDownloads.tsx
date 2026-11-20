@@ -163,7 +163,7 @@ const ActiveDownloads = ({ filetype, filetypes, withHeader = false }: ActiveDown
             return (
               <div
                 key={download.jobId}
-                className={`nomad-interactive-card rounded-xl p-4 border shadow-sm transition-all ${
+                className={`nomad-telemetry-panel rounded-xl p-4 border shadow-sm ${
                   status === 'failed'
                     ? 'bg-surface-primary border-red-500/45'
                     : download.requeueReason
