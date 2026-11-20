@@ -137,7 +137,7 @@ export class MapService implements IMapService {
     await doResumableDownloadWithRetry({
       url: resolvedURL.toString(),
       filepath: tempTarPath,
-      timeout: 30000,
+      timeout: 120000,
       max_retries: 2,
       allowedMimeTypes: BASE_ASSETS_MIME_TYPES,
       onAttemptError(error, attempt) {

@@ -121,7 +121,7 @@ export class CollectionUpdateService {
     const result = await RunDownloadJob.dispatch({
       url: update.download_url,
       filepath,
-      timeout: 30000,
+      timeout: 120000,
       allowedMimeTypes:
         update.resource_type === 'zim' ? ZIM_MIME_TYPES : PMTILES_MIME_TYPES,
       filetype: update.resource_type,

@@ -115,7 +115,7 @@ export class CreatorPackService {
     await RunDownloadJob.dispatch({
       url,
       filepath,
-      timeout: 30000,
+      timeout: 120000,
       allowedMimeTypes: ZIM_MIME_TYPES,
       filetype: 'zim',
       title: pack.name,

@@ -12,6 +12,10 @@ import { readdir, stat } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { deleteFileIfExists, repairDownloadDirectory } from '../utils/fs.js'
 import { diagnoseDownloadError } from '../utils/download_diagnostics.js'
+import {
+  evaluateBootRecoveryAction,
+  sortDownloadJobsFifo,
+} from '../utils/download_queue_policy.js'
 import { DownloadAuditService } from './download_audit_service.js'
 import transmit from '@adonisjs/transmit/services/main'
 import { BROADCAST_CHANNELS } from '../../constants/broadcast.js'
@@ -37,14 +41,30 @@ export class DownloadService {
     return { percent: parseInt(String(progress), 10) || 0 }
   }
 
+  private async _syncWikipediaDownloadingState(url?: string): Promise<void> {
+    if (!url || !url.includes('wikipedia_')) return
+    try {
+      const { default: WikipediaSelection } = await import('#models/wikipedia_selection')
+      const selection = await WikipediaSelection.query().first()
+      if (selection && (selection.url === url || selection.status === 'failed')) {
+        selection.status = 'downloading'
+        await selection.save()
+      }
+    } catch {
+      // Non-fatal: Wikipedia selection status sync is best effort
+    }
+  }
+
   /** Fetch all non-completed jobs from a queue, tagged with their current BullMQ state */
   private async fetchJobsWithStates(queueName: string): Promise<TaggedJob[]> {
     const queue = this.queueService.getQueue(queueName)
+    // Pass asc=true for waiting/active/delayed so BullMQ reverses Redis LRANGE (FIFO wait list
+    // pushes via LPUSH and dequeues via RPOPLPUSH) into true execution order: #1 next -> #N tail.
     const [waiting, active, delayed, failed] = await Promise.all([
-      queue.getJobs(['waiting']),
-      queue.getJobs(['active']),
-      queue.getJobs(['delayed']),
-      queue.getJobs(['failed']),
+      queue.getJobs(['waiting'], 0, -1, true),
+      queue.getJobs(['active'], 0, -1, true),
+      queue.getJobs(['delayed'], 0, -1, true),
+      queue.getJobs(['failed'], 0, -1, false),
     ])
     return [
       ...waiting.map((j) => ({ job: j, state: 'waiting' as const })),
@@ -188,18 +208,7 @@ export class DownloadService {
 
     const allDownloads = [...fileDownloads, ...extractDownloads, ...modelDownloads, ...drugDownloads]
     const filtered = allDownloads.filter((job) => !filetype || job.filetype === filetype)
-
-    const statusRank = (s?: string) => (s === 'active' ? 0 : s === 'waiting' || s === 'delayed' ? 1 : 2)
-    return filtered
-      .sort((a, b) => {
-        const rankDiff = statusRank(a.status) - statusRank(b.status)
-        if (rankDiff !== 0) return rankDiff
-        if (a.status === 'active' && b.status === 'active') {
-          return b.progress - a.progress
-        }
-        return a._fifoIdx - b._fifoIdx
-      })
-      .map(({ _fifoIdx: _, ...rest }) => rest)
+    return sortDownloadJobsFifo(filtered)
   }
 
   async removeFailedJob(jobId: string): Promise<void> {
@@ -324,6 +333,7 @@ export class DownloadService {
           requeuedFromTailAt: new Date().toISOString(),
           finalCancelledByRetryLimit: false,
         })
+        await this._syncWikipediaDownloadingState(params.url)
         return {
           success: true,
           message: `Erro validado (${diag.summaryPt}) e download enviado ao final da fila.`,
@@ -403,18 +413,14 @@ export class DownloadService {
     for (const job of failedJobs) {
       const params = job.data as RunDownloadJobParams
       if (!params?.url || !params?.filepath) continue
-      if (
-        !includeFinal &&
-        params.retryPolicyVersion === 2 &&
-        (params.finalCancelledByRetryLimit || Number(params.retryAttempt || 1) >= 3)
-      ) {
-        continue
-      }
-
+      const recovery = evaluateBootRecoveryAction(
+        params,
+        job.failedReason || params.lastErrorPt || '',
+        includeFinal
+      )
+      if (recovery.action !== 'requeue_tail') continue
+      const diag = recovery.diagnosis
       const jobId = String(job.id ?? RunDownloadJob.getJobId(params.url))
-      const diag = diagnoseDownloadError(job.failedReason || params.lastErrorPt || '', params.filepath)
-      // On boot/manual global validation, never re-dispatch items explicitly cancelled by operator or missing entitlement
-      if (diag.code === 'USER_CANCELLED' || diag.category === 'auth') continue
 
       try {
         const repair = await repairDownloadDirectory(params.filepath).catch((err: any) => ({
@@ -458,6 +464,7 @@ export class DownloadService {
           requeuedFromTailAt: new Date().toISOString(),
           finalCancelledByRetryLimit: false,
         })
+        await this._syncWikipediaDownloadingState(params.url)
         resumedCount++
       } catch {}
     }
@@ -647,7 +654,7 @@ export class DownloadService {
 
     // If this was a Wikipedia download, update selection status to failed
     // (the worker's failed event may not fire if we removed the job first)
-    if (job.data.filetype === 'zim' && job.data.url?.includes('wikipedia_en_')) {
+    if (job.data.filetype === 'zim' && job.data.url?.includes('wikipedia_')) {
       try {
         const { DockerService } = await import('#services/docker_service')
         const { ZimService } = await import('#services/zim_service')

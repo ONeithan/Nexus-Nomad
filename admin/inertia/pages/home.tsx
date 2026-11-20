@@ -117,7 +117,7 @@ function CircularGauge({
   size = 90,
   strokeWidth = 9,
   color = '#4ade80',
-  trackColor = 'rgba(255,255,255,0.08)',
+  trackColor = 'color-mix(in srgb, var(--tactical-text, #94a3b8) 15%, transparent)',
   label,
   sublabel,
 }: {
@@ -799,7 +799,7 @@ export default function Home(props: {
         /* ====================================================================
            PAINEL DE CONTROLE N.O.M.A.D. (PROPORÇÃO EQUILIBRADA & TEMPO REAL)
            ==================================================================== */
-        <div className="max-w-[85rem] w-full mx-auto px-4 sm:px-6 py-5 space-y-5 nomad-page-enter">
+        <div className="max-w-[85rem] w-full mx-auto px-4 sm:px-6 py-5 space-y-5">
           {/* 1. BARRA OPERACIONAL COMPACTA */}
           <div className="nomad-hud-header flex flex-col md:flex-row md:items-center justify-between gap-3 px-4 py-2.5 rounded-xl border border-border-default bg-surface-primary shadow-sm">
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-text-secondary">
@@ -933,7 +933,7 @@ export default function Home(props: {
                         ? 'nomad-split-pre-exit'
                         : diskTransitionPhase === 'merge-in'
                           ? 'nomad-merge-lock'
-                          : ''
+                          : 'nomad-interactive-card'
                     }`}
                   >
                     <div className="flex flex-col lg:flex-row lg:items-center gap-5">

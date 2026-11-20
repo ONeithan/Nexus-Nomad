@@ -145,13 +145,13 @@ export default function AppLayout({
               {isHome ? (
                 <div
                   title="N.O.M.A.D. online e 100% operacional na rede local (com ou sem internet)"
-                  className="hidden sm:flex items-center gap-2.5 px-3.5 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/45 text-xs sm:text-[0.8125rem] font-mono-mil mr-1 shadow-xs"
+                  className="flex items-center gap-2 sm:gap-2.5 px-2.5 sm:px-3.5 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/45 text-xs sm:text-[0.8125rem] font-mono-mil mr-1 shadow-xs"
                 >
                   <span className="relative flex h-2.5 w-2.5 shrink-0">
                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
                     <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500 shadow-[0_0_8px_#10b981]" />
                   </span>
-                  <span className="text-text-secondary uppercase font-semibold tracking-wider">STATUS:</span>
+                  <span className="hidden md:inline text-text-secondary uppercase font-semibold tracking-wider">STATUS:</span>
                   <span className="nomad-status-online-text font-extrabold tracking-wider">100% NOMINAL</span>
                 </div>
               ) : isSupplyDepot ? (

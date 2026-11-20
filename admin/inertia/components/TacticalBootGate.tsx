@@ -438,7 +438,7 @@ export default function TacticalBootGate({ children }: { children: React.ReactNo
   const displayVersion =
     appVersion && appVersion !== '0.0.0' && appVersion !== 'dev'
       ? `v${appVersion.replace(/^v/i, '').replace(/-nexus$/i, '')}`
-      : 'v1.0.36'
+      : 'v1.0.37'
 
   const [authState, setAuthState] = useState<AuthStatusPayload | null>(() => {
     if (authUser) {

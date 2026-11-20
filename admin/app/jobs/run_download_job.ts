@@ -3,12 +3,6 @@ import { RunDownloadJobParams, DownloadProgressData } from '../../types/download
 import { QueueService } from '#services/queue_service'
 import { doResumableDownload, GatedContentAuthError } from '../utils/downloads.js'
 import { createHash } from 'crypto'
-import { DockerService } from '#services/docker_service'
-import { ZimService } from '#services/zim_service'
-import { MapService } from '#services/map_service'
-import { RagService } from '#services/rag_service'
-import { OllamaService } from '#services/ollama_service'
-import { EmbedFileJob } from './embed_file_job.js'
 import { basename, join, resolve, sep } from 'node:path'
 import {
   getFileStatsIfExists,
@@ -284,6 +278,10 @@ export class RunDownloadJob {
                 }
               } catch {}
 
+              const [{ DockerService }, { ZimService }] = await Promise.all([
+                import('#services/docker_service'),
+                import('#services/zim_service'),
+              ])
               const dockerService = new DockerService()
               const zimService = new ZimService(dockerService)
               await zimService.downloadRemoteSuccessCallback([url], true)
@@ -309,6 +307,10 @@ export class RunDownloadJob {
                   // honor that choice in both directions. See the method for the
                   // full 5-step contract.
                   try {
+                    const [{ RagService }, { OllamaService }] = await Promise.all([
+                      import('#services/rag_service'),
+                      import('#services/ollama_service'),
+                    ])
                     const ragService = new RagService(dockerService, new OllamaService())
                     const outcome = await ragService.reconcileReplacedContentFile({
                       oldFilePath: oldFilePath!,
@@ -353,6 +355,7 @@ export class RunDownloadJob {
                     }
                   } else {
                     try {
+                      const { EmbedFileJob } = await import('./embed_file_job.js')
                       await EmbedFileJob.dispatch({
                         fileName: url.split('/').pop() || '',
                         filePath: filepath,
@@ -364,6 +367,7 @@ export class RunDownloadJob {
                 }
               }
             } else if (filetype === 'map') {
+              const { MapService } = await import('#services/map_service')
               const mapsService = new MapService()
               await mapsService.downloadRemoteSuccessCallback([url], false)
             }

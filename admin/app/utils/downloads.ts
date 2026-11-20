@@ -170,15 +170,34 @@ export async function doResumableDownload({
     headers.Range = `bytes=${startByte}-`
   }
 
-  const fetchStream = (headers: Record<string, string>) =>
+  const fetchStream = (reqHeaders: Record<string, string>) =>
     axios.get(url, {
       responseType: 'stream',
-      headers,
+      headers: reqHeaders,
       signal,
       timeout: effectiveTimeout,
     })
 
-  let response = await fetchStream(headers)
+  let response
+  try {
+    response = await fetchStream(headers)
+  } catch (streamErr: any) {
+    // Some CDN mirrors report an inconsistent Content-Length on HEAD or omit it,
+    // causing an HTTP 416 Range Not Satisfiable when resuming a .tmp file.
+    // Discard the stale partial and restart cleanly from byte 0.
+    if (headers.Range && streamErr?.response?.status === 416) {
+      logger.warn(
+        `[Download] HTTP 416 while resuming ${filepath} from byte ${startByte}; resetting partial download.`
+      )
+      await deleteFileIfExists(tempPath)
+      startByte = 0
+      appendMode = false
+      delete headers.Range
+      response = await fetchStream(headers)
+    } else {
+      throw streamErr
+    }
+  }
 
   if (response.status !== 200 && response.status !== 206) {
     throw new Error(`Failed to download: HTTP ${response.status}`)
@@ -195,6 +214,18 @@ export async function doResumableDownload({
     response = await fetchStream(headers)
     if (response.status !== 200 && response.status !== 206) {
       throw new Error(`Failed to download: HTTP ${response.status}`)
+    }
+  }
+
+  // Guard GET Content-Type too: some captive portals or mirror redirects answer
+  // HEAD cleanly or redirect GET to a text/html error page. Never stream HTML
+  // into a binary .zim/.pmtiles artifact when allowedMimeTypes is enforced.
+  const getContentType = response.headers['content-type']?.toString()
+  if (allowedMimeTypes && allowedMimeTypes.length > 0 && getContentType) {
+    const isGetMimeAllowed = allowedMimeTypes.some((mimeType) => getContentType.includes(mimeType))
+    if (!isGetMimeAllowed) {
+      response.data.destroy()
+      throw new Error(`MIME type ${getContentType} is not allowed`)
     }
   }
 
@@ -309,7 +340,7 @@ export async function doResumableDownloadWithRetry({
   url,
   filepath,
   signal,
-  timeout = 30000,
+  timeout = 120000,
   onProgress,
   max_retries = 3,
   retry_delay = 2000,
@@ -340,7 +371,12 @@ export async function doResumableDownloadWithRetry({
 
       const isAborted = error.name === 'AbortError' || error.code === 'ABORT_ERR'
       const isNetworkError =
-        error.code === 'ECONNRESET' || error.code === 'ENOTFOUND' || error.code === 'ETIMEDOUT'
+        error.code === 'ECONNRESET' ||
+        error.code === 'ENOTFOUND' ||
+        error.code === 'ETIMEDOUT' ||
+        error.code === 'ECONNABORTED' ||
+        error.code === 'EPIPE' ||
+        error.code === 'EAI_AGAIN'
 
       onAttemptError?.(error, attempt)
       if (isAborted) {
