@@ -14,6 +14,16 @@ import {
   containerMatchesCatalogService,
   isNomadManagedContainer,
 } from '../utils/container_matcher.js'
+import {
+  clearInstallProgress,
+  setInstallProgress,
+  translateDockerDeployErrorPtBr,
+} from '../utils/install_progress_tracker.js'
+import {
+  getStackBlueprint,
+  hasMultiServiceSidecars,
+  getStarterConfigFile,
+} from '../utils/app_stack_blueprints.js'
 
 export interface PortainerContainerInfo {
   id?: string
@@ -951,6 +961,7 @@ export class PortainerService {
    * Broadcast an installation event to the frontend via SSE
    */
   private broadcast(serviceName: string, event: string, message: string) {
+    setInstallProgress(serviceName, event, message)
     try {
       transmit.broadcast(`services:${serviceName}`, { event, message })
       transmit.broadcast(`services:portainer:${serviceName}`, { event, message })
@@ -1003,33 +1014,50 @@ export class PortainerService {
     config: any,
     cmd: string | null = null,
     hostStorageRoot: string | null = null,
-    extraEnv: string[] = []
+    extraEnv: string[] = [],
+    hostIp = '127.0.0.1'
   ): string {
     const isKiwix = serviceName.toLowerCase().includes('kiwix')
+    const bp = getStackBlueprint(serviceName)
 
-    // 1. Build Ports List
+    // 1. Build Ports List accurately (preserving protocol /udp vs /tcp and matching primary UI port)
     const portsList: string[] = []
     const portBindings = config?.HostConfig?.PortBindings || {}
     const exposedPorts = Object.keys(config?.ExposedPorts || {})
-    const boundInternals = new Set<string>()
+    const boundKeys = new Set<string>()
 
-    // Primary UI port mapping
-    let primaryInternal = '8080'
-    if (Object.keys(portBindings).length > 0) {
-      primaryInternal = Object.keys(portBindings)[0].replace(/\/.*$/, '')
+    let primaryBindingKey = ''
+    const bindingEntries = Object.entries(portBindings)
+    if (bindingEntries.length > 0) {
+      const exactMatch = bindingEntries.find(
+        ([, arr]) => String((arr as any)?.[0]?.HostPort || '') === String(primaryHostPort)
+      )
+      const tcpMatch = bindingEntries.find(([k]) => !k.endsWith('/udp'))
+      primaryBindingKey = (exactMatch || tcpMatch || bindingEntries[0])[0]
     } else if (exposedPorts.length > 0) {
-      primaryInternal = exposedPorts[0].replace(/\/.*$/, '')
+      primaryBindingKey = exposedPorts.find((k) => !k.endsWith('/udp')) || exposedPorts[0]
+    } else {
+      primaryBindingKey = '8080/tcp'
     }
-    portsList.push(`"${primaryHostPort}:${primaryInternal}"`)
-    boundInternals.add(primaryInternal)
 
-    // Secondary ports (e.g. Kolibri 8311, Qdrant 6334)
-    for (const [bindingKey, bindingArr] of Object.entries(portBindings)) {
-      const intPort = bindingKey.replace(/\/.*$/, '')
-      if (!boundInternals.has(intPort)) {
-        const hostP = (bindingArr as any)?.[0]?.HostPort || intPort
-        portsList.push(`"${hostP}:${intPort}"`)
-        boundInternals.add(intPort)
+    const formatPortEntry = (hostP: string, bindingKey: string): string => {
+      const [intNum, protoRaw] = bindingKey.split('/')
+      const proto = protoRaw === 'udp' ? '/udp' : ''
+      return `"${hostP}:${intNum}${proto}"`
+    }
+
+    if (!bp?.proxyOwnsHostPort) {
+      const pProtoKey = primaryBindingKey.includes('/') ? primaryBindingKey : `${primaryBindingKey}/tcp`
+      portsList.push(formatPortEntry(primaryHostPort, pProtoKey))
+      boundKeys.add(pProtoKey)
+    }
+
+    for (const [bindingKey, bindingArr] of bindingEntries) {
+      const pProtoKey = bindingKey.includes('/') ? bindingKey : `${bindingKey}/tcp`
+      if (!boundKeys.has(pProtoKey)) {
+        const hostP = String((bindingArr as any)?.[0]?.HostPort || pProtoKey.split('/')[0])
+        portsList.push(formatPortEntry(hostP, pProtoKey))
+        boundKeys.add(pProtoKey)
       }
     }
 
@@ -1073,9 +1101,17 @@ export class PortainerService {
       declaredNamedVolumes.add(defaultVol)
     }
 
+    if (bp?.extraAppVolumes) {
+      for (const volSpec of bp.extraAppVolumes(serviceName)) {
+        volumeMounts.push(`- ${volSpec}`)
+      }
+    }
+
     // 3. Environment Variables (deduplicated by key, avoiding LC_ALL=pt_BR.UTF-8 locale warnings)
+    const blueprintEnv = bp ? bp.extraEnv(hostIp, primaryHostPort) : []
     const rawEnvVars = [
       ...(config?.Env || []),
+      ...blueprintEnv,
       ...extraEnv,
       'TZ=America/Sao_Paulo',
     ]
@@ -1088,10 +1124,18 @@ export class PortainerService {
     }
     const envVars = Array.from(envMap.values())
 
-    const portsBlock = portsList.map((p) => `      - ${p}`).join('\n')
+    const portsSection =
+      portsList.length > 0
+        ? `    ports:\n${portsList.map((p) => `      - ${p}`).join('\n')}\n`
+        : ''
     const volumesBlock = volumeMounts.map((v) => `      ${v}`).join('\n')
     const envBlock = envVars.map((e) => `      - ${JSON.stringify(e)}`).join('\n')
     const userLine = config?.User ? `    user: "${config.User}"\n` : ''
+    const shmLine = bp?.shmSize ? `    shm_size: "${bp.shmSize}"\n` : ''
+    const entrypointLine = bp?.composeEntrypointOverride
+      ? `    entrypoint: ${JSON.stringify(bp.composeEntrypointOverride)}\n`
+      : ''
+    const dependsOnLine = bp?.dependsOnYaml || ''
 
     let cmdBlock = ''
     if (isKiwix) {
@@ -1106,18 +1150,23 @@ export class PortainerService {
       lowerSvcName.includes('kiwix') ||
       lowerSvcName.includes('calibre') ||
       lowerSvcName.includes('vaultwarden') ||
-      lowerSvcName.includes('meshcore')
+      lowerSvcName.includes('meshcore') ||
+      Boolean(getStarterConfigFile(serviceName, hostIp, primaryHostPort))
+
+    const allVolumeDefs: string[] = Array.from(declaredNamedVolumes).map((v) =>
+      requiresPreSeededVolume ? `  ${v}:\n    external: true` : `  ${v}:\n    name: ${v}`
+    )
+    if (bp) {
+      for (const sv of bp.sidecarVolumeNames(serviceName)) {
+        allVolumeDefs.push(`  ${sv}:\n    name: ${sv}`)
+      }
+    }
 
     const topLevelVolumesBlock =
-      declaredNamedVolumes.size > 0
-        ? `\nvolumes:\n${Array.from(declaredNamedVolumes)
-            .map((v) =>
-              requiresPreSeededVolume
-                ? `  ${v}:\n    external: true`
-                : `  ${v}:\n    name: ${v}`
-            )
-            .join('\n')}\n`
-        : ''
+      allVolumeDefs.length > 0 ? `\nvolumes:\n${allVolumeDefs.join('\n')}\n` : ''
+
+    const sidecarsBlock = bp ? bp.sidecarServicesYaml(serviceName, hostIp, primaryHostPort) : ''
+    const sidecarsSection = sidecarsBlock ? `\n${sidecarsBlock}\n` : ''
 
     const gpuBlock = this.pendingGpuServices.has(serviceName)
       ? `    deploy:
@@ -1137,13 +1186,11 @@ export class PortainerService {
     restart: unless-stopped
     extra_hosts:
       - "host.docker.internal:host-gateway"
-${gpuBlock}${userLine}    ports:
-${portsBlock}
-    volumes:
+${gpuBlock}${userLine}${shmLine}${entrypointLine}${dependsOnLine}${portsSection}    volumes:
 ${volumesBlock}
     environment:
 ${envBlock}
-${cmdBlock}${topLevelVolumesBlock}`
+${cmdBlock}${sidecarsSection}${topLevelVolumesBlock}`
   }
 
   /**
@@ -1391,7 +1438,9 @@ ${cmdBlock}${topLevelVolumesBlock}`
     endpointId: number,
     serviceName: string,
     config: any,
-    serviceImage: string
+    serviceImage: string,
+    hostIp = '127.0.0.1',
+    hostPort = '8080'
   ): Promise<void> {
     const rawBinds: string[] = config?.HostConfig?.Binds || []
     const volumeDefs: Array<{ volName: string; targetPath: string }> = []
@@ -1427,11 +1476,47 @@ ${cmdBlock}${topLevelVolumesBlock}`
     const isCalibre = lowerName.includes('calibre')
     const isVaultwarden = lowerName.includes('vaultwarden')
     const isMeshcore = lowerName.includes('meshcore')
-    if (!isKiwix && !isCalibre && !isVaultwarden && !isMeshcore) return
+    const starterCfg = getStarterConfigFile(serviceName, hostIp, hostPort)
+
+    if (!isKiwix && !isCalibre && !isVaultwarden && !isMeshcore && !starterCfg) return
 
     const primaryVol = volumeDefs[0]?.volName || `nomad-${serviceName}-data`
     const primaryTarget = volumeDefs[0]?.targetPath || '/data'
     const initContName = `nomad-tmp-init-${Date.now()}`
+
+    if (starterCfg && !isKiwix && !isCalibre && !isVaultwarden && !isMeshcore) {
+      try {
+        await client
+          .post(`/api/endpoints/${endpointId}/docker/images/create?fromImage=alpine%3Alatest`, null, {
+            timeout: 60000,
+          })
+          .catch(() => {})
+        const b64 = Buffer.from(starterCfg.content, 'utf8').toString('base64')
+        const targetFile = `${starterCfg.volumeTargetDir}/${starterCfg.filename}`
+        const cmd = `mkdir -p "${starterCfg.volumeTargetDir}" && [ -s "${targetFile}" ] || echo '${b64}' | base64 -d > "${targetFile}"; chmod 666 "${targetFile}" 2>/dev/null || true`
+        const cResp = await client.post(
+          `/api/endpoints/${endpointId}/docker/containers/create?name=${initContName}`,
+          {
+            Image: 'alpine:latest',
+            Cmd: ['sh', '-c', cmd],
+            HostConfig: { Binds: [`${primaryVol}:${starterCfg.volumeTargetDir}`] },
+          },
+          { timeout: 15000 }
+        )
+        if (cResp.data?.Id) {
+          await client.post(`/api/endpoints/${endpointId}/docker/containers/${cResp.data.Id}/start`, null, { timeout: 15000 })
+          for (let i = 0; i < 10; i++) {
+            await new Promise((r) => setTimeout(r, 800))
+            const insp = await client.get(`/api/endpoints/${endpointId}/docker/containers/${cResp.data.Id}/json`, { timeout: 8000 }).catch(() => null)
+            if (insp?.data?.State?.Running === false) break
+          }
+          await client.delete(`/api/endpoints/${endpointId}/docker/containers/${cResp.data.Id}?force=true`, { timeout: 10000 }).catch(() => {})
+        }
+      } catch (cfgErr: any) {
+        logger.debug(`[PortainerService] Starter config init skipped for ${serviceName}: ${cfgErr?.message}`)
+      }
+      return
+    }
 
     try {
       if (isKiwix) {
@@ -1622,6 +1707,7 @@ ${cmdBlock}${topLevelVolumesBlock}`
       logger.info(`[PortainerService] Port 8080 is reserved. Remapped ${serviceName} to ${hostPort}.`)
     }
 
+    clearInstallProgress(serviceName)
     this.broadcast(
       serviceName,
       'initializing',
@@ -1935,7 +2021,7 @@ ${cmdBlock}${topLevelVolumesBlock}`
             )
           } catch {
             throw new Error(
-              `Falha ao baixar a imagem "${service.container_image}" no servidor Portainer: ${pullErr?.message || pullErr}`
+              `Falha ao baixar a imagem "${service.container_image}" no servidor Portainer: ${translateDockerDeployErrorPtBr(pullErr?.message || pullErr)}`
             )
           }
         }
@@ -1959,11 +2045,13 @@ ${cmdBlock}${topLevelVolumesBlock}`
           endpointId,
           serviceName,
           config,
-          service.container_image
+          service.container_image,
+          hostIp,
+          hostPort
         )
       }
 
-      // 6. Build clean single-service Docker Compose configuration
+      // 6. Build single- or multi-service Docker Compose configuration
       const composeContent = this.buildComposeFile(
         serviceName,
         service.container_image,
@@ -1971,17 +2059,22 @@ ${cmdBlock}${topLevelVolumesBlock}`
         config,
         service.container_command,
         endpointStorageRoot,
-        extraEnv
+        extraEnv,
+        hostIp
       )
+      const isMultiService = hasMultiServiceSidecars(serviceName)
 
       // 7. Create fresh stack in Portainer
       this.broadcast(
         serviceName,
         'creating',
-        `[4/5] Implantando Stack "${stackName}" no Portainer...`
+        isMultiService
+          ? `[4/5] Implantando Stack completo (${stackName} + banco/serviços de apoio) no Portainer...`
+          : `[4/5] Implantando Stack "${stackName}" no Portainer...`
       )
 
       let deployedViaStack = false
+      let stackFailureReason = ''
       try {
         logger.info(`[PortainerService] Creating standalone stack ${stackName}...`)
         await client.post(
@@ -1994,33 +2087,60 @@ ${cmdBlock}${topLevelVolumesBlock}`
           { timeout: 300000 }
         )
 
-        // Verify the stack actually spawned a container and didn't stall in Portainer "Error" state
-        await new Promise((r) => setTimeout(r, 3500))
-        const [postStackResp, postContResp] = await Promise.all([
-          client.get('/api/stacks', { timeout: 10000 }).catch(() => null),
-          client.get(`/api/endpoints/${endpointId}/docker/containers/json?all=1`, { timeout: 10000 }).catch(() => null),
-        ])
-        const createdStack = Array.isArray(postStackResp?.data)
-          ? postStackResp.data.find((s: any) => (s.Name || '').toLowerCase() === stackName.toLowerCase())
-          : null
-        const spawnedCont = Array.isArray(postContResp?.data)
-          ? postContResp.data.find(
+        // Multi-service stacks (Postgres/Redis/ElasticSearch/MariaDB) need extra time for DB init & healthchecks
+        const stackPollAttempts = isMultiService ? 8 : 2
+        let createdStack: any = null
+        let spawnedCont: any = null
+        for (let sAttempt = 0; sAttempt < stackPollAttempts; sAttempt++) {
+          await new Promise((r) => setTimeout(r, sAttempt === 0 ? 3500 : 3000))
+          const [postStackResp, postContResp] = await Promise.all([
+            client.get('/api/stacks', { timeout: 10000 }).catch(() => null),
+            client.get(`/api/endpoints/${endpointId}/docker/containers/json?all=1`, { timeout: 10000 }).catch(() => null),
+          ])
+          createdStack = Array.isArray(postStackResp?.data)
+            ? postStackResp.data.find((s: any) => (s.Name || '').toLowerCase() === stackName.toLowerCase())
+            : null
+          const contList: any[] = Array.isArray(postContResp?.data) ? postContResp.data : []
+          spawnedCont =
+            contList.find(
               (c: any) =>
                 !c.Names?.some((n: string) => n.endsWith('-init')) &&
+                (c.Labels?.['com.docker.compose.service']?.toLowerCase() === serviceName.toLowerCase() ||
+                  c.Names?.some((n: string) => n.toLowerCase() === `/${stackName.toLowerCase()}`))
+            ) ||
+            contList.find(
+              (c: any) =>
+                !c.Names?.some((n: string) => n.endsWith('-init')) &&
+                !c.Names?.some((n: string) => /-(db|redis|meili|es|web)$/.test(n.toLowerCase())) &&
                 (c.Labels?.['com.docker.compose.project']?.toLowerCase() === stackName.toLowerCase() ||
                   c.Names?.some((n: string) => n.toLowerCase().includes(stackName.toLowerCase())))
             )
-          : null
+          if (spawnedCont && spawnedCont.State === 'running' && createdStack?.Status !== 2) {
+            break
+          }
+          if (spawnedCont && (spawnedCont.State === 'exited' || spawnedCont.State === 'dead')) {
+            break
+          }
+        }
 
         if (spawnedCont && spawnedCont.State === 'running' && createdStack?.Status !== 2) {
           deployedViaStack = true
         } else {
+          stackFailureReason = `estado=${spawnedCont?.State || 'não criado'}, stackStatus=${createdStack?.Status ?? '?'}`
           logger.warn(
-            `[PortainerService] Stack ${stackName} created but container not running (state=${spawnedCont?.State || 'missing'}, stackStatus=${createdStack?.Status}). Falling back to direct Docker Engine API...`
+            `[PortainerService] Stack ${stackName} check (${stackFailureReason}).${isMultiService ? '' : ' Falling back to direct Docker Engine API...'}`
           )
+          if (isMultiService) {
+            throw new Error(
+              `Stack multi-serviço ${stackName} não iniciou o contêiner principal (${stackFailureReason}). Verifique recursos/logs no Portainer.`
+            )
+          }
           await this.cleanupBeforeRemoteDeploy(client, endpointId, serviceName, stackName, hostPort)
         }
       } catch (stackErr: any) {
+        if (isMultiService) {
+          throw stackErr
+        }
         logger.warn(
           `[PortainerService] Stacks API failed (${stackErr?.response?.data?.message || stackErr?.message}). Cleaning up partial stack and falling back to Docker Container API...`
         )
@@ -2144,19 +2264,28 @@ ${cmdBlock}${topLevelVolumesBlock}`
           .get(`/api/endpoints/${endpointId}/docker/containers/json?all=1`, { timeout: 15000 })
           .catch(() => null)
 
-        runningCont = (verifyResp?.data || []).find(
-          (c: any) =>
-            !c.Names?.some((n: string) => n.endsWith('-init')) &&
-            (c.Labels?.['com.docker.compose.project']?.toLowerCase() === stackName.toLowerCase() ||
-              c.Labels?.['com.docker.compose.service']?.toLowerCase() === serviceName.toLowerCase() ||
-              c.Names?.some(
-                (n: string) =>
-                  n.toLowerCase() === `/${stackName.toLowerCase()}` ||
-                  n.toLowerCase() === `/${serviceName.toLowerCase()}` ||
-                  n.toLowerCase().includes(stackName.toLowerCase()) ||
-                  n.toLowerCase().includes(serviceName.toLowerCase())
-              ))
-        )
+        const contList: any[] = Array.isArray(verifyResp?.data) ? verifyResp.data : []
+        runningCont =
+          contList.find(
+            (c: any) =>
+              !c.Names?.some((n: string) => n.endsWith('-init')) &&
+              (c.Labels?.['com.docker.compose.service']?.toLowerCase() === serviceName.toLowerCase() ||
+                c.Names?.some(
+                  (n: string) =>
+                    n.toLowerCase() === `/${stackName.toLowerCase()}` ||
+                    n.toLowerCase() === `/${serviceName.toLowerCase()}`
+                ))
+          ) ||
+          contList.find(
+            (c: any) =>
+              !c.Names?.some((n: string) => n.endsWith('-init') || /-(db|redis|meili|es|web)$/.test(n.toLowerCase())) &&
+              (c.Labels?.['com.docker.compose.project']?.toLowerCase() === stackName.toLowerCase() ||
+                c.Names?.some(
+                  (n: string) =>
+                    n.toLowerCase().includes(stackName.toLowerCase()) ||
+                    n.toLowerCase().includes(serviceName.toLowerCase())
+                ))
+          )
         if (runningCont) break
       }
 
@@ -2177,7 +2306,7 @@ ${cmdBlock}${topLevelVolumesBlock}`
       }
 
       let inspectCheck: any = null
-      for (let iAttempt = 0; iAttempt < 6; iAttempt++) {
+      for (let iAttempt = 0; iAttempt < 12; iAttempt++) {
         inspectCheck = await client
           .get(`/api/endpoints/${endpointId}/docker/containers/${runningCont.Id}/json`, {
             timeout: 20000,
@@ -2185,8 +2314,8 @@ ${cmdBlock}${topLevelVolumesBlock}`
           .catch(() => null)
         const healthStatus = inspectCheck?.data?.State?.Health?.Status
         if (inspectCheck?.data?.State) {
-          // If the container defines a Docker HEALTHCHECK and is still 'starting', wait briefly before evaluating
-          if (healthStatus === 'starting' && inspectCheck.data.State.Running && iAttempt < 5) {
+          // If the container defines a Docker HEALTHCHECK and is still 'starting', wait up to ~36s before evaluating
+          if (healthStatus === 'starting' && inspectCheck.data.State.Running && iAttempt < 11) {
             await new Promise((r) => setTimeout(r, 3000))
             continue
           }
@@ -2299,7 +2428,8 @@ ${cmdBlock}${topLevelVolumesBlock}`
       service.installed = false
       service.installation_status = 'error'
       await service.save()
-      this.broadcast(serviceName, 'error', `Falha ao implantar no Portainer: ${apiErr.message}`)
+      const detailedErr = translateDockerDeployErrorPtBr(apiErr?.message || apiErr)
+      this.broadcast(serviceName, 'error', `Falha ao implantar no Portainer: ${detailedErr}`)
     }
   }
 

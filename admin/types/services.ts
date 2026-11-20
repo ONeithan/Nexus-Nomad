@@ -27,4 +27,6 @@ export type ServiceSlim = Pick<
   node?: 'local' | 'dell-micro' | 'portainer'
   node_label?: string
   is_unmanaged?: boolean
+  install_progress_status?: string
+  install_progress_message?: string
 }

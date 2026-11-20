@@ -582,8 +582,8 @@ export default function Home(props: {
       setDiskTransitionPhase(willSplit ? 'split-in' : 'merge-in')
       diskAnimTimerRef.current = setTimeout(() => {
         setDiskTransitionPhase('idle')
-      }, 740)
-    }, willSplit ? 420 : 480)
+      }, willSplit ? 700 : 640)
+    }, willSplit ? 360 : 520)
   }
 
   const handleToggleCpuCombined = () => {
@@ -598,8 +598,8 @@ export default function Home(props: {
       setCpuTransitionPhase(willSplit ? 'split-in' : 'merge-in')
       cpuAnimTimerRef.current = setTimeout(() => {
         setCpuTransitionPhase('idle')
-      }, 740)
-    }, willSplit ? 420 : 480)
+      }, willSplit ? 700 : 640)
+    }, willSplit ? 360 : 520)
   }
 
   const handleOpenAiHub = () => {
@@ -946,6 +946,9 @@ export default function Home(props: {
                           : 'nomad-telemetry-panel'
                     }`}
                   >
+                    {diskTransitionPhase === 'splitting-out' && (
+                      <span className="nomad-cleave-beam" aria-hidden="true" />
+                    )}
                     <div className="flex flex-col lg:flex-row lg:items-center gap-5">
                       {/* Bloco Esquerdo: Gauge Consolidado Único */}
                       <div className="flex items-center gap-4 lg:w-[300px] lg:pr-5 lg:border-r border-border-default/60 shrink-0">
@@ -1198,6 +1201,9 @@ export default function Home(props: {
                             : 'nomad-telemetry-panel'
                       }`}
                     >
+                      {cpuTransitionPhase === 'splitting-out' && (
+                        <span className="nomad-cleave-beam" aria-hidden="true" />
+                      )}
                       <div className="flex items-center justify-between pb-2.5 mb-3 border-b border-border-default/60">
                         <div className="flex items-center gap-2">
                           <IconCpu size={16} className="text-cyan-400" />
@@ -1599,16 +1605,16 @@ export default function Home(props: {
                 {/* 1. Configuração Inicial (Nativo NOMAD) */}
                 <Link
                   href="/easy-setup"
-                  className="nomad-interactive-card rounded-xl border border-border-default bg-surface-primary p-4 flex flex-col justify-between hover:border-desert-orange transition-all group shadow-sm"
+                  className="nomad-interactive-card rounded-xl border border-border-default bg-surface-primary p-4 flex flex-col justify-between hover:border-desert-orange group shadow-sm"
                 >
                   <div>
                     <div className="flex items-center justify-between mb-2.5">
                       <span className="text-xs px-2 py-0.5 rounded bg-desert-orange/15 text-desert-orange font-semibold border border-desert-orange/30">
                         {shouldHighlightEasySetup ? 'Comece Aqui' : 'Assistente Nativo'}
                       </span>
-                      <IconBolt size={20} className="text-desert-orange group-hover:scale-110 transition-transform" />
+                      <IconBolt size={20} className="text-desert-orange group-hover:scale-110 transition-transform duration-500" />
                     </div>
-                    <h3 className="text-sm sm:text-base font-bold text-text-primary group-hover:text-desert-orange transition-colors">
+                    <h3 className="text-sm sm:text-base font-bold text-text-primary group-hover:text-desert-orange transition-colors duration-300">
                       Configuração Inicial
                     </h3>
                     <p className="text-xs text-text-secondary mt-1 leading-relaxed">
@@ -1624,16 +1630,16 @@ export default function Home(props: {
                 {/* 2. Central de Aplicativos */}
                 <Link
                   href="/supply-depot"
-                  className="nomad-interactive-card rounded-xl border border-border-default bg-surface-primary p-4 flex flex-col justify-between hover:border-desert-orange transition-all group shadow-sm"
+                  className="nomad-interactive-card rounded-xl border border-border-default bg-surface-primary p-4 flex flex-col justify-between hover:border-desert-orange group shadow-sm"
                 >
                   <div>
                     <div className="flex items-center justify-between mb-2.5">
                       <span className="text-xs px-2 py-0.5 rounded bg-desert-orange/15 text-desert-orange font-semibold border border-desert-orange/30">
                         {installedAppCount} ativos / {APP_CATALOG.length} apps
                       </span>
-                      <IconBox size={20} className="text-desert-orange group-hover:scale-110 transition-transform" />
+                      <IconBox size={20} className="text-desert-orange group-hover:scale-110 transition-transform duration-500" />
                     </div>
-                    <h3 className="text-sm sm:text-base font-bold text-text-primary group-hover:text-desert-orange transition-colors">
+                    <h3 className="text-sm sm:text-base font-bold text-text-primary group-hover:text-desert-orange transition-colors duration-300">
                       Central de Aplicativos
                     </h3>
                     <p className="text-xs text-text-secondary mt-1 leading-relaxed">
@@ -1650,16 +1656,16 @@ export default function Home(props: {
                 <button
                   type="button"
                   onClick={() => openAppCatalog()}
-                  className="nomad-interactive-card text-left rounded-xl border border-border-default bg-surface-primary p-4 flex flex-col justify-between hover:border-desert-tan transition-all group shadow-sm cursor-pointer"
+                  className="nomad-interactive-card text-left rounded-xl border border-border-default bg-surface-primary p-4 flex flex-col justify-between hover:border-desert-tan group shadow-sm cursor-pointer"
                 >
                   <div>
                     <div className="flex items-center justify-between mb-2.5">
                       <span className="text-xs px-2 py-0.5 rounded bg-desert-tan/15 text-desert-tan font-semibold border border-desert-tan/30">
                         {APP_CATALOG.length} guias PT-BR
                       </span>
-                      <IconBook size={20} className="text-desert-tan group-hover:scale-110 transition-transform" />
+                      <IconBook size={20} className="text-desert-tan group-hover:scale-110 transition-transform duration-500" />
                     </div>
-                    <h3 className="text-sm sm:text-base font-bold text-text-primary group-hover:text-desert-tan transition-colors">
+                    <h3 className="text-sm sm:text-base font-bold text-text-primary group-hover:text-desert-tan transition-colors duration-300">
                       Catálogo &amp; Guias
                     </h3>
                     <p className="text-xs text-text-secondary mt-1 leading-relaxed">
@@ -1675,16 +1681,16 @@ export default function Home(props: {
                 {/* 4. Discos & Armazenamento */}
                 <Link
                   href="/settings/storage"
-                  className="nomad-interactive-card rounded-xl border border-border-default bg-surface-primary p-4 flex flex-col justify-between hover:border-desert-tan transition-all group shadow-sm"
+                  className="nomad-interactive-card rounded-xl border border-border-default bg-surface-primary p-4 flex flex-col justify-between hover:border-desert-tan group shadow-sm"
                 >
                   <div>
                     <div className="flex items-center justify-between mb-2.5">
                       <span className="text-xs px-2 py-0.5 rounded bg-emerald-500/15 nomad-status-online-text font-semibold border border-emerald-500/30">
                         Multi-HD &amp; Samba
                       </span>
-                      <IconServer size={20} className="nomad-status-online-text group-hover:scale-110 transition-transform" />
+                      <IconServer size={20} className="nomad-status-online-text group-hover:scale-110 transition-transform duration-500" />
                     </div>
-                    <h3 className="text-sm sm:text-base font-bold text-text-primary group-hover:text-emerald-400 transition-colors">
+                    <h3 className="text-sm sm:text-base font-bold text-text-primary group-hover:text-emerald-400 transition-colors duration-300">
                       Discos &amp; Samba SMB
                     </h3>
                     <p className="text-xs text-text-secondary mt-1 leading-relaxed">
@@ -1700,16 +1706,16 @@ export default function Home(props: {
                 {/* 5. Mapas Offline */}
                 <Link
                   href="/maps"
-                  className="nomad-interactive-card rounded-xl border border-border-default bg-surface-primary p-4 flex flex-col justify-between hover:border-desert-tan transition-all group shadow-sm"
+                  className="nomad-interactive-card rounded-xl border border-border-default bg-surface-primary p-4 flex flex-col justify-between hover:border-desert-tan group shadow-sm"
                 >
                   <div>
                     <div className="flex items-center justify-between mb-2.5">
                       <span className="text-xs px-2 py-0.5 rounded bg-surface-secondary text-desert-tan font-semibold border border-border-default">
                         PMTiles Vetorial
                       </span>
-                      <IconCompass size={20} className="text-desert-tan group-hover:scale-110 transition-transform" />
+                      <IconCompass size={20} className="text-desert-tan group-hover:scale-110 transition-transform duration-500" />
                     </div>
-                    <h3 className="text-sm sm:text-base font-bold text-text-primary group-hover:text-desert-tan transition-colors">
+                    <h3 className="text-sm sm:text-base font-bold text-text-primary group-hover:text-desert-tan transition-colors duration-300">
                       Mapas Offline
                     </h3>
                     <p className="text-xs text-text-secondary mt-1 leading-relaxed">
@@ -1726,7 +1732,7 @@ export default function Home(props: {
                 <button
                   type="button"
                   onClick={handleOpenAiHub}
-                  className="nomad-interactive-card text-left rounded-xl border border-border-default bg-surface-primary p-4 flex flex-col justify-between hover:border-desert-olive transition-all group shadow-sm cursor-pointer"
+                  className="nomad-interactive-card text-left rounded-xl border border-border-default bg-surface-primary p-4 flex flex-col justify-between hover:border-desert-olive group shadow-sm cursor-pointer"
                 >
                   <div>
                     <div className="flex items-center justify-between mb-2.5">
@@ -1741,9 +1747,9 @@ export default function Home(props: {
                       >
                         {aiStatus.cardBadgeText}
                       </span>
-                      <IconBrain size={20} className="text-desert-olive group-hover:scale-110 transition-transform" />
+                      <IconBrain size={20} className="text-desert-olive group-hover:scale-110 transition-transform duration-500" />
                     </div>
-                    <h3 className="text-sm sm:text-base font-bold text-text-primary group-hover:text-desert-olive transition-colors">
+                    <h3 className="text-sm sm:text-base font-bold text-text-primary group-hover:text-desert-olive transition-colors duration-300">
                       Assistente de IA Local
                     </h3>
                     <p className="text-xs text-text-secondary mt-1 leading-relaxed">
@@ -1759,7 +1765,7 @@ export default function Home(props: {
                 {/* 7. Gerenciador de Downloads */}
                 <Link
                   href="/settings/downloads"
-                  className="nomad-interactive-card rounded-xl border border-border-default bg-surface-primary p-4 flex flex-col justify-between hover:border-desert-tan transition-all group shadow-sm"
+                  className="nomad-interactive-card rounded-xl border border-border-default bg-surface-primary p-4 flex flex-col justify-between hover:border-desert-tan group shadow-sm"
                 >
                   <div>
                     <div className="flex items-center justify-between mb-2.5">
@@ -1776,9 +1782,9 @@ export default function Home(props: {
                             ? `${failedDownloads.length} falha(s)`
                             : 'Auto-Retomada 3x'}
                       </span>
-                      <IconDownload size={20} className="text-desert-tan group-hover:scale-110 transition-transform" />
+                      <IconDownload size={20} className="text-desert-tan group-hover:scale-110 transition-transform duration-500" />
                     </div>
-                    <h3 className="text-sm sm:text-base font-bold text-text-primary group-hover:text-desert-tan transition-colors">
+                    <h3 className="text-sm sm:text-base font-bold text-text-primary group-hover:text-desert-tan transition-colors duration-300">
                       Downloads &amp; Logs
                     </h3>
                     <p className="text-xs text-text-secondary mt-1 leading-relaxed">
@@ -1794,16 +1800,16 @@ export default function Home(props: {
                 {/* 8. Configurações do Sistema */}
                 <Link
                   href="/settings/system"
-                  className="nomad-interactive-card rounded-xl border border-border-default bg-surface-primary p-4 flex flex-col justify-between hover:border-desert-tan transition-all group shadow-sm"
+                  className="nomad-interactive-card rounded-xl border border-border-default bg-surface-primary p-4 flex flex-col justify-between hover:border-desert-tan group shadow-sm"
                 >
                   <div>
                     <div className="flex items-center justify-between mb-2.5">
                       <span className="text-xs px-2 py-0.5 rounded bg-surface-secondary text-text-secondary font-semibold border border-border-default">
                         Sistema &amp; Atualizações
                       </span>
-                      <IconSettings size={20} className="text-desert-tan group-hover:scale-110 transition-transform" />
+                      <IconSettings size={20} className="text-desert-tan group-hover:scale-110 transition-transform duration-500" />
                     </div>
-                    <h3 className="text-sm sm:text-base font-bold text-text-primary group-hover:text-desert-tan transition-colors">
+                    <h3 className="text-sm sm:text-base font-bold text-text-primary group-hover:text-desert-tan transition-colors duration-300">
                       Configurações Gerais
                     </h3>
                     <p className="text-xs text-text-secondary mt-1 leading-relaxed">
@@ -1867,7 +1873,7 @@ export default function Home(props: {
                         item.label.toLowerCase().includes('kiwix')
 
                       const cardContent = (
-                        <div className="rounded-xl border border-border-default bg-surface-primary nomad-interactive-card relative p-4 flex flex-col justify-between transition-all hover:border-desert-tan group h-full shadow-sm">
+                        <div className="rounded-xl border border-border-default bg-surface-primary nomad-interactive-card relative p-4 flex flex-col justify-between hover:border-desert-tan group h-full shadow-sm">
                           <div>
                             <div className="flex items-center justify-between gap-2 mb-2.5 pb-2 border-b border-border-subtle">
                               <div className="flex items-center gap-1.5 min-w-0">

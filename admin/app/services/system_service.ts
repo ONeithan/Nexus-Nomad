@@ -42,6 +42,7 @@ import {
   getConfiguredDefaultCredentials,
   injectDefaultCredentialEnv,
 } from '../utils/default_credentials.js'
+import { getInstallProgress } from '../utils/install_progress_tracker.js'
 
 @inject()
 export class SystemService {
@@ -341,6 +342,7 @@ export class SystemService {
     for (const service of services) {
       const status = statuses.find((s) => s.service_name === service.service_name)
       const isExternalLocal = Boolean(status?.isExternal)
+      const liveProg = getInstallProgress(service.service_name)
       const resolvedUiLocation =
         isExternalLocal && status?.hostPort
           ? String(status.hostPort)
@@ -367,6 +369,12 @@ export class SystemService {
         is_link_tile: service.is_link_tile,
         link_color: service.link_color,
         category: service.category,
+        ...(liveProg
+          ? {
+              install_progress_status: liveProg.status,
+              install_progress_message: liveProg.message,
+            }
+          : {}),
         ...(isExternalLocal
           ? { node: 'local' as const, node_label: 'Docker Local (Vinculado)' }
           : {}),

@@ -104,7 +104,7 @@ export default function AppCatalogModal({
       >
         <DialogPanel
           transition
-          className={`relative bg-surface-primary flex flex-col overflow-hidden transition-all data-[closed]:scale-95 data-[closed]:opacity-0 data-[enter]:duration-300 data-[leave]:duration-200 data-[enter]:ease-out data-[leave]:ease-in ${
+          className={`nomad-modal-animate relative bg-surface-primary flex flex-col overflow-hidden transition-all data-[closed]:scale-95 data-[closed]:opacity-0 data-[enter]:duration-300 data-[leave]:duration-200 data-[enter]:ease-out data-[leave]:ease-in ${
             isFullscreen
               ? 'w-screen h-screen max-w-none max-h-none rounded-none border-none z-50'
               : 'rounded-2xl shadow-2xl w-full max-w-6xl h-[90vh] max-h-[900px] border border-border-subtle'

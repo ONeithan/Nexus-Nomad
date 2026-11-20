@@ -885,21 +885,22 @@ export default class ServiceSeeder extends BaseSeeder {
     },
     {
       service_name: SERVICE_NAMES.WHISPER,
-      friendly_name: 'Whisper.cpp (Transcrição Offline de Voz)',
-      powered_by: 'Whisper.cpp',
+      friendly_name: 'Whisper ASR (Transcrição Offline de Voz)',
+      powered_by: 'Whisper ASR',
       display_order: 45,
       description: 'Motor de conversão de fala e gravações de voz em texto 100% offline com alta precisão para o português',
       icon: 'IconMicrophone',
-      container_image: 'ghcr.io/ggerganov/whisper.cpp:main',
-      source_repo: 'https://github.com/ggerganov/whisper.cpp',
+      container_image: 'onerahmet/openai-whisper-asr-webservice:latest',
+      source_repo: 'https://github.com/ahmetoner/whisper-asr-webservice',
       container_command: null,
       container_config: JSON.stringify({
         HostConfig: {
           RestartPolicy: { Name: 'unless-stopped' },
-          PortBindings: { '8080/tcp': [{ HostPort: '8525' }] },
-          Binds: [`${ServiceSeeder.NOMAD_STORAGE_ABS_PATH}/whisper:/models`],
+          PortBindings: { '9000/tcp': [{ HostPort: '8525' }] },
+          Binds: [`${ServiceSeeder.NOMAD_STORAGE_ABS_PATH}/whisper:/root/.cache/whisper`],
         },
-        ExposedPorts: { '8080/tcp': {} },
+        ExposedPorts: { '9000/tcp': {} },
+        Env: ['ASR_MODEL=base', 'ASR_ENGINE=openai_whisper'],
       }),
       ui_location: '8525',
       installed: false,
@@ -976,10 +977,11 @@ export default class ServiceSeeder extends BaseSeeder {
       container_config: JSON.stringify({
         HostConfig: {
           RestartPolicy: { Name: 'unless-stopped' },
-          PortBindings: { '80/tcp': [{ HostPort: '8540' }] },
+          PortBindings: { '8080/tcp': [{ HostPort: '8540' }] },
           Binds: [`${ServiceSeeder.NOMAD_STORAGE_ABS_PATH}/kitchenowl:/data`],
         },
-        ExposedPorts: { '80/tcp': {} },
+        ExposedPorts: { '8080/tcp': {} },
+        Env: ['JWT_SECRET_KEY=kitchenowl-jwt-secret-nomad-2026!'],
       }),
       ui_location: '8540',
       installed: false,
@@ -1017,21 +1019,21 @@ export default class ServiceSeeder extends BaseSeeder {
     },
     {
       service_name: SERVICE_NAMES.OPENREM,
-      friendly_name: 'OpenREM / DICOM (Arquivo de Exames Médicos)',
-      powered_by: 'OpenREM',
+      friendly_name: 'Orthanc / DICOM (Arquivo de Exames Médicos)',
+      powered_by: 'Orthanc DICOM',
       display_order: 50,
-      description: 'Visualizador e arquivador médico para tomografias, ressonâncias magnéticas e raios-X em altíssima resolução',
+      description: 'Visualizador e arquivador médico PACS/DICOM para tomografias, ressonâncias magnéticas e raios-X em altíssima resolução',
       icon: 'IconFirstAidKit',
-      container_image: 'openrem/openrem:latest',
-      source_repo: 'https://github.com/openrem/openrem',
+      container_image: 'orthancteam/orthanc:latest',
+      source_repo: 'https://github.com/orthancteam/orthanc',
       container_command: null,
       container_config: JSON.stringify({
         HostConfig: {
           RestartPolicy: { Name: 'unless-stopped' },
-          PortBindings: { '80/tcp': [{ HostPort: '8550' }] },
-          Binds: [`${ServiceSeeder.NOMAD_STORAGE_ABS_PATH}/dicom:/data`],
+          PortBindings: { '8042/tcp': [{ HostPort: '8550' }] },
+          Binds: [`${ServiceSeeder.NOMAD_STORAGE_ABS_PATH}/dicom:/var/lib/orthanc/db`],
         },
-        ExposedPorts: { '80/tcp': {} },
+        ExposedPorts: { '8042/tcp': {} },
       }),
       ui_location: '8550',
       installed: false,
@@ -1054,10 +1056,10 @@ export default class ServiceSeeder extends BaseSeeder {
       container_config: JSON.stringify({
         HostConfig: {
           RestartPolicy: { Name: 'unless-stopped' },
-          PortBindings: { '80/tcp': [{ HostPort: '8555' }] },
+          PortBindings: { '5000/tcp': [{ HostPort: '8555' }] },
           Binds: [`${ServiceSeeder.NOMAD_STORAGE_ABS_PATH}/gramps:/app/users`],
         },
-        ExposedPorts: { '80/tcp': {} },
+        ExposedPorts: { '5000/tcp': {} },
       }),
       ui_location: '8555',
       installed: false,
@@ -1074,7 +1076,7 @@ export default class ServiceSeeder extends BaseSeeder {
       display_order: 52,
       description: 'Cadastre suas garrafas e ingredientes para descobrir todos os coquetéis e drinks que você consegue preparar para visitas',
       icon: 'IconGlassFull',
-      container_image: 'karlomikus/bar-assistant:latest',
+      container_image: 'barassistant/server:v6',
       source_repo: 'https://github.com/karlomikus/bar-assistant',
       container_command: null,
       container_config: JSON.stringify({
@@ -1259,9 +1261,9 @@ export default class ServiceSeeder extends BaseSeeder {
       display_order: 59,
       description: 'Central de identidade com biometria / FaceID e 2FA para você e sua família entrarem em todos os serviços com um só login',
       icon: 'IconKey',
-      container_image: 'ghcr.io/goauthentik/server:latest',
+      container_image: 'ghcr.io/goauthentik/server:2025.10',
       source_repo: 'https://github.com/goauthentik/authentik',
-      container_command: null,
+      container_command: 'server',
       container_config: JSON.stringify({
         HostConfig: {
           RestartPolicy: { Name: 'unless-stopped' },
@@ -1311,14 +1313,14 @@ export default class ServiceSeeder extends BaseSeeder {
       display_order: 61,
       description: 'Varre a rede 24h e avisa no celular no segundo em que qualquer aparelho novo ou desconhecido conectar no seu Wi-Fi',
       icon: 'IconRadar',
-      container_image: 'jokob-sk/netalertx:latest',
+      container_image: 'ghcr.io/jokob-sk/netalertx:latest',
       source_repo: 'https://github.com/jokob-sk/NetAlertX',
       container_command: null,
       container_config: JSON.stringify({
         HostConfig: {
           RestartPolicy: { Name: 'unless-stopped' },
           PortBindings: { '20211/tcp': [{ HostPort: '8610' }] },
-          Binds: [`${ServiceSeeder.NOMAD_STORAGE_ABS_PATH}/netalertx:/app/config`],
+          Binds: [`${ServiceSeeder.NOMAD_STORAGE_ABS_PATH}/netalertx:/data`],
         },
         ExposedPorts: { '20211/tcp': {} },
       }),
@@ -1393,7 +1395,7 @@ export default class ServiceSeeder extends BaseSeeder {
       icon: 'IconNetwork',
       container_image: 'headscale/headscale:latest',
       source_repo: 'https://github.com/juanfont/headscale',
-      container_command: null,
+      container_command: 'serve',
       container_config: JSON.stringify({
         HostConfig: {
           RestartPolicy: { Name: 'unless-stopped' },
@@ -1424,12 +1426,12 @@ export default class ServiceSeeder extends BaseSeeder {
         HostConfig: {
           RestartPolicy: { Name: 'unless-stopped' },
           PortBindings: {
-            '51820/udp': [{ HostPort: '51820' }],
             '51821/tcp': [{ HostPort: '8630' }],
+            '51820/udp': [{ HostPort: '51820' }],
           },
           Binds: [`${ServiceSeeder.NOMAD_STORAGE_ABS_PATH}/wgeasy:/etc/wireguard`],
         },
-        ExposedPorts: { '51820/udp': {}, '51821/tcp': {} },
+        ExposedPorts: { '51821/tcp': {}, '51820/udp': {} },
       }),
       ui_location: '8630',
       installed: false,
@@ -1442,19 +1444,19 @@ export default class ServiceSeeder extends BaseSeeder {
     {
       service_name: SERVICE_NAMES.NMAP_WEB,
       friendly_name: 'Nmap Web (Auditor de Portas & Brechas)',
-      powered_by: 'Nmap Web',
+      powered_by: 'WebMap / Nmap',
       display_order: 66,
       description: 'Scanner visual de portas e vulnerabilidades para verificar se câmeras ou roteadores da casa possuem brechas abertas',
       icon: 'IconSearch',
-      container_image: 'sandmap/sandmap:latest',
-      source_repo: 'https://github.com/trimstray/sandmap',
+      container_image: 'vuldocker/webmap:latest',
+      source_repo: 'https://github.com/Rev3rseSecurity/WebMap',
       container_command: null,
       container_config: JSON.stringify({
         HostConfig: {
           RestartPolicy: { Name: 'unless-stopped' },
-          PortBindings: { '8080/tcp': [{ HostPort: '8635' }] },
+          PortBindings: { '8000/tcp': [{ HostPort: '8635' }] },
         },
-        ExposedPorts: { '8080/tcp': {} },
+        ExposedPorts: { '8000/tcp': {} },
       }),
       ui_location: '8635',
       installed: false,
@@ -1590,6 +1592,7 @@ export default class ServiceSeeder extends BaseSeeder {
           Binds: [`${ServiceSeeder.NOMAD_STORAGE_ABS_PATH}/blocky:/app/config`],
         },
         ExposedPorts: { '4000/tcp': {} },
+        Env: ['BLOCKY_CONFIG_FILE=/app/config/config.yml'],
       }),
       ui_location: '8660',
       installed: false,
@@ -1762,7 +1765,7 @@ export default class ServiceSeeder extends BaseSeeder {
       display_order: 78,
       description: 'Monitora bateria do nobreak em tempo real e desliga com segurança o TrueNAS e os PCs ao faltar energia',
       icon: 'IconBatteryCharging',
-      container_image: 'brandawg/peanut:latest',
+      container_image: 'brandawg93/peanut:latest',
       source_repo: 'https://github.com/Brandawg93/PeaNUT',
       container_command: null,
       container_config: JSON.stringify({
@@ -1921,7 +1924,7 @@ export default class ServiceSeeder extends BaseSeeder {
       display_order: 84,
       description: 'Toca a mesma música perfeitamente sincronizada em todos os cômodos da residência ao mesmo tempo',
       icon: 'IconVolume',
-      container_image: 'badaix/snapcast:latest',
+      container_image: 'ivdata/snapserver:latest',
       source_repo: 'https://github.com/badaix/snapcast',
       container_command: null,
       container_config: JSON.stringify({
@@ -2254,19 +2257,19 @@ export default class ServiceSeeder extends BaseSeeder {
     },
     {
       service_name: SERVICE_NAMES.PARTKEEPR,
-      friendly_name: 'PartKeepr (Estoque de Componentes Eletrônicos)',
-      powered_by: 'PartKeepr',
+      friendly_name: 'Part-DB / PartKeepr (Estoque de Componentes Eletrônicos)',
+      powered_by: 'Part-DB',
       display_order: 97,
       description: 'Catálogo avançado para componentes eletrônicos SMD, circuitos integrados e datasheets técnicos na bancada',
       icon: 'IconCpu',
-      container_image: 'mhubig/partkeepr:latest',
-      source_repo: 'https://github.com/partkeepr/PartKeepr',
+      container_image: 'jbtronics/part-db1:latest',
+      source_repo: 'https://github.com/Part-DB/Part-DB-server',
       container_command: null,
       container_config: JSON.stringify({
         HostConfig: {
           RestartPolicy: { Name: 'unless-stopped' },
           PortBindings: { '80/tcp': [{ HostPort: '8795' }] },
-          Binds: [`${ServiceSeeder.NOMAD_STORAGE_ABS_PATH}/partkeepr:/data`],
+          Binds: [`${ServiceSeeder.NOMAD_STORAGE_ABS_PATH}/partdb:/var/www/html/uploads`],
         },
         ExposedPorts: { '80/tcp': {} },
       }),
@@ -2306,13 +2309,13 @@ export default class ServiceSeeder extends BaseSeeder {
     },
     {
       service_name: SERVICE_NAMES.LIBRECAD_WEB,
-      friendly_name: 'LibreCAD Web (Desenho Técnico 2D)',
-      powered_by: 'LibreCAD Web',
+      friendly_name: 'FreeCAD / LibreCAD Web (Desenho Técnico 2D/3D)',
+      powered_by: 'FreeCAD / LinuxServer',
       display_order: 99,
-      description: 'Criação e consulta de plantas baixas, peças mecânicas e desenhos técnicos diretamente pelo navegador',
+      description: 'Criação e consulta de plantas baixas, peças mecânicas e desenhos técnicos 2D/3D diretamente pelo navegador',
       icon: 'IconVectorTriangle',
-      container_image: 'lscr.io/linuxserver/librecad:latest',
-      source_repo: 'https://github.com/LibreCAD/LibreCAD',
+      container_image: 'lscr.io/linuxserver/freecad:latest',
+      source_repo: 'https://github.com/linuxserver/docker-freecad',
       container_command: null,
       container_config: JSON.stringify({
         HostConfig: {
@@ -2343,9 +2346,9 @@ export default class ServiceSeeder extends BaseSeeder {
       container_config: JSON.stringify({
         HostConfig: {
           RestartPolicy: { Name: 'unless-stopped' },
-          PortBindings: { '80/tcp': [{ HostPort: '8810' }] },
+          PortBindings: { '8080/tcp': [{ HostPort: '8810' }] },
         },
-        ExposedPorts: { '80/tcp': {} },
+        ExposedPorts: { '8080/tcp': {} },
       }),
       ui_location: '8810',
       installed: false,
@@ -2496,7 +2499,7 @@ export default class ServiceSeeder extends BaseSeeder {
       display_order: 106,
       description: 'Salas de chamadas de vídeo criptografadas, sem limite de tempo e com compartilhamento de tela em 1080p',
       icon: 'IconVideo',
-      container_image: 'jitsi/web:latest',
+      container_image: 'jitsi/web:stable',
       source_repo: 'https://github.com/jitsi/jitsi-meet',
       container_command: null,
       container_config: JSON.stringify({
@@ -2521,8 +2524,8 @@ export default class ServiceSeeder extends BaseSeeder {
       display_order: 107,
       description: 'Ramais móveis no celular e interfonia IP para conversar entre os cômodos, oficina e garagem sem gastar linha de telefone',
       icon: 'IconPhoneCall',
-      container_image: 'tiredofit/freepbx:latest',
-      source_repo: 'https://github.com/tiredofit/docker-freepbx',
+      container_image: 'flaviostutz/freepbx:latest',
+      source_repo: 'https://github.com/flaviostutz/freepbx',
       container_command: null,
       container_config: JSON.stringify({
         HostConfig: {
@@ -2601,7 +2604,7 @@ export default class ServiceSeeder extends BaseSeeder {
       icon: 'IconDeviceDesktop',
       container_image: 'rustdesk/rustdesk-server:latest',
       source_repo: 'https://github.com/rustdesk/rustdesk-server',
-      container_command: null,
+      container_command: 'hbbs',
       container_config: JSON.stringify({
         HostConfig: {
           RestartPolicy: { Name: 'unless-stopped' },
@@ -2682,7 +2685,7 @@ export default class ServiceSeeder extends BaseSeeder {
       display_order: 113,
       description: 'Guarde seus scripts, repositórios de código e composes em um servidor Git privado sob seu controle absoluto',
       icon: 'IconGitBranch',
-      container_image: 'codeberg.org/forgejo/forgejo:latest',
+      container_image: 'codeberg.org/forgejo/forgejo:14',
       source_repo: 'https://codeberg.org/forgejo/forgejo',
       container_command: null,
       container_config: JSON.stringify({
@@ -2708,7 +2711,7 @@ export default class ServiceSeeder extends BaseSeeder {
       display_order: 114,
       description: 'Servidor de integração contínua leve que testa scripts e compila imagens Docker a cada commit',
       icon: 'IconCode',
-      container_image: 'woodpeckerci/woodpecker-server:latest',
+      container_image: 'woodpeckerci/woodpecker-server:v3',
       source_repo: 'https://github.com/woodpecker-ci/woodpecker',
       container_command: null,
       container_config: JSON.stringify({
@@ -2740,10 +2743,10 @@ export default class ServiceSeeder extends BaseSeeder {
       container_config: JSON.stringify({
         HostConfig: {
           RestartPolicy: { Name: 'unless-stopped' },
-          PortBindings: { '8000/tcp': [{ HostPort: '8885' }] },
+          PortBindings: { '5797/tcp': [{ HostPort: '8885' }] },
           Binds: [`${ServiceSeeder.NOMAD_STORAGE_ABS_PATH}/archivebox:/data`],
         },
-        ExposedPorts: { '8000/tcp': {} },
+        ExposedPorts: { '5797/tcp': {} },
       }),
       ui_location: '8885',
       installed: false,
@@ -2996,19 +2999,20 @@ export default class ServiceSeeder extends BaseSeeder {
     {
       service_name: SERVICE_NAMES.WOL_WEB,
       friendly_name: 'Wake-on-LAN Hub (Ligue Computadores à Distância)',
-      powered_by: 'Wake-on-LAN Hub',
+      powered_by: 'UpSnap',
       display_order: 125,
       description: 'Ligue seu PC potente com a RTX 5060 pelo celular com um clique antes de conectar via Sunshine ou Guacamole',
       icon: 'IconPower',
-      container_image: 'probonopd/up:latest',
-      source_repo: 'https://github.com/probonopd/up',
+      container_image: 'ghcr.io/seriousm4x/upsnap:latest',
+      source_repo: 'https://github.com/seriousm4x/UpSnap',
       container_command: null,
       container_config: JSON.stringify({
         HostConfig: {
           RestartPolicy: { Name: 'unless-stopped' },
-          PortBindings: { '8080/tcp': [{ HostPort: '8935' }] },
+          PortBindings: { '8090/tcp': [{ HostPort: '8935' }] },
+          Binds: [`${ServiceSeeder.NOMAD_STORAGE_ABS_PATH}/upsnap:/app/pb_data`],
         },
-        ExposedPorts: { '8080/tcp': {} },
+        ExposedPorts: { '8090/tcp': {} },
       }),
       ui_location: '8935',
       installed: false,
@@ -3177,6 +3181,24 @@ export default class ServiceSeeder extends BaseSeeder {
 
   ]
 
+  private static readonly DEFUNCT_CONTAINER_IMAGES = new Set([
+    'openrem/openrem:latest',
+    'karlomikus/bar-assistant:latest',
+    'ghcr.io/goauthentik/server:latest',
+    'jokob-sk/netalertx:latest',
+    'sandmap/sandmap:latest',
+    'brandawg/peanut:latest',
+    'badaix/snapcast:latest',
+    'lscr.io/linuxserver/librecad:latest',
+    'jitsi/web:latest',
+    'tiredofit/freepbx:latest',
+    'probonopd/up:latest',
+    'codeberg.org/forgejo/forgejo:latest',
+    'ghcr.io/ggerganov/whisper.cpp:main',
+    'woodpeckerci/woodpecker-server:latest',
+    'mhubig/partkeepr:latest',
+  ])
+
   async run() {
     const existingServices = await Service.query().select([
       'service_name',
@@ -3184,6 +3206,7 @@ export default class ServiceSeeder extends BaseSeeder {
       'is_user_modified',
       // Needed to keep an installed app's published host port across catalog sync.
       'installed',
+      'container_image',
       'container_config',
       'ui_location',
     ])
@@ -3199,28 +3222,17 @@ export default class ServiceSeeder extends BaseSeeder {
 
     // Keep curated services in sync with the catalog. Custom services are user-defined and must
     // never be overwritten. User-modified curated services (a user edited their config) are
-    // likewise left alone so the edit survives reboots. ui_location is synced too so a catalog
-    // change to an app's link/scheme/port (e.g. Vaultwarden moving to https:8480, or a corrected
-    // internal port) reaches existing non-modified installs on update, not just fresh ones.
+    // likewise left alone so the edit survives reboots. ui_location and broken/uninstalled
+    // container_image refs are synced so fixes reach existing appliances on boot too.
     for (const service of ServiceSeeder.DEFAULT_SERVICES) {
       const existing = existingServiceMap.get(service.service_name)
       if (existing && !existing.is_custom && !existing.is_user_modified) {
-        // An installed app's published host port belongs to the machine, not the
-        // catalog: it diverges because the default was already taken on that host.
-        // Overwriting it desyncs the row from the running container, which breaks
-        // the Open link now and collides on the next recreate (#1005). Keep the
-        // live host ports and apply every other catalog change. Not-yet-installed
-        // rows take the catalog verbatim, since nothing is running to conflict.
         const containerConfig = existing.installed
           ? mergeContainerConfigPreservingHostPorts(
               service.container_config,
               existing.container_config
             )
           : service.container_config
-        // Derive the link from the config we are about to WRITE, not the live one. When a
-        // catalog change to the container-side port means the live host port was not
-        // preserved above, the link has to follow the catalog too, or the row ships a
-        // container bound to one port and an Open button pointing at another.
         const uiLocation = existing.installed
           ? mergeUiLocationPreservingHostPort(
               service.ui_location,
@@ -3228,6 +3240,9 @@ export default class ServiceSeeder extends BaseSeeder {
               containerConfig
             )
           : service.ui_location
+        const shouldSyncImage =
+          !existing.installed ||
+          ServiceSeeder.DEFUNCT_CONTAINER_IMAGES.has(existing.container_image || '')
 
         await Service.query().where('service_name', service.service_name).update({
           friendly_name: service.friendly_name,
@@ -3237,6 +3252,8 @@ export default class ServiceSeeder extends BaseSeeder {
           metadata: (service as any).metadata ?? null,
           category: service.category,
           ui_location: uiLocation,
+          depends_on: service.depends_on ?? null,
+          ...(shouldSyncImage ? { container_image: service.container_image } : {}),
         })
       }
     }

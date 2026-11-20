@@ -273,7 +273,7 @@ export default function AppLayout({
           </>
         )}
 
-        <div className="flex-1 w-full bg-desert nomad-page-enter">{children}</div>
+        <div key={currentPath.split('?')[0]} className="flex-1 w-full bg-desert nomad-page-enter">{children}</div>
         <Footer />
 
         {aiStatus.hasAnyAi && (
@@ -322,7 +322,7 @@ export default function AppLayout({
           <DialogBackdrop className="fixed inset-0 bg-black/80 backdrop-blur-sm transition-opacity" />
           <div className="fixed inset-0 z-10 w-screen overflow-y-auto">
             <div className="flex min-h-full items-center justify-center p-4 text-center">
-              <DialogPanel className="w-full max-w-md transform overflow-hidden rounded-2xl bg-surface-primary border border-desert-orange/60 p-6 text-left align-middle shadow-2xl transition-all">
+              <DialogPanel className="nomad-modal-animate w-full max-w-md transform overflow-hidden rounded-2xl bg-surface-primary border border-desert-orange/60 p-6 text-left align-middle shadow-2xl transition-all">
                 <div className="flex items-center gap-3 text-desert-orange mb-3">
                   <IconRotateClockwise size={26} className="shrink-0" />
                   <h3 className="text-base font-bold text-text-primary">

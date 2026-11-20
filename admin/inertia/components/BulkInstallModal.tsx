@@ -159,19 +159,34 @@ export default function BulkInstallModal({
         }
       }
 
-      // Polling de segurança a cada ~6s (garante detecção mesmo se SSE falhar)
-      if (attempt > 0 && attempt % 2 === 0) {
+      // Polling de segurança a cada ~3s (garante progresso em tempo real e motivo exato de erro mesmo se SSE falhar)
+      if (attempt >= 1) {
         try {
           const sysServices = await api.getSystemServices(true)
           const found = sysServices?.find((s: any) => s.service_name === serviceName)
           if (found) {
-            if (found.installation_status === 'error') {
+            const liveMsg = found.install_progress_message
+            const liveStatus = found.install_progress_status
+
+            if (liveMsg && liveStatus !== 'error' && liveStatus !== 'completed') {
+              lastProgressMsg = liveMsg
+              setStatuses((prev) => ({
+                ...prev,
+                [serviceName]: {
+                  state: 'installing',
+                  message: liveMsg,
+                },
+              }))
+            }
+
+            if (found.installation_status === 'error' || liveStatus === 'error') {
               return {
                 success: false,
                 message:
-                  lastProgressMsg && lastProgressMsg.toLowerCase().includes('falha')
+                  liveMsg ||
+                  (lastProgressMsg && lastProgressMsg.toLowerCase().includes('falha')
                     ? lastProgressMsg
-                    : 'Falha ao iniciar o contêiner no servidor (verifique portas/recursos/imagem).',
+                    : 'Falha ao iniciar o contêiner no servidor (verifique imagem/portas/logs no Portainer).'),
               }
             }
             if (found.installed && found.installation_status !== 'installing') {
@@ -180,8 +195,8 @@ export default function BulkInstallModal({
                   success: true,
                   message:
                     deployTarget === 'portainer'
-                      ? 'Contêiner ativo e em execução no Servidor Portainer!'
-                      : 'Contêiner instalado e em execução!',
+                      ? liveMsg || 'Contêiner ativo e em execução no Servidor Portainer!'
+                      : liveMsg || 'Contêiner instalado e em execução!',
                 }
               }
               // Se marcou installed mas ainda não aparece como running, dá mais 2 ciclos antes de reprovar
@@ -204,10 +219,21 @@ export default function BulkInstallModal({
     return { success: false, message: 'Tempo limite excedido aguardando resposta do servidor.' }
   }
 
-  const startBulkInstall = async () => {
-    const itemsToInstall = queueItems.length > 0 ? queueItems : selectedServices
+  const startBulkInstall = async (overrideList?: ServiceSlim[]) => {
+    const itemsToInstall = overrideList && overrideList.length > 0
+      ? overrideList
+      : queueItems.length > 0
+        ? queueItems
+        : selectedServices
     if (itemsToInstall.length === 0) return
-    if (queueItems.length === 0) {
+    if (overrideList && overrideList.length > 0) {
+      setQueueItems(overrideList)
+      const resetStatuses: Record<string, ItemStatus> = {}
+      for (const s of overrideList) {
+        resetStatuses[s.service_name] = { state: 'pending', message: 'Aguardando nova tentativa...' }
+      }
+      setStatuses(resetStatuses)
+    } else if (queueItems.length === 0) {
       setQueueItems(itemsToInstall)
     }
 
@@ -352,7 +378,7 @@ export default function BulkInstallModal({
       <div className="fixed inset-0 flex items-center justify-center p-3 sm:p-6 overflow-y-auto">
         <DialogPanel
           transition
-          className="relative bg-surface-primary rounded-2xl shadow-2xl w-full max-w-3xl max-h-[85vh] flex flex-col overflow-hidden border border-border-subtle transition-all data-[closed]:scale-95 data-[closed]:opacity-0 data-[enter]:duration-300 data-[leave]:duration-200 data-[enter]:ease-out data-[leave]:ease-in"
+          className="nomad-modal-animate relative bg-surface-primary rounded-2xl shadow-2xl w-full max-w-3xl max-h-[85vh] flex flex-col overflow-hidden border border-border-subtle transition-all data-[closed]:scale-95 data-[closed]:opacity-0 data-[enter]:duration-300 data-[leave]:duration-200 data-[enter]:ease-out data-[leave]:ease-in"
         >
           {/* Header */}
           <div className="px-6 py-4 border-b border-border-subtle bg-surface-secondary/70 flex items-center justify-between gap-3">
@@ -566,7 +592,7 @@ export default function BulkInstallModal({
                     variant="primary"
                     size="sm"
                     icon="IconPlayerPlay"
-                    onClick={startBulkInstall}
+                    onClick={() => startBulkInstall()}
                   >
                     Iniciar Instalação em Massa
                   </StyledButton>
@@ -585,22 +611,41 @@ export default function BulkInstallModal({
               )}
 
               {isFinished && (
-                <StyledButton
-                  variant="primary"
-                  size="sm"
-                  icon="IconCheck"
-                  onClick={() => {
-                    setIsFinished(false)
-                    onClose()
-                    if (onCompletedAll) {
-                      onCompletedAll()
-                    } else {
-                      window.location.reload()
-                    }
-                  }}
-                >
-                  Concluir e Atualizar
-                </StyledButton>
+                <>
+                  {errorCount > 0 && (
+                    <StyledButton
+                      variant="outline"
+                      size="sm"
+                      icon="IconRefresh"
+                      onClick={() => {
+                        const failedOnly = displayList.filter(
+                          (s) => statuses[s.service_name]?.state === 'error'
+                        )
+                        if (failedOnly.length > 0) {
+                          startBulkInstall(failedOnly)
+                        }
+                      }}
+                    >
+                      Tentar Falhas ({errorCount})
+                    </StyledButton>
+                  )}
+                  <StyledButton
+                    variant="primary"
+                    size="sm"
+                    icon="IconCheck"
+                    onClick={() => {
+                      setIsFinished(false)
+                      onClose()
+                      if (onCompletedAll) {
+                        onCompletedAll()
+                      } else {
+                        window.location.reload()
+                      }
+                    }}
+                  >
+                    Concluir e Atualizar
+                  </StyledButton>
+                </>
               )}
             </div>
           </div>

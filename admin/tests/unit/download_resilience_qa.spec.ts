@@ -559,6 +559,7 @@ test('CSS animations, hover cascade, reduced-motion, contrast and release metada
     'nomad-split-wing-left',
     'nomad-split-wing-right',
     'nomad-split-pre-exit',
+    'nomad-cleave-beam',
     'nomad-merge-pre-left',
     'nomad-merge-pre-right',
     'nomad-merge-lock',
@@ -571,24 +572,19 @@ test('CSS animations, hover cascade, reduced-motion, contrast and release metada
     assert.ok(css.includes(`.${cls}`), `Expected .${cls} class definition in app.css`)
   }
   assert.doesNotMatch(css, /\.nomad-interactive-card::before/, 'Fast bright sheen sweep on hover must be removed')
-  assert.match(css, /translateX\(54%\)/, 'Split wing animation must visibly slide from center outward')
+  assert.match(css, /translateX\(52%\)/, 'Split wing animation must visibly slide from center outward')
 
-  // 4) Avoid double nomad-page-enter animation inside home.tsx (already provided by AppLayout.tsx)
-  assert.match(appLayout, /nomad-page-enter/)
+  // 4) Avoid double nomad-page-enter animation inside home.tsx and re-key page transitions by route
+  assert.match(appLayout, /key=\{currentPath\.split\('\?'\)\[0\]\}[^>]*nomad-page-enter/)
   assert.doesNotMatch(home, /nomad-page-enter/)
+  assert.match(home, /nomad-cleave-beam/)
 
-  // 5) Reduced-motion accessibility includes split & merge choreography
+  // 5) Ensure Windows/browser prefers-reduced-motion does NOT nuke explicit operator-triggered split/merge/page animations
   const reducedMotion = css.match(/@media \(prefers-reduced-motion: reduce\)\s*\{([\s\S]*?)\n\}/)?.[1] || ''
-  for (const cls of [
-    '.nomad-split-wing-left',
-    '.nomad-split-wing-right',
-    '.nomad-split-pre-exit',
-    '.nomad-merge-pre-left',
-    '.nomad-merge-pre-right',
-    '.nomad-merge-lock',
-  ]) {
-    assert.ok(reducedMotion.includes(cls), `reduced-motion rule missing ${cls}`)
-  }
+  assert.doesNotMatch(reducedMotion, /\.nomad-split-wing-left/)
+  assert.doesNotMatch(reducedMotion, /\.nomad-merge-lock/)
+  assert.doesNotMatch(reducedMotion, /\.nomad-page-enter/)
+  assert.doesNotMatch(home, /nomad-interactive-card[^\"]*transition-all/, 'Slow hover transition must not be overridden by 150ms transition-all')
 
   // 6) HUD online status contrast check (WCAG AA >= 4.5:1 on tactical/dark and light surfaces)
   const luminance = (hex: string) => {
@@ -617,26 +613,138 @@ test('CSS animations, hover cascade, reduced-motion, contrast and release metada
     assert.ok(routes.includes(`documented(${snippet}`), `Missing documented() wrapper for ${snippet}`)
   }
 
-  // 8) Triple version sync to v1.0.37 across workflow and boot gate
-  assert.match(workflow, /# Build release trigger: v1\.0\.37/)
-  assert.match(workflow, /default: '1\.0\.37-nexus'/)
-  assert.match(workflow, /inputs\.version \|\| '1\.0\.37-nexus'/)
-  assert.match(bootGate, /:\s*'v1\.0\.37'/)
+  // 8) Triple version sync to v1.0.38 across workflow and boot gate
+  assert.match(workflow, /# Build release trigger: v1\.0\.38/)
+  assert.match(workflow, /default: '1\.0\.38-nexus'/)
+  assert.match(workflow, /inputs\.version \|\| '1\.0\.38-nexus'/)
+  assert.match(bootGate, /:\s*'v1\.0\.38'/)
 
-  // 9) Bulk install & Portainer hardening checks (real sequential wait + port collision resolution + catalog port uniqueness)
-  const [bulkModal, supplyDepot, portainerSvc, seeder] = await Promise.all([
+  // 9) Bulk install & Portainer hardening checks (real sequential wait + port collision resolution + catalog port uniqueness + live progress polling)
+  const [bulkModal, supplyDepot, portainerSvc, seeder, systemSvc] = await Promise.all([
     readFile(new URL('../../inertia/components/BulkInstallModal.tsx', import.meta.url), 'utf8'),
     readFile(new URL('../../inertia/pages/supply-depot.tsx', import.meta.url), 'utf8'),
     readFile(new URL('../../app/services/portainer_service.ts', import.meta.url), 'utf8'),
     readFile(new URL('../../database/seeders/service_seeder.ts', import.meta.url), 'utf8'),
+    readFile(new URL('../../app/services/system_service.ts', import.meta.url), 'utf8'),
   ])
 
   assert.doesNotMatch(bulkModal, /Portainer is synchronous on backend/)
   assert.match(bulkModal, /waitForServiceCompletion/)
+  assert.match(bulkModal, /found\.install_progress_message/)
+  assert.match(bulkModal, /Tentar Falhas/)
   assert.match(supplyDepot, /if \(bulkModalOpen \|\| !installActivity\.length\) return/)
   assert.match(portainerSvc, /occupiedPorts\.has\(requestedPortNum\)/)
   assert.match(portainerSvc, /healthStatus === 'unhealthy'/)
   assert.match(portainerSvc, /if \(createdOrModifiedContainer\)/)
+  assert.match(systemSvc, /install_progress_message:\s*liveProg\.message/)
   assert.match(seeder, /HostPort:\s*'8502'/)
   assert.match(seeder, /HostPort:\s*'8492'/)
+  assert.match(seeder, /shouldSyncImage/)
+
+  // Verify previously broken/404 container_image literals are completely absent from catalog entries
+  const catalogSection = seeder.slice(0, seeder.indexOf('DEFUNCT_CONTAINER_IMAGES'))
+  for (const defunctImage of [
+    'openrem/openrem:latest',
+    'karlomikus/bar-assistant:latest',
+    'ghcr.io/goauthentik/server:latest',
+    'jokob-sk/netalertx:latest',
+    'sandmap/sandmap:latest',
+    'brandawg/peanut:latest',
+    'badaix/snapcast:latest',
+    'lscr.io/linuxserver/librecad:latest',
+    'jitsi/web:latest',
+    'tiredofit/freepbx:latest',
+    'probonopd/up:latest',
+    'codeberg.org/forgejo/forgejo:latest',
+    'ghcr.io/ggerganov/whisper.cpp:main',
+    'woodpeckerci/woodpecker-server:latest',
+  ]) {
+    assert.ok(
+      !catalogSection.includes(`container_image: '${defunctImage}'`),
+      `Catalog still references defunct container_image: ${defunctImage}`
+    )
+  }
+
+  // Verify no two distinct catalog services share the same published HostPort
+  const portOwners = new Map<string, string[]>()
+  for (const chunk of catalogSection.split('service_name:').slice(1)) {
+    const svcName = /SERVICE_NAMES\.(\w+)/.exec(chunk)?.[1] || 'unknown'
+    const ports = new Set([...chunk.matchAll(/HostPort:\s*'(\d+)'/g)].map((m) => m[1]))
+    for (const p of ports) {
+      const owners = portOwners.get(p) || []
+      owners.push(svcName)
+      portOwners.set(p, owners)
+    }
+  }
+  const collisions = [...portOwners.entries()].filter(([, owners]) => owners.length > 1)
+  assert.deepEqual(collisions, [], `Duplicate catalog HostPorts detected: ${JSON.stringify(collisions)}`)
+})
+
+test('install_progress_tracker stores live steps and translates Docker/Portainer errors in PT-BR', async () => {
+  const tracker = await import('../../app/utils/install_progress_tracker.js')
+  tracker.clearInstallProgress('nomad_test_app')
+  assert.equal(tracker.getInstallProgress('nomad_test_app'), undefined)
+
+  tracker.setInstallProgress('nomad_test_app', 'pulling', '[2/5] Baixando imagem Docker...')
+  const cur = tracker.getInstallProgress('nomad_test_app')
+  assert.equal(cur?.status, 'pulling')
+  assert.equal(cur?.message, '[2/5] Baixando imagem Docker...')
+
+  tracker.clearInstallProgress('nomad_test_app')
+  assert.equal(tracker.getInstallProgress('nomad_test_app'), undefined)
+
+  assert.match(
+    tracker.translateDockerDeployErrorPtBr('manifest for foo:latest not found: manifest unknown'),
+    /Imagem ou tag inexistente no registro Docker/
+  )
+  assert.match(
+    tracker.translateDockerDeployErrorPtBr('Bind for 0.0.0.0:8635 failed: port is already allocated'),
+    /Conflito de porta no servidor/
+  )
+  assert.match(
+    tracker.translateDockerDeployErrorPtBr('Container exited with exit code 137 (OOMKilled)'),
+    /falta de memória RAM/
+  )
+})
+
+test('stack blueprints, starter configs, multi-port and 8080 container port fixes pass QA', async () => {
+  const [bpMod, seeder, portainerSvc] = await Promise.all([
+    import('../../app/utils/app_stack_blueprints.js'),
+    readFile(new URL('../../database/seeders/service_seeder.ts', import.meta.url), 'utf8'),
+    readFile(new URL('../../app/services/portainer_service.ts', import.meta.url), 'utf8'),
+  ])
+
+  for (const sName of [
+    'nomad_outline',
+    'nomad_docmost',
+    'nomad_ghostfolio',
+    'nomad_maybe',
+    'nomad_authentik',
+    'nomad_mattermost',
+    'nomad_planka',
+    'nomad_immich',
+    'nomad_bar_assistant',
+    'nomad_tubearchivist',
+    'nomad_invoice_ninja',
+  ]) {
+    const bp = bpMod.getStackBlueprint(sName)
+    assert.ok(bp, `Missing multi-service stack blueprint for ${sName}`)
+    assert.ok(bpMod.hasMultiServiceSidecars(sName), `Expected sidecars for ${sName}`)
+    assert.ok(bp.extraEnv('192.168.1.10', '8510').length > 0, `Expected env for ${sName}`)
+    const yaml = bp.sidecarServicesYaml(sName, '192.168.1.10', '8510')
+    assert.ok(yaml.includes(`container_name: nomad-${sName}-`), `Missing named sidecar for ${sName}`)
+  }
+
+  for (const cfgApp of ['nomad_blocky', 'nomad_headscale', 'nomad_frigate', 'nomad_weewx']) {
+    const cfg = bpMod.getStarterConfigFile(cfgApp, '192.168.1.10', '8625')
+    assert.ok(cfg && cfg.content.trim().length > 10, `Missing starter config for ${cfgApp}`)
+  }
+
+  // Verify fixed container ports and Part-DB replacement
+  assert.match(seeder, /BLOCKY_CONFIG_FILE=\/app\/config\/config\.yml/)
+  assert.match(seeder, /jbtronics\/part-db1:latest/)
+  assert.doesNotMatch(seeder.slice(0, seeder.indexOf('DEFUNCT_CONTAINER_IMAGES')), /mhubig\/partkeepr:latest/)
+  assert.match(portainerSvc, /hasMultiServiceSidecars/)
+  assert.match(portainerSvc, /primaryBindingKey/)
+  assert.match(portainerSvc, /iAttempt < 11/)
 })

@@ -37,6 +37,11 @@ import {
   containerMatchesCatalogService,
   isNomadManagedContainer,
 } from '../utils/container_matcher.js'
+import {
+  clearInstallProgress,
+  setInstallProgress,
+} from '../utils/install_progress_tracker.js'
+import { getStarterConfigFile } from '../utils/app_stack_blueprints.js'
 
 // Written by install_nomad.sh with the host AMD GPU's gfx target.
 const AMD_GFX_MARKER_PATH = '/app/storage/.nomad-amd-gfx'
@@ -416,6 +421,7 @@ export class DockerService {
     }
 
     // Mark installation as in progress
+    clearInstallProgress(serviceName)
     this.activeInstallations.add(serviceName)
     service.installation_status = 'installing'
     await service.save()
@@ -467,6 +473,7 @@ export class DockerService {
       }
 
       // Mark as installing to prevent concurrent operations
+      clearInstallProgress(serviceName)
       this.activeInstallations.add(serviceName)
       service.installation_status = 'installing'
       await service.save()
@@ -1215,7 +1222,64 @@ export class DockerService {
         extraEnv.push(`HBOX_AUTH_API_KEY_PEPPER=${await this._resolveHomeboxPepper()}`)
       } else if (serviceName === SERVICE_NAMES.FIREFLY_III) {
         extraEnv.push('APP_KEY=base64:c29tZXJhbmRvbXN0cmluZ2ZvcmZpcmVmbHlpaWk=')
+        extraEnv.push('DB_CONNECTION=sqlite')
+        extraEnv.push('TRUSTED_PROXIES=**')
         extraEnv.push('DEFAULT_CURRENCY=BRL')
+      } else if (serviceName === SERVICE_NAMES.BAR_ASSISTANT) {
+        extraEnv.push('APP_KEY=base64:c29tZXJhbmRvbXN0cmluZ2ZvcmJhcmFzc2lzdGFudA==')
+        extraEnv.push('DB_CONNECTION=sqlite')
+        extraEnv.push('CACHE_DRIVER=file')
+        extraEnv.push('SESSION_DRIVER=file')
+      } else if (serviceName === SERVICE_NAMES.KITCHENOWL) {
+        extraEnv.push('JWT_SECRET_KEY=kitchenowl-jwt-secret-nomad-2026!')
+        extraEnv.push('JWT_SECRET=kitchenowl-jwt-secret-nomad-key!')
+      } else if (serviceName === SERVICE_NAMES.SPEEDTEST) {
+        extraEnv.push('APP_KEY=base64:c29tZXJhbmRvbXN0cmluZ2ZvcnNwZWVkdGVzdA==')
+        extraEnv.push('DB_CONNECTION=sqlite')
+      } else if (serviceName === SERVICE_NAMES.CROWDSEC) {
+        extraEnv.push('DISABLE_ONLINE_API=true')
+      } else if (serviceName === SERVICE_NAMES.BLOCKY) {
+        extraEnv.push('BLOCKY_CONFIG_FILE=/app/config/config.yml')
+      } else if (serviceName === SERVICE_NAMES.MEALIE) {
+        extraEnv.push('DB_ENGINE=sqlite')
+        extraEnv.push('ALLOW_SIGNUP=true')
+      } else if (serviceName === SERVICE_NAMES.WG_EASY) {
+        extraEnv.push('PORT=51821')
+        extraEnv.push('INSECURE=true')
+        extraEnv.push('WG_HOST=127.0.0.1')
+      } else if (serviceName === SERVICE_NAMES.INVENTREE) {
+        extraEnv.push('INVENTREE_DB_ENGINE=sqlite3')
+        extraEnv.push('INVENTREE_DB_NAME=/home/inventree/data/inventree.sqlite3')
+        extraEnv.push('INVENTREE_DEBUG=False')
+      } else if (serviceName === SERVICE_NAMES.BASEROW) {
+        extraEnv.push('BASEROW_PUBLIC_URL=http://127.0.0.1:8755')
+      } else if (serviceName === SERVICE_NAMES.WOODPECKER) {
+        extraEnv.push('WOODPECKER_OPEN=true')
+        extraEnv.push('WOODPECKER_HOST=http://127.0.0.1:8880')
+        extraEnv.push('WOODPECKER_AGENT_SECRET=nomad-woodpecker-secret-2026')
+        extraEnv.push('WOODPECKER_GITEA=true')
+        extraEnv.push('WOODPECKER_GITEA_URL=http://127.0.0.1:8875')
+        extraEnv.push('WOODPECKER_GITEA_CLIENT=nomad')
+        extraEnv.push('WOODPECKER_GITEA_SECRET=nomad')
+      } else if (serviceName === SERVICE_NAMES.PIHOLE) {
+        extraEnv.push('FTLCONF_webserver_api_password=nomad')
+      } else if (serviceName === SERVICE_NAMES.N8N) {
+        extraEnv.push('N8N_SECURE_COOKIE=false')
+      } else if (serviceName === SERVICE_NAMES.HOMEPAGE) {
+        extraEnv.push('HOMEPAGE_ALLOWED_HOSTS=*')
+      } else if (serviceName === SERVICE_NAMES.ARCHIVEBOX) {
+        extraEnv.push('PUBLIC_INDEX=True')
+        extraEnv.push('PUBLIC_SNAPSHOTS=True')
+        extraEnv.push('PUBLIC_ADD_VIEW=False')
+      } else if (serviceName === SERVICE_NAMES.YOUR_SPOTIFY) {
+        extraEnv.push('API_ENDPOINT=http://127.0.0.1:8080')
+      } else if (serviceName === SERVICE_NAMES.PLANKA) {
+        extraEnv.push('SECRET_KEY=nomad-planka-secret-key-64-chars-minimum-homelab-2026-offline')
+      } else if (serviceName === SERVICE_NAMES.DIRECTUS) {
+        extraEnv.push('KEY=nomad-directus-key-2026')
+        extraEnv.push('SECRET=nomad-directus-secret-2026-homelab')
+        extraEnv.push('DB_CLIENT=sqlite3')
+        extraEnv.push('DB_FILENAME=/directus/database/data.db')
       } else if (serviceName === SERVICE_NAMES.AUTHENTIK) {
         extraEnv.push('AUTHENTIK_SECRET_KEY=authentik-secret-key-32-chars-nomad')
         extraEnv.push('AUTHENTIK_DISABLE_STARTUP_CHECKS=true')
@@ -1226,16 +1290,31 @@ export class DockerService {
         extraEnv.push('APP_SECRET=docmost-secret-key-32-chars-nomad')
       } else if (serviceName === SERVICE_NAMES.HOARDER) {
         extraEnv.push('NEXTAUTH_SECRET=hoarder-auth-secret-key-nomad!')
+        extraEnv.push('NEXTAUTH_URL=http://127.0.0.1:8520')
+        extraEnv.push('MEILI_NO_ANALYTICS=true')
         extraEnv.push('DATA_DIR=/data')
       } else if (serviceName === SERVICE_NAMES.GHOSTFOLIO) {
         extraEnv.push('JWT_SECRET_KEY=ghostfolio-jwt-secret-nomad-key!')
         extraEnv.push('NODE_ENV=production')
-      } else if (serviceName === SERVICE_NAMES.KITCHENOWL) {
-        extraEnv.push('JWT_SECRET=kitchenowl-jwt-secret-nomad-key!')
       } else if (serviceName === SERVICE_NAMES.SHLINK) {
         extraEnv.push('DEFAULT_DOMAIN=localhost')
         extraEnv.push('IS_HTTPS_ENABLED=false')
         extraEnv.push('DB_DRIVER=sqlite')
+        extraEnv.push('INITIAL_API_KEY=nomad-shlink-api-key-2026')
+      }
+
+      const starterCfg = getStarterConfigFile(serviceName)
+      if (starterCfg) {
+        const storageBase = env.get('NOMAD_STORAGE_PATH', '/opt/project-nomad/storage')
+        const targetDir = join(storageBase, starterCfg.relativeSubdir)
+        const targetFile = join(targetDir, starterCfg.filename)
+        await mkdir(targetDir, { recursive: true }).catch(() => {})
+        await chmod(targetDir, 0o777).catch(() => {})
+        const exists = await access(targetFile).then(() => true).catch(() => false)
+        if (!exists) {
+          await writeFile(targetFile, starterCfg.content, 'utf8').catch(() => {})
+          await chmod(targetFile, 0o666).catch(() => {})
+        }
       }
 
       // Pre-create host bind directories for this service if on local host
@@ -2354,6 +2433,7 @@ export class DockerService {
   }
 
   private _broadcast(service: string, status: string, message: string) {
+    setInstallProgress(service, status, message)
     transmit.broadcast(BROADCAST_CHANNELS.SERVICE_INSTALLATION, {
       service_name: service,
       timestamp: new Date().toISOString(),

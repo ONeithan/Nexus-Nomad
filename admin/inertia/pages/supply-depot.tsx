@@ -1552,7 +1552,7 @@ function AppCard({
   return (
     <div
       onClick={isBulkMode && !service.installed ? onToggleSelect : undefined}
-      className={`relative flex flex-col rounded-xl border p-4 bg-surface-primary shadow-sm transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5 ${
+      className={`nomad-interactive-card relative flex flex-col rounded-xl border p-4 bg-surface-primary shadow-sm ${
         isBulkMode && !service.installed ? 'cursor-pointer select-none' : ''
       } ${
         isSelected
