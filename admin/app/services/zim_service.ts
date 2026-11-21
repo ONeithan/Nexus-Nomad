@@ -429,9 +429,6 @@ export class ZimService {
   }> {
     const { StorageManagerService } = await import('#services/storage_manager_service')
     const svc = new StorageManagerService()
-    if (!targetDisk?.trim() && (!requiredBytes || requiredBytes <= 0)) {
-      return { targetDir: join(process.cwd(), ZIM_STORAGE_PATH), diskLabel: '' }
-    }
     try {
       const res = await svc.prepareDownloadTargetDir('zim', targetDisk, requiredBytes)
       return { targetDir: res.targetDir, diskLabel: res.diskLabel }

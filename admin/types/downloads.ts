@@ -80,6 +80,9 @@ export type DownloadJobWithProgress = {
   url: string
   progress: number
   filepath: string
+  realFilepath?: string
+  diskLabel?: string
+  diskPath?: string
   filetype: string
   title?: string
   downloadedBytes?: number
@@ -117,6 +120,9 @@ export type DownloadAuditLogEntry = {
 export type IncompleteDownloadItem = {
   name: string
   tempPath: string
+  realPath?: string
+  diskLabel?: string
+  diskPath?: string
   sizeBytes: number
   modifiedAt: string
   category: string

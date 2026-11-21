@@ -31,7 +31,6 @@ import {
   IconBrain,
   IconDownload,
   IconArrowRight,
-  IconRefresh,
 } from '@tabler/icons-react'
 import axios from 'axios'
 import { Head, Link, router, usePage } from '@inertiajs/react'
@@ -782,42 +781,35 @@ export default function Home(props: {
     <AppLayout>
       <Head title="Centro de Comando" />
       {updateInfo?.updateAvailable && !updateBannerDismissed && (
-        <div className="px-4 sm:px-6 pt-3 w-full max-w-[85rem] mx-auto">
-          <div className="nomad-update-pill relative overflow-hidden flex items-center justify-between gap-3 px-3.5 py-2 rounded-lg border border-desert-orange/45 bg-surface-primary/95 shadow-sm">
-            <div className="flex items-center gap-2.5 min-w-0 text-xs">
-              <span className="relative flex h-2 w-2 shrink-0">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-desert-orange opacity-75" />
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-desert-orange" />
-              </span>
-              <span className="px-1.5 py-0.5 rounded bg-desert-orange/15 border border-desert-orange/30 text-desert-orange font-mono font-bold uppercase tracking-wider shrink-0">
-                {updateInfo.latestVersion
-                  ? `v${String(updateInfo.latestVersion).replace(/^v/i, '')}`
-                  : 'ATUALIZAÇÃO'}
-              </span>
-              <span className="text-text-primary font-medium truncate">
-                Nova versão do N.O.M.A.D. disponível para instalação
-              </span>
-            </div>
-            <div className="flex items-center gap-1.5 shrink-0">
-              <button
-                type="button"
-                onClick={() => router.visit('/settings/update')}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-desert-orange hover:bg-desert-orange-light text-white text-xs font-semibold transition-all cursor-pointer shadow-xs"
-              >
-                <IconRefresh size={13} />
-                <span>Atualizar</span>
-                <IconArrowRight size={13} />
-              </button>
-              <button
-                type="button"
-                onClick={() => setUpdateBannerDismissed(true)}
-                aria-label="Ocultar aviso"
-                title="Ocultar aviso"
-                className="p-1 rounded-md text-text-muted hover:text-text-primary hover:bg-surface-secondary transition-colors cursor-pointer"
-              >
-                <IconX size={14} />
-              </button>
-            </div>
+        <div className="px-4 sm:px-6 pt-2.5 w-full max-w-[85rem] mx-auto flex justify-end">
+          <div className="nomad-update-pill relative overflow-hidden inline-flex items-center gap-2 px-3 py-1 rounded-full border border-desert-orange/45 bg-surface-primary/95 shadow-sm text-xs">
+            <span className="relative flex h-2 w-2 shrink-0">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-desert-orange opacity-75" />
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-desert-orange" />
+            </span>
+            <span className="font-mono font-bold text-desert-orange">
+              {updateInfo.latestVersion
+                ? `v${String(updateInfo.latestVersion).replace(/^v/i, '')}`
+                : 'Atualização'}
+            </span>
+            <span className="text-text-secondary hidden sm:inline">disponível</span>
+            <button
+              type="button"
+              onClick={() => router.visit('/settings/update')}
+              className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-desert-orange hover:bg-desert-orange-light text-white text-[0.7rem] font-semibold transition-colors cursor-pointer"
+            >
+              <span>Atualizar</span>
+              <IconArrowRight size={12} />
+            </button>
+            <button
+              type="button"
+              onClick={() => setUpdateBannerDismissed(true)}
+              aria-label="Ocultar aviso"
+              title="Ocultar aviso"
+              className="p-0.5 rounded-full text-text-muted hover:text-text-primary hover:bg-surface-secondary transition-colors cursor-pointer"
+            >
+              <IconX size={13} />
+            </button>
           </div>
         </div>
       )}
@@ -1006,6 +998,9 @@ export default function Home(props: {
                     >
                       {diskAnimState === 'to-split' && (
                         <span className="nomad-cleave-beam" aria-hidden="true" />
+                      )}
+                      {diskAnimState === 'to-merged' && (
+                        <span className="nomad-merge-seam" aria-hidden="true" />
                       )}
                       <div className="flex flex-col lg:flex-row lg:items-center gap-5">
                         {/* Bloco Esquerdo: Gauge Consolidado Único */}
@@ -1305,6 +1300,9 @@ export default function Home(props: {
                 >
                   {cpuAnimState === 'to-split' && (
                     <span className="nomad-cleave-beam" aria-hidden="true" />
+                  )}
+                  {cpuAnimState === 'to-merged' && (
+                    <span className="nomad-merge-seam" aria-hidden="true" />
                   )}
                   <div className="flex items-center justify-between pb-2.5 mb-3 border-b border-border-default/60">
                     <div className="flex items-center gap-2">

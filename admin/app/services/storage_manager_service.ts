@@ -617,7 +617,6 @@ export class StorageManagerService {
       KVStore.getValue('storage.preferredDownloadDisk'),
       this.getDiskQuotas(),
     ])
-    const preferredDownloadDisk = preferredDownloadDiskRaw || storageRoot
 
     for (const mt of mountTargets) {
       mt.usedBytes = Math.max(0, mt.totalBytes - mt.freeBytes)
@@ -651,6 +650,16 @@ export class StorageManagerService {
         ? Math.max(0, Math.min(mt.freeBytes, mt.quotaLimitBytes - mt.usedBytes))
         : mt.freeBytes
     }
+
+    const rawPref = typeof preferredDownloadDiskRaw === 'string' ? preferredDownloadDiskRaw.trim() : ''
+    const matchedPreferredDisk = rawPref
+      ? mountTargets.find(
+          (m) =>
+            resolve(m.path) === resolve(rawPref) ||
+            (m.realHostPath && resolve(m.realHostPath) === resolve(rawPref))
+        ) || this.findDiskForResolvedPath(resolve(rawPref), mountTargets)
+      : null
+    const preferredDownloadDisk = matchedPreferredDisk?.path || mountTargets[0]?.path || storageRoot
 
     const folderUsage: FolderUsageItem[] = []
     if (existsSync(storageRoot)) {
@@ -1372,43 +1381,60 @@ export class StorageManagerService {
     const moduleSource = join(overview.storageRoot, moduleName)
     const currentLoc = overview.moduleLocations?.[moduleName]
 
-    if (!targetDisk?.trim() || !disk) {
+    if (!disk) {
       await mkdir(moduleSource, { recursive: true })
+      const resolvedFallback = await realpath(moduleSource).catch(() => moduleSource)
       return {
-        targetDir: moduleSource,
-        diskLabel: disk?.label || currentLoc?.currentDiskLabel || 'Armazenamento Interno NOMAD',
-        diskPath: disk?.path || currentLoc?.currentDiskPath || overview.storageRoot,
+        targetDir: resolvedFallback,
+        diskLabel: currentLoc?.currentDiskLabel || 'Armazenamento Interno NOMAD',
+        diskPath: currentLoc?.currentDiskPath || overview.storageRoot,
       }
     }
 
     const targetNorm = resolve(disk.path)
+    const storageRootNorm = resolve(overview.storageRoot)
+    const isTargetPrimary = targetNorm === storageRootNorm
+    const physicalTargetDir = isTargetPrimary ? moduleSource : join(disk.path, moduleName)
     const currentNorm = currentLoc?.currentDiskPath
       ? resolve(currentLoc.currentDiskPath)
-      : resolve(overview.storageRoot)
+      : storageRootNorm
     const srcLst = await lstat(moduleSource).catch(() => null)
     const alreadyOnTarget =
-      currentNorm === targetNorm &&
-      (targetNorm !== resolve(overview.storageRoot) || !srcLst?.isSymbolicLink())
+      currentNorm === targetNorm && (!isTargetPrimary || !srcLst?.isSymbolicLink())
 
     if (alreadyOnTarget) {
-      await mkdir(moduleSource, { recursive: true })
-      return { targetDir: moduleSource, diskLabel: disk.label, diskPath: disk.path }
+      await mkdir(physicalTargetDir, { recursive: true })
+      return { targetDir: physicalTargetDir, diskLabel: disk.label, diskPath: disk.path }
     }
 
     const existingSize = currentLoc?.sizeBytes ?? 0
     const existingFiles = currentLoc?.fileCount ?? 0
     if (!currentLoc?.exists || (existingSize <= 64 * 1024 * 1024 && existingFiles <= 5)) {
-      await this.moveContent(
-        moduleSource,
-        disk.path,
-        targetNorm !== resolve(overview.storageRoot)
-      )
-      return { targetDir: moduleSource, diskLabel: disk.label, diskPath: disk.path }
+      await this.moveContent(moduleSource, disk.path, !isTargetPrimary)
+      await mkdir(physicalTargetDir, { recursive: true })
+      return { targetDir: physicalTargetDir, diskLabel: disk.label, diskPath: disk.path }
     }
 
-    const directDir = join(disk.path, moduleName)
-    await mkdir(directDir, { recursive: true })
-    return { targetDir: directDir, diskLabel: disk.label, diskPath: disk.path }
+    await mkdir(physicalTargetDir, { recursive: true })
+    return { targetDir: physicalTargetDir, diskLabel: disk.label, diskPath: disk.path }
+  }
+
+  /**
+   * Maps a resolved real filesystem path to the matching physical disk entry from storage overview.
+   */
+  public resolveDiskForRealPath(
+    realPath: string,
+    mountTargets: Array<{ label: string; path: string; realHostPath?: string }>,
+    fallbackRoot?: string
+  ): { diskLabel: string; diskPath: string } {
+    const matched = this.findDiskForResolvedPath(realPath, mountTargets) || mountTargets[0]
+    if (matched) {
+      return { diskLabel: matched.label, diskPath: matched.path }
+    }
+    return {
+      diskLabel: 'Armazenamento Interno NOMAD',
+      diskPath: fallbackRoot || this.getStorageRoot(),
+    }
   }
 
   /**

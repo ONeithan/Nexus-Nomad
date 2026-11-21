@@ -1,5 +1,6 @@
 import type { HttpContext } from '@adonisjs/core/http'
 import { inject } from '@adonisjs/core'
+import { resolve } from 'node:path'
 import { StorageManagerService } from '#services/storage_manager_service'
 import KVStore from '#models/kv_store'
 
@@ -71,8 +72,9 @@ export default class StorageController {
 
   async setPreferredDisk({ request, response }: HttpContext) {
     const { path } = request.only(['path'])
-    await KVStore.setValue('storage.preferredDownloadDisk', path || '')
-    return response.ok({ success: true, preferredDownloadDisk: path || '' })
+    const normalized = path && typeof path === 'string' && path.trim() ? resolve(path.trim()) : ''
+    await KVStore.setValue('storage.preferredDownloadDisk', normalized)
+    return response.ok({ success: true, preferredDownloadDisk: normalized })
   }
 
   async setQuota({ request, response }: HttpContext) {

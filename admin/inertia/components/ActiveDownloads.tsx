@@ -145,13 +145,16 @@ const ActiveDownloads = ({ filetype, filetypes, withHeader = false }: ActiveDown
               status === 'queued'
                 ? downloads.filter((d) => getDownloadStatus(d) === 'queued').indexOf(download) + 1
                 : 0
-            const storageDirHint = download.filepath
-              ? download.filepath.startsWith('/mnt/')
-                ? download.filepath.split('/').slice(0, 3).join('/')
-                : download.filepath.includes('/storage/')
-                  ? 'Armazenamento Interno NOMAD'
-                  : ''
-              : ''
+            const resolvedDisplayPath = download.realFilepath || download.filepath
+            const storageDirHint =
+              download.diskLabel ||
+              (resolvedDisplayPath
+                ? resolvedDisplayPath.startsWith('/mnt/')
+                  ? resolvedDisplayPath.split('/').slice(0, 3).join('/')
+                  : resolvedDisplayPath.includes('/storage/')
+                    ? 'Armazenamento Interno NOMAD'
+                    : ''
+                : '')
 
             const isRetrying = retryingJobs.has(download.jobId)
             const attempt = download.attempt || 1
@@ -343,7 +346,17 @@ const ActiveDownloads = ({ filetype, filetypes, withHeader = false }: ActiveDown
                           : `${Math.round(download.progress || 0)}% / 100%`}
                       </span>
                       {storageDirHint && (
-                        <span className="text-[0.6875rem] px-2 py-0.5 rounded bg-surface-secondary border border-border-subtle text-text-secondary">
+                        <span
+                          className={`text-[0.6875rem] px-2 py-0.5 rounded border ${
+                            download.diskPath &&
+                            (download.diskPath.startsWith('/mnt') ||
+                              download.diskPath.startsWith('/media') ||
+                              download.diskPath.startsWith('/run/media'))
+                              ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30 font-semibold'
+                              : 'bg-surface-secondary border-border-subtle text-text-secondary'
+                          }`}
+                          title={resolvedDisplayPath ? `Arquivo real: ${resolvedDisplayPath}` : undefined}
+                        >
                           Destino: {storageDirHint}
                         </span>
                       )}

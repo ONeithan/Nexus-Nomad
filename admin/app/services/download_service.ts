@@ -7,8 +7,8 @@ import { DownloadModelJob } from '#jobs/download_model_job'
 import { DownloadDrugDataJob } from '#jobs/download_drug_data_job'
 import { DownloadJobWithProgress, DownloadProgressData, IncompleteDownloadItem, RunDownloadJobParams } from '../../types/downloads.js'
 import type { Job, Queue } from 'bullmq'
-import { normalize, join, basename, resolve } from 'node:path'
-import { readdir, stat } from 'node:fs/promises'
+import { normalize, join, basename, dirname, resolve } from 'node:path'
+import { readdir, realpath, stat } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { deleteFileIfExists, repairDownloadDirectory } from '../utils/fs.js'
 import { diagnoseDownloadError } from '../utils/download_diagnostics.js'
@@ -77,6 +77,34 @@ export class DownloadService {
       // jobs are never evicted the endpoint stayed broken until Redis was cleared
       // by hand. Drop them: with no payload there is nothing to show anyway.
     ].filter(({ job }) => job?.id != null && job.data != null)
+  }
+
+  private async resolveDiskInfoMap(paths: string[]): Promise<
+    Map<string, { realPath: string; diskLabel: string; diskPath: string }>
+  > {
+    const result = new Map<string, { realPath: string; diskLabel: string; diskPath: string }>()
+    const validPaths = paths.filter((p) => Boolean(p && (p.startsWith('/') || /^[a-zA-Z]:/.test(p))))
+    if (validPaths.length === 0) return result
+
+    const { StorageManagerService } = await import('#services/storage_manager_service')
+    const storageSvc = new StorageManagerService()
+    const overview = await storageSvc.getStorageOverview().catch(() => null)
+    const mountTargets = overview?.mountTargets || []
+    const fallbackRoot = overview?.storageRoot
+
+    await Promise.all(
+      validPaths.map(async (rawPath) => {
+        const absPath = resolve(rawPath)
+        let realResolved = await realpath(absPath).catch(() => null)
+        if (!realResolved) {
+          const parentReal = await realpath(dirname(absPath)).catch(() => resolve(dirname(absPath)))
+          realResolved = join(parentReal, basename(absPath))
+        }
+        const diskInfo = storageSvc.resolveDiskForRealPath(realResolved, mountTargets, fallbackRoot)
+        result.set(rawPath, { realPath: realResolved, ...diskInfo })
+      })
+    )
+    return result
   }
 
   async listDownloadJobs(filetype?: string): Promise<DownloadJobWithProgress[]> {
@@ -208,7 +236,22 @@ export class DownloadService {
 
     const allDownloads = [...fileDownloads, ...extractDownloads, ...modelDownloads, ...drugDownloads]
     const filtered = allDownloads.filter((job) => !filetype || job.filetype === filetype)
-    return sortDownloadJobsFifo(filtered)
+    const sorted = sortDownloadJobsFifo(filtered)
+    const diskMap = await this.resolveDiskInfoMap(
+      sorted.map((j) => j.filepath).filter((fp): fp is string => Boolean(fp))
+    ).catch(() => new Map())
+
+    return sorted.map((job) => {
+      const info = job.filepath ? diskMap.get(job.filepath) : undefined
+      return info
+        ? {
+            ...job,
+            realFilepath: info.realPath,
+            diskLabel: info.diskLabel,
+            diskPath: info.diskPath,
+          }
+        : job
+    })
   }
 
   async removeFailedJob(jobId: string): Promise<void> {
@@ -816,23 +859,15 @@ export class DownloadService {
 
     const categories = ['zim', 'maps', 'kb_uploads', 'books', 'media'] as const
     const candidateDirs: Array<{ path: string; category: string }> = []
-    const seenCandidatePaths = new Set<string>()
-    const { dirname } = await import('node:path')
-    const { realpath } = await import('node:fs/promises')
+    const seenCandidateRealPaths = new Set<string>()
 
     const addCandidate = async (dirPath: string, category: string) => {
       const resolvedDir = resolve(dirPath)
-      if (!seenCandidatePaths.has(resolvedDir)) {
-        seenCandidatePaths.add(resolvedDir)
-        candidateDirs.push({ path: resolvedDir, category })
+      const canonicalDir = await realpath(resolvedDir).catch(() => resolvedDir)
+      if (!seenCandidateRealPaths.has(canonicalDir)) {
+        seenCandidateRealPaths.add(canonicalDir)
+        candidateDirs.push({ path: canonicalDir, category })
       }
-      try {
-        const real = await realpath(resolvedDir)
-        if (real && !seenCandidatePaths.has(real)) {
-          seenCandidatePaths.add(real)
-          candidateDirs.push({ path: real, category })
-        }
-      } catch {}
     }
 
     for (const root of baseRoots) {
@@ -843,39 +878,55 @@ export class DownloadService {
 
     // Include directories of any queued, active or failed download jobs
     for (const job of currentJobs) {
-      if (job.filepath) {
-        const jobDir = dirname(resolve(job.filepath))
+      const jobPath = job.realFilepath || job.filepath
+      if (jobPath) {
+        const jobDir = dirname(resolve(jobPath))
         const cat = categories.find((c) => jobDir.toLowerCase().includes(c)) || 'downloads'
         await addCandidate(jobDir, cat)
       }
     }
 
-    const scannedFilesMap = new Map<string, { name: string; tempPath: string; sizeBytes: number; modifiedAt: string; category: string }>()
+    const scannedFilesMap = new Map<
+      string,
+      { name: string; tempPath: string; realPath: string; sizeBytes: number; modifiedAt: string; category: string }
+    >()
 
     for (const { path: dir, category } of candidateDirs) {
       const files = await this._scanDirectoryForTemp(dir, category)
       for (const f of files) {
-        const normKey = normalize(f.tempPath)
-        if (!scannedFilesMap.has(normKey)) {
-          scannedFilesMap.set(normKey, f)
+        const canonicalTemp = await realpath(f.tempPath).catch(() => normalize(f.tempPath))
+        const existing = scannedFilesMap.get(canonicalTemp)
+        const isDirectPath = normalize(f.tempPath) === canonicalTemp
+        if (!existing || isDirectPath) {
+          scannedFilesMap.set(canonicalTemp, {
+            ...f,
+            tempPath: canonicalTemp,
+            realPath: canonicalTemp,
+          })
         }
       }
     }
+
+    const diskMap = await this.resolveDiskInfoMap(Array.from(scannedFilesMap.keys())).catch(
+      () => new Map()
+    )
 
     const files: IncompleteDownloadItem[] = []
     let totalBytes = 0
 
     for (const rawFile of scannedFilesMap.values()) {
-      const normPath = normalize(rawFile.tempPath)
+      const normPath = normalize(rawFile.realPath)
       const baseName = basename(normPath)
 
       // Check matching job in BullMQ
       const matchingJob = currentJobs.find((job) => {
         if (!job.filepath) return false
-        const expectedTemp = normalize(job.filepath + '.tmp')
+        const expectedTempRaw = normalize(job.filepath + '.tmp')
+        const expectedTempReal = job.realFilepath ? normalize(job.realFilepath + '.tmp') : expectedTempRaw
         return (
-          normPath === expectedTemp ||
-          baseName === basename(expectedTemp) ||
+          normPath === expectedTempReal ||
+          normPath === expectedTempRaw ||
+          baseName === basename(expectedTempRaw) ||
           baseName.startsWith(basename(job.filepath))
         )
       })
@@ -891,9 +942,17 @@ export class DownloadService {
         }
       }
 
+      const diskInfo = diskMap.get(rawFile.realPath)
       totalBytes += rawFile.sizeBytes
       files.push({
-        ...rawFile,
+        name: rawFile.name,
+        tempPath: rawFile.tempPath,
+        realPath: diskInfo?.realPath || rawFile.realPath,
+        diskLabel: diskInfo?.diskLabel,
+        diskPath: diskInfo?.diskPath,
+        sizeBytes: rawFile.sizeBytes,
+        modifiedAt: rawFile.modifiedAt,
+        category: rawFile.category,
         status,
         jobId: matchingJob?.jobId,
       })
@@ -915,6 +974,7 @@ export class DownloadService {
     }
 
     const norm = resolve(tempPath)
+    const realNorm = await realpath(norm).catch(() => norm)
     const lower = norm.toLowerCase()
     if (!lower.endsWith('.tmp') && !lower.endsWith('.part') && !lower.endsWith('.crdownload')) {
       return { success: false, message: 'Operação recusada: apenas arquivos temporários (.tmp, .part) podem ser excluídos.' }
@@ -930,7 +990,11 @@ export class DownloadService {
       ...(process.env.STORAGE_PATH ? [resolve(process.env.STORAGE_PATH)] : []),
     ]
     const inAllowedRoot = allowedRoots.some(
-      (root) => norm.startsWith(root + '/') || norm.startsWith(root + '\\')
+      (root) =>
+        norm.startsWith(root + '/') ||
+        norm.startsWith(root + '\\') ||
+        realNorm.startsWith(root + '/') ||
+        realNorm.startsWith(root + '\\')
     )
     if (!inAllowedRoot) {
       return {
@@ -944,7 +1008,12 @@ export class DownloadService {
     const activeMatch = currentJobs.find((j) => {
       if (!j.filepath || j.status !== 'active') return false
       const expected = resolve(j.filepath + '.tmp')
-      return norm === expected || basename(norm) === basename(expected)
+      const expectedReal = j.realFilepath ? resolve(j.realFilepath + '.tmp') : expected
+      return (
+        norm === expected ||
+        realNorm === expectedReal ||
+        basename(norm) === basename(expected)
+      )
     })
 
     if (activeMatch) {

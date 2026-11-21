@@ -838,46 +838,38 @@ body {
 }
 
 @keyframes nomad-split-wing-left {
-  0% {
+  0%,
+  26% {
     opacity: 0;
-    transform: translateX(52%) scale(0.84);
-    border-color: rgba(245, 158, 11, 0.78);
+    transform: translateX(10px) scaleX(0.90) scaleY(0.98);
+    border-color: rgba(245, 158, 11, 0.85);
   }
-  20% {
+  42% {
     opacity: 1;
-    transform: translateX(36%) scale(0.92);
+    transform: translateX(4px) scaleX(0.96) scaleY(0.995);
     border-color: rgba(245, 158, 11, 0.72);
-  }
-  78% {
-    opacity: 1;
-    transform: translateX(-4px) scale(1.012);
-    border-color: rgba(194, 166, 119, 0.85);
   }
   100% {
     opacity: 1;
-    transform: translateX(0) scale(1);
+    transform: translateX(0) scaleX(1) scaleY(1);
   }
 }
 
 @keyframes nomad-split-wing-right {
-  0% {
+  0%,
+  26% {
     opacity: 0;
-    transform: translateX(-52%) scale(0.84);
-    border-color: rgba(245, 158, 11, 0.78);
+    transform: translateX(-10px) scaleX(0.90) scaleY(0.98);
+    border-color: rgba(245, 158, 11, 0.85);
   }
-  20% {
+  42% {
     opacity: 1;
-    transform: translateX(-36%) scale(0.92);
+    transform: translateX(-4px) scaleX(0.96) scaleY(0.995);
     border-color: rgba(245, 158, 11, 0.72);
-  }
-  78% {
-    opacity: 1;
-    transform: translateX(4px) scale(1.012);
-    border-color: rgba(194, 166, 119, 0.85);
   }
   100% {
     opacity: 1;
-    transform: translateX(0) scale(1);
+    transform: translateX(0) scaleX(1) scaleY(1);
   }
 }
 
@@ -886,15 +878,15 @@ body {
     opacity: 1;
     transform: scaleX(1) scaleY(1);
   }
-  30% {
-    opacity: 0.75;
-    transform: scaleX(0.985) scaleY(0.985);
-    box-shadow: 0 0 28px -6px rgba(245, 158, 11, 0.45);
+  20% {
+    opacity: 0.92;
+    transform: scaleX(0.99) scaleY(0.99);
+    box-shadow: 0 0 24px -6px rgba(245, 158, 11, 0.4);
   }
-  80%,
+  38%,
   100% {
     opacity: 0;
-    transform: scaleX(0.92) scaleY(0.95);
+    transform: scaleX(0.96) scaleY(0.975);
   }
 }
 
@@ -903,69 +895,85 @@ body {
     opacity: 0;
     transform: scaleY(0);
   }
-  25% {
+  28% {
     opacity: 1;
-    transform: scaleY(0.75);
+    transform: scaleY(1);
   }
-  65% {
-    opacity: 0.95;
+  58% {
+    opacity: 0.85;
     transform: scaleY(1);
   }
   100% {
     opacity: 0;
-    transform: scaleY(1.04);
+    transform: scaleY(1.02);
+  }
+}
+
+@keyframes nomad-merge-seam-flash {
+  0%,
+  20% {
+    opacity: 0;
+    transform: scaleY(0.35);
+  }
+  42% {
+    opacity: 1;
+    transform: scaleY(1);
+  }
+  72% {
+    opacity: 0.75;
+    transform: scaleY(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scaleY(0.9);
   }
 }
 
 @keyframes nomad-merge-pre-left {
   0% {
     opacity: 1;
-    transform: translateX(0) scale(1);
+    transform: translateX(0) scaleX(1);
   }
-  52% {
-    opacity: 0.78;
-    transform: translateX(36%) scale(0.92);
-    border-color: rgba(52, 211, 153, 0.75);
+  32% {
+    opacity: 0.88;
+    transform: translateX(8px) scaleX(0.93);
+    border-color: rgba(52, 211, 153, 0.8);
   }
-  85%,
+  44%,
   100% {
     opacity: 0;
-    transform: translateX(52%) scale(0.84);
+    transform: translateX(12px) scaleX(0.88);
   }
 }
 
 @keyframes nomad-merge-pre-right {
   0% {
     opacity: 1;
-    transform: translateX(0) scale(1);
+    transform: translateX(0) scaleX(1);
   }
-  52% {
-    opacity: 0.78;
-    transform: translateX(-36%) scale(0.92);
-    border-color: rgba(52, 211, 153, 0.75);
+  32% {
+    opacity: 0.88;
+    transform: translateX(-8px) scaleX(0.93);
+    border-color: rgba(52, 211, 153, 0.8);
   }
-  85%,
+  44%,
   100% {
     opacity: 0;
-    transform: translateX(-52%) scale(0.84);
+    transform: translateX(-12px) scaleX(0.88);
   }
 }
 
 @keyframes nomad-merge-lock {
-  0% {
+  0%,
+  34% {
     opacity: 0;
-    transform: scaleX(0.56) scaleY(0.94);
+    transform: scaleX(0.84) scaleY(0.98);
     box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.25);
   }
-  25% {
-    opacity: 0.9;
-    transform: scaleX(0.74) scaleY(0.98);
-    box-shadow: 0 0 24px -4px rgba(52, 211, 153, 0.42);
-  }
-  76% {
+  54% {
     opacity: 1;
-    transform: scaleX(1.012) scaleY(1.005);
-    box-shadow: 0 0 32px -4px rgba(52, 211, 153, 0.48);
+    transform: scaleX(0.97) scaleY(1);
+    box-shadow: 0 0 26px -4px rgba(52, 211, 153, 0.45);
   }
   100% {
     opacity: 1;
@@ -1017,11 +1025,13 @@ body {
 }
 
 .nomad-split-wing-left {
+  transform-origin: right center;
   animation: nomad-split-wing-left 0.85s cubic-bezier(0.22, 1, 0.36, 1) forwards;
   will-change: transform, opacity;
 }
 
 .nomad-split-wing-right {
+  transform-origin: left center;
   animation: nomad-split-wing-right 0.85s cubic-bezier(0.22, 1, 0.36, 1) forwards;
   will-change: transform, opacity;
 }
@@ -1029,6 +1039,7 @@ body {
 .nomad-split-pre-exit {
   position: relative;
   overflow: hidden;
+  transform-origin: center center;
   animation: nomad-split-pre-exit 0.85s cubic-bezier(0.4, 0, 0.2, 1) forwards;
   will-change: transform, opacity;
 }
@@ -1044,22 +1055,42 @@ body {
   background: linear-gradient(180deg, transparent, #f59e0b 25%, #fde68a 50%, #f59e0b 75%, transparent);
   box-shadow: 0 0 18px 4px rgba(245, 158, 11, 0.6);
   transform-origin: top center;
-  animation: nomad-cleave-beam-down 0.68s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation: nomad-cleave-beam-down 0.52s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  pointer-events: none;
+  z-index: 20;
+}
+
+.nomad-merge-seam {
+  position: absolute;
+  top: 6%;
+  bottom: 6%;
+  left: 50%;
+  width: 3px;
+  margin-left: -1.5px;
+  border-radius: 9999px;
+  background: linear-gradient(180deg, transparent, #10b981 25%, #6ee7b7 50%, #10b981 75%, transparent);
+  box-shadow: 0 0 18px 4px rgba(16, 185, 129, 0.58);
+  transform-origin: center center;
+  animation: nomad-merge-seam-flash 0.68s cubic-bezier(0.22, 1, 0.36, 1) forwards;
   pointer-events: none;
   z-index: 20;
 }
 
 .nomad-merge-pre-left {
+  transform-origin: right center;
   animation: nomad-merge-pre-left 0.85s cubic-bezier(0.32, 0, 0.25, 1) forwards;
   will-change: transform, opacity;
 }
 
 .nomad-merge-pre-right {
+  transform-origin: left center;
   animation: nomad-merge-pre-right 0.85s cubic-bezier(0.32, 0, 0.25, 1) forwards;
   will-change: transform, opacity;
 }
 
 .nomad-merge-lock {
+  position: relative;
+  overflow: hidden;
   transform-origin: center center;
   animation: nomad-merge-lock 0.85s cubic-bezier(0.22, 1, 0.36, 1) forwards;
   will-change: transform, opacity;

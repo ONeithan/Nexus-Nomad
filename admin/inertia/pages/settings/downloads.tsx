@@ -458,16 +458,31 @@ export default function SettingsDownloads() {
                               }
                             />
                             <div className="min-w-0">
-                              <div className="flex items-center gap-2">
+                              <div className="flex flex-wrap items-center gap-2">
                                 <span className="text-sm font-semibold text-text-primary truncate">
                                   {f.name}
                                 </span>
                                 <span className="text-[0.625rem] uppercase font-mono px-1.5 py-0.5 rounded bg-surface-secondary text-text-muted border border-border-default shrink-0">
                                   {f.category}
                                 </span>
+                                {f.diskLabel && (
+                                  <span
+                                    className={`text-[0.625rem] font-mono px-1.5 py-0.5 rounded border shrink-0 ${
+                                      f.diskPath &&
+                                      (f.diskPath.startsWith('/mnt') ||
+                                        f.diskPath.startsWith('/media') ||
+                                        f.diskPath.startsWith('/run/media'))
+                                        ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30 font-semibold'
+                                        : 'bg-surface-secondary text-text-secondary border-border-default'
+                                    }`}
+                                    title={`Gravado em: ${f.realPath || f.tempPath}`}
+                                  >
+                                    HD: {f.diskLabel}
+                                  </span>
+                                )}
                               </div>
                               <div className="text-xs text-text-muted truncate font-mono mt-0.5">
-                                {f.tempPath}
+                                {f.realPath || f.tempPath}
                               </div>
                             </div>
                           </div>

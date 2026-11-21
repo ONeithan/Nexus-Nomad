@@ -573,7 +573,8 @@ test('CSS animations, hover cascade, reduced-motion, contrast and release metada
     assert.ok(css.includes(`.${cls}`), `Expected .${cls} class definition in app.css`)
   }
   assert.doesNotMatch(css, /\.nomad-interactive-card::before/, 'Fast bright sheen sweep on hover must be removed')
-  assert.match(css, /translateX\(52%\)/, 'Split wing animation must visibly slide from center outward')
+  assert.match(css, /nomad-merge-seam/, 'Unified card merge animation must flash center fusion seam')
+  assert.doesNotMatch(css, /translateX\(52%\)/, 'Split cards must not cross over centerline onto each other')
 
   // 4) Avoid double nomad-page-enter animation inside home.tsx and re-key page transitions by route
   assert.match(appLayout, /key=\{currentPath\.split\('\?'\)\[0\]\}[^>]*nomad-page-enter/)
@@ -861,4 +862,28 @@ test('stack blueprints, starter configs, multi-port and 8080 container port fixe
   assert.match(portainerSvc, /httpStatus === 304/)
   assert.match(portainerSvc, /createdStack\?\.Status === 4/)
   assert.match(portainerSvc, /iAttempt < 24/)
+
+  // Verify v1.0.41 storage/download path resolution, realpath deduplication for .tmp files, non-overlapping split/merge animation & minimalist update capsule
+  const [downloadSvc, storageMgr, mapSvc, zimSvc, downloadsPage, activeDownloadsTsx, appCss] = await Promise.all([
+    readFile(new URL('../../app/services/download_service.ts', import.meta.url), 'utf8'),
+    readFile(new URL('../../app/services/storage_manager_service.ts', import.meta.url), 'utf8'),
+    readFile(new URL('../../app/services/map_service.ts', import.meta.url), 'utf8'),
+    readFile(new URL('../../app/services/zim_service.ts', import.meta.url), 'utf8'),
+    readFile(new URL('../../inertia/pages/settings/downloads.tsx', import.meta.url), 'utf8'),
+    readFile(new URL('../../inertia/components/ActiveDownloads.tsx', import.meta.url), 'utf8'),
+    readFile(new URL('../../inertia/css/app.css', import.meta.url), 'utf8'),
+  ])
+  assert.match(downloadSvc, /resolveDiskInfoMap/)
+  assert.match(downloadSvc, /seenCandidateRealPaths/)
+  assert.doesNotMatch(storageMgr, /if \(!targetDisk\?\.trim\(\) \|\| !disk\)/)
+  assert.match(storageMgr, /resolveDiskForRealPath/)
+  assert.match(storageMgr, /matchedPreferredDisk/)
+  assert.match(mapSvc, /const \{ pmtilesDir \} = await this\.prepareMapsDiskTarget/)
+  assert.doesNotMatch(zimSvc, /if \(!targetDisk\?\.trim\(\) && \(!requiredBytes \|\| requiredBytes <= 0\)\)/)
+  assert.match(downloadsPage, /HD: \{f\.diskLabel\}/)
+  assert.match(activeDownloadsTsx, /download\.diskLabel \|\|/)
+  assert.match(homeTsx, /rounded-full/)
+  assert.match(homeTsx, /nomad-merge-seam/)
+  assert.match(appCss, /transform-origin: right center/)
+  assert.match(appCss, /nomad-merge-seam-flash/)
 })

@@ -91,10 +91,32 @@ export class MapService implements IMapService {
   private worldBasemapReady = false
   private worldBasemapInFlight: Promise<void> | null = null
 
-  private async prepareMapsDiskTarget(targetDisk?: string, requiredBytes?: number): Promise<void> {
-    if (!targetDisk && (!requiredBytes || requiredBytes <= 0)) return
-    const { StorageManagerService } = await import('#services/storage_manager_service')
-    await new StorageManagerService().prepareModuleTargetDisk('maps', targetDisk, requiredBytes)
+  private async prepareMapsDiskTarget(
+    targetDisk?: string,
+    requiredBytes?: number
+  ): Promise<{ pmtilesDir: string; diskLabel: string; diskPath: string }> {
+    const defaultPmtilesDir = resolve(join(this.baseDirPath, 'pmtiles'))
+    try {
+      const { StorageManagerService } = await import('#services/storage_manager_service')
+      const res = await new StorageManagerService().prepareDownloadTargetDir(
+        'maps',
+        targetDisk,
+        requiredBytes
+      )
+      const pmtilesDir = resolve(join(res.targetDir, 'pmtiles'))
+      await ensureDirectoryExists(pmtilesDir)
+      return { pmtilesDir, diskLabel: res.diskLabel, diskPath: res.diskPath }
+    } catch (err: any) {
+      if (
+        err?.message?.includes('Limite de espaço configurado') ||
+        err?.message?.includes('Espaço livre insuficiente')
+      ) {
+        throw err
+      }
+      logger.warn(`[MapService] Fallback para diretório padrão de mapas: ${err?.message || err}`)
+      await ensureDirectoryExists(defaultPmtilesDir).catch(() => {})
+      return { pmtilesDir: defaultPmtilesDir, diskLabel: 'Armazenamento Interno NOMAD', diskPath: defaultPmtilesDir }
+    }
   }
 
   async listRegions(): Promise<{
@@ -189,7 +211,7 @@ export class MapService implements IMapService {
         ),
       0
     )
-    await this.prepareMapsDiskTarget(targetDisk, estimatedBytes)
+    const { pmtilesDir } = await this.prepareMapsDiskTarget(targetDisk, estimatedBytes)
 
     const downloadFilenames: string[] = []
 
@@ -214,7 +236,7 @@ export class MapService implements IMapService {
       }
 
       downloadFilenames.push(filename)
-      const filepath = join(process.cwd(), this.mapStoragePath, 'pmtiles', filename)
+      const filepath = resolve(join(pmtilesDir, filename))
 
       await RunDownloadJob.dispatch({
         url: resource.url,
@@ -317,9 +339,9 @@ export class MapService implements IMapService {
       throw new Error('Could not determine filename from URL')
     }
 
-    await this.prepareMapsDiskTarget(targetDisk)
+    const { pmtilesDir } = await this.prepareMapsDiskTarget(targetDisk)
 
-    const filepath = join(process.cwd(), this.mapStoragePath, 'pmtiles', filename)
+    const filepath = resolve(join(pmtilesDir, filename))
 
 
     // First, ensure base assets are present - regions depend on them
@@ -712,13 +734,12 @@ export class MapService implements IMapService {
       )
     }
 
-    await this.prepareMapsDiskTarget(targetDisk, info.size)
+    const { pmtilesDir } = await this.prepareMapsDiskTarget(targetDisk, info.size)
 
-    const basePath = resolve(join(this.baseDirPath, 'pmtiles'))
-    const filepath = resolve(join(basePath, info.key))
+    const filepath = resolve(join(pmtilesDir, info.key))
 
     // Prevent path traversal — resolved path must stay within the storage directory
-    if (!filepath.startsWith(basePath + sep)) {
+    if (!filepath.startsWith(pmtilesDir + sep)) {
       throw new Error('Invalid filename')
     }
 
@@ -819,7 +840,7 @@ export class MapService implements IMapService {
     targetDisk?: string
   }): Promise<{ filename: string; jobId?: string }> {
     this.validateMaxzoom(params.maxzoom)
-    await this.prepareMapsDiskTarget(params.targetDisk, params.estimatedBytes)
+    let { pmtilesDir } = await this.prepareMapsDiskTarget(params.targetDisk, params.estimatedBytes)
     const countriesService = CountriesService.getInstance()
     const countries = await countriesService.resolveCodes(params.countries)
     const regionFilepath = await countriesService.writeRegionFile(countries)
@@ -840,12 +861,6 @@ export class MapService implements IMapService {
     const slug = this.buildRegionSlug(countries, groupMatch)
     const dateSlug = info.key.replace('.pmtiles', '')
     const filename = `${slug}_${dateSlug}_z${maxzoom}.pmtiles`
-    const basePath = resolve(join(this.baseDirPath, 'pmtiles'))
-    const filepath = resolve(join(basePath, filename))
-
-    if (!filepath.startsWith(basePath + sep)) {
-      throw new Error('Invalid filename')
-    }
 
     let estimatedBytes = params.estimatedBytes ?? 0
     if (estimatedBytes === 0) {
@@ -856,8 +871,13 @@ export class MapService implements IMapService {
         logger.warn(`[MapService] extractRegion preflight failed, proceeding without estimate: ${err}`)
       }
       if (estimatedBytes > 0) {
-        await this.prepareMapsDiskTarget(params.targetDisk, estimatedBytes)
+        ({ pmtilesDir } = await this.prepareMapsDiskTarget(params.targetDisk, estimatedBytes))
       }
+    }
+
+    const filepath = resolve(join(pmtilesDir, filename))
+    if (!filepath.startsWith(pmtilesDir + sep)) {
+      throw new Error('Invalid filename')
     }
 
     const title = params.label ?? this.buildRegionTitle(countries, groupMatch)
