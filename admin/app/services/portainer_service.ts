@@ -3280,6 +3280,8 @@ ${cmdBlock}${sidecarsSection}${topLevelVolumesBlock}${topLevelNetworksBlock}`
       nomad_invoice_ninja: () => !onSharedNet,
       nomad_tubearchivist: () => !hasEnv('ES_URL='),
       nomad_translate: () => !envArr.some((e) => e.includes('nomad-nomad_kiwix_server')),
+      nomad_bar_assistant: () =>
+        envArr.some((e) => e === 'DB_DATABASE=/var/www/cocktails/storage/bar-assistant/database.sqlite'),
     }
 
     const checkFn = driftChecks[serviceName]

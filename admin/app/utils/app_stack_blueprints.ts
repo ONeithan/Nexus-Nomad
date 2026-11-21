@@ -234,32 +234,39 @@ export const STACK_BLUEPRINTS: Record<string, StackBlueprint> = {
       `APP_URL=http://${hostIp}:${hostPort}`,
       'APP_KEY=base64:Tm9tYWRBcHBLZXkzMkJ5dGVzRXhhY3RMZW5ndGgwMDE=',
       'DB_CONNECTION=sqlite',
-      'DB_DATABASE=/var/www/cocktails/storage/bar-assistant/database.sqlite',
+      'DB_DATABASE=/var/www/cocktails/storage/bar-assistant/database.ba3.sqlite',
       `REDIS_HOST=${SERVICE_NAMES.BAR_ASSISTANT}-redis`,
       'REDIS_PORT=6379',
       'CACHE_DRIVER=redis',
       'CACHE_STORE=redis',
       'SESSION_DRIVER=redis',
       'QUEUE_CONNECTION=sync',
+      'SCOUT_DRIVER=meilisearch',
       'ALLOW_REGISTRATION=true',
       `MEILISEARCH_HOST=http://${SERVICE_NAMES.BAR_ASSISTANT}-meili:7700`,
       'MEILISEARCH_KEY=nomadMeiliMasterKey2026',
     ],
     dependsOnYaml: `    depends_on:
       ${SERVICE_NAMES.BAR_ASSISTANT}-meili:
-        condition: service_started
+        condition: service_healthy
       ${SERVICE_NAMES.BAR_ASSISTANT}-redis:
         condition: service_healthy\n`,
     sidecarServicesYaml: (s) => `  ${s}-meili:
-    image: getmeili/meilisearch:v1.11
+    image: getmeili/meilisearch:v1.56
     container_name: nomad-${s}-meili
     restart: unless-stopped
     environment:
       - MEILI_MASTER_KEY=nomadMeiliMasterKey2026
       - MEILI_NO_ANALYTICS=true
       - MEILI_ENV=production
+      - MEILI_UPGRADE_DB=true
     volumes:
       - nomad-${s}-meili:/meili_data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:7700/health || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 15
 ${buildRedisService(s)}`,
     sidecarVolumeNames: (s) => [`nomad-${s}-meili`, `nomad-${s}-redis`],
   },

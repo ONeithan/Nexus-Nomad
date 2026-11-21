@@ -1236,6 +1236,7 @@ export class DockerService {
       } else if (serviceName === SERVICE_NAMES.BAR_ASSISTANT) {
         extraEnv.push('APP_KEY=base64:Tm9tYWRBcHBLZXkzMkJ5dGVzRXhhY3RMZW5ndGgwMDE=')
         extraEnv.push('DB_CONNECTION=sqlite')
+        extraEnv.push('DB_DATABASE=/var/www/cocktails/storage/bar-assistant/database.ba3.sqlite')
         extraEnv.push('CACHE_DRIVER=file')
         extraEnv.push('SESSION_DRIVER=file')
       } else if (serviceName === SERVICE_NAMES.KITCHENOWL) {

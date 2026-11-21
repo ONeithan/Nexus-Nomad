@@ -615,11 +615,11 @@ test('CSS animations, hover cascade, reduced-motion, contrast and release metada
     assert.ok(routes.includes(`documented(${snippet}`), `Missing documented() wrapper for ${snippet}`)
   }
 
-  // 8) Triple version sync to v1.0.41 across workflow and boot gate
-  assert.match(workflow, /# Build release trigger: v1\.0\.41/)
-  assert.match(workflow, /default: '1\.0\.41-nexus'/)
-  assert.match(workflow, /inputs\.version \|\| '1\.0\.41-nexus'/)
-  assert.match(bootGate, /:\s*'v1\.0\.41'/)
+  // 8) Triple version sync to v1.0.42 across workflow and boot gate
+  assert.match(workflow, /# Build release trigger: v1\.0\.42/)
+  assert.match(workflow, /default: '1\.0\.42-nexus'/)
+  assert.match(workflow, /inputs\.version \|\| '1\.0\.42-nexus'/)
+  assert.match(bootGate, /:\s*'v1\.0\.42'/)
 
   // 9) Bulk install & Portainer hardening checks (real sequential wait + port collision resolution + catalog port uniqueness + live progress polling)
   const [bulkModal, supplyDepot, portainerSvc, seeder, systemSvc] = await Promise.all([
@@ -776,6 +776,11 @@ test('stack blueprints, starter configs, multi-port and 8080 container port fixe
   const barAppKey = barEnv.find((e: string) => e.startsWith('APP_KEY=base64:'))?.split('base64:')[1] || ''
   assert.equal(Buffer.from(barAppKey, 'base64').length, 32, 'Laravel APP_KEY must decode to exact 32 bytes (AES-256)')
   assert.ok(barEnv.some((e: string) => e.startsWith('REDIS_HOST=')))
+  assert.ok(barEnv.includes('DB_DATABASE=/var/www/cocktails/storage/bar-assistant/database.ba3.sqlite'))
+  assert.ok(barEnv.includes('SCOUT_DRIVER=meilisearch'))
+  assert.match(barBp!.dependsOnYaml || '', /nomad_bar_assistant-meili:\s*\n\s*condition:\s*service_healthy/)
+  assert.ok(barBp!.sidecarServicesYaml('nomad_bar_assistant', '192.168.1.10', '8560').includes('getmeili/meilisearch:v1.56'))
+  assert.ok(barBp!.sidecarServicesYaml('nomad_bar_assistant', '192.168.1.10', '8560').includes('http://localhost:7700/health'))
 
   // Verify v1.0.41 live-audited app blueprints (Maybe, Outline, DefGuard, Paperless, Gramps Web, WG-Easy, Speedtest, Your_Spotify, Translate)
   const maybeEnv = bpMod.getStackBlueprint('nomad_maybe')!.extraEnv('192.168.1.10', '8580')
