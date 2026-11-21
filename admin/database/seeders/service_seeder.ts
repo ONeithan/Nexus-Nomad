@@ -1114,7 +1114,7 @@ export default class ServiceSeeder extends BaseSeeder {
           Binds: [`${ServiceSeeder.NOMAD_STORAGE_ABS_PATH}/firefly/upload:/var/www/html/storage/upload`],
         },
         ExposedPorts: { '8080/tcp': {} },
-        Env: ['APP_KEY=SomeRandomString32BytesExactLen!!', 'DB_CONNECTION=sqlite'],
+        Env: ['APP_KEY=base64:Tm9tYWRBcHBLZXkzMkJ5dGVzRXhhY3RMZW5ndGgwMDE=', 'DB_CONNECTION=sqlite'],
       }),
       ui_location: '8570',
       installed: false,
@@ -1294,9 +1294,13 @@ export default class ServiceSeeder extends BaseSeeder {
         HostConfig: {
           RestartPolicy: { Name: 'unless-stopped' },
           PortBindings: { '8080/tcp': [{ HostPort: '8605' }] },
-          Binds: [`${ServiceSeeder.NOMAD_STORAGE_ABS_PATH}/crowdsec:/etc/crowdsec`],
+          Binds: [
+            `${ServiceSeeder.NOMAD_STORAGE_ABS_PATH}/crowdsec:/etc/crowdsec`,
+            `${ServiceSeeder.NOMAD_STORAGE_ABS_PATH}/crowdsec/data:/var/lib/crowdsec/data`,
+          ],
         },
         ExposedPorts: { '8080/tcp': {} },
+        Env: ['DISABLE_ONLINE_API=true'],
       }),
       ui_location: '8605',
       installed: false,
@@ -1426,6 +1430,11 @@ export default class ServiceSeeder extends BaseSeeder {
       container_config: JSON.stringify({
         HostConfig: {
           RestartPolicy: { Name: 'unless-stopped' },
+          CapAdd: ['NET_ADMIN', 'SYS_MODULE'],
+          Sysctls: {
+            'net.ipv4.conf.all.src_valid_mark': '1',
+            'net.ipv4.ip_forward': '1',
+          },
           PortBindings: {
             '51821/tcp': [{ HostPort: '8630' }],
             '51820/udp': [{ HostPort: '51820' }],
@@ -1538,7 +1547,10 @@ export default class ServiceSeeder extends BaseSeeder {
         HostConfig: {
           RestartPolicy: { Name: 'unless-stopped' },
           PortBindings: { '81/tcp': [{ HostPort: '8650' }] },
-          Binds: [`${ServiceSeeder.NOMAD_STORAGE_ABS_PATH}/npm:/data`],
+          Binds: [
+            `${ServiceSeeder.NOMAD_STORAGE_ABS_PATH}/npm:/data`,
+            `${ServiceSeeder.NOMAD_STORAGE_ABS_PATH}/npm/letsencrypt:/etc/letsencrypt`,
+          ],
         },
         ExposedPorts: { '81/tcp': {} },
       }),
@@ -1724,6 +1736,13 @@ export default class ServiceSeeder extends BaseSeeder {
           Binds: [`${ServiceSeeder.NOMAD_STORAGE_ABS_PATH}/speedtest:/config`],
         },
         ExposedPorts: { '80/tcp': {} },
+        Env: [
+          'DB_CONNECTION=sqlite',
+          'APP_KEY=base64:Tm9tYWRBcHBLZXkzMkJ5dGVzRXhhY3RMZW5ndGgwMDE=',
+          'PUID=1000',
+          'PGID=1000',
+          'APP_TIMEZONE=America/Sao_Paulo',
+        ],
       }),
       ui_location: '8685',
       installed: false,
@@ -3184,7 +3203,7 @@ export default class ServiceSeeder extends BaseSeeder {
 
   ]
 
-  private static readonly DEFUNCT_CONTAINER_IMAGES = new Set([
+  public static readonly DEFUNCT_CONTAINER_IMAGES = new Set([
     'openrem/openrem:latest',
     'orthancteam/orthanc:latest',
     'karlomikus/bar-assistant:latest',

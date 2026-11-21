@@ -122,6 +122,7 @@ export const KV_STORE_SCHEMA = {
   'portainer.defaultUsername': 'string',
   'portainer.defaultPassword': 'string',
   'portainer.autoApplyCredentials': 'boolean',
+  'portainer.lastReconcileVersion': 'string',
   // TrueNAS integration settings
   'truenas.enabled': 'boolean',
   'truenas.url': 'string',

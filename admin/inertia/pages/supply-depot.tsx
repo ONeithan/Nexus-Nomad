@@ -36,6 +36,7 @@ import PortainerConfigModal from '~/components/PortainerConfigModal'
 import AppUrlModal from '~/components/AppUrlModal'
 import AppCatalogModal from '~/components/AppCatalogModal'
 import BulkInstallModal from '~/components/BulkInstallModal'
+import BulkUninstallModal from '~/components/BulkUninstallModal'
 import ServiceLogsModal from '~/components/ServiceLogsModal'
 import { setPendingAppAction } from '~/components/TacticalBootGate'
 import ServiceStatsModal from '~/components/ServiceStatsModal'
@@ -187,6 +188,9 @@ export default function SupplyDepotPage(props: {
   const [isBulkMode, setIsBulkMode] = useState(false)
   const [selectedForBulk, setSelectedForBulk] = useState<Set<string>>(new Set())
   const [bulkModalOpen, setBulkModalOpen] = useState(false)
+  const [isBulkUninstallMode, setIsBulkUninstallMode] = useState(false)
+  const [selectedForBulkUninstall, setSelectedForBulkUninstall] = useState<Set<string>>(new Set())
+  const [bulkUninstallModalOpen, setBulkUninstallModalOpen] = useState(false)
 
   const rememberInstallTarget = (target: 'local' | 'portainer') => {
     setDefaultTarget(target)
@@ -229,12 +233,16 @@ export default function SupplyDepotPage(props: {
     setModal({ type: 'install', service })
   }
 
-  const toggleCategoryForBulk = (catId: string) => {
-    const catServices = availableServices
+  const toggleCategoryInSet = (
+    sourceList: ServiceSlim[],
+    catId: string,
+    setFn: React.Dispatch<React.SetStateAction<Set<string>>>
+  ) => {
+    const catServices = sourceList
       .filter((s) => s.category === catId)
       .map((s) => s.service_name)
     if (catServices.length === 0) return
-    setSelectedForBulk((prev) => {
+    setFn((prev) => {
       const next = new Set(prev)
       const allInCatSelected = catServices.every((name) => next.has(name))
       if (allInCatSelected) {
@@ -246,14 +254,23 @@ export default function SupplyDepotPage(props: {
     })
   }
 
-  const toggleSelectService = (serviceName: string) => {
-    setSelectedForBulk((prev) => {
+  const toggleNameInSet = (
+    setFn: React.Dispatch<React.SetStateAction<Set<string>>>,
+    serviceName: string
+  ) => {
+    setFn((prev) => {
       const next = new Set(prev)
       if (next.has(serviceName)) next.delete(serviceName)
       else next.add(serviceName)
       return next
     })
   }
+
+  const toggleSelectService = (serviceName: string) =>
+    toggleNameInSet(setSelectedForBulk, serviceName)
+
+  const toggleSelectUninstall = (serviceName: string) =>
+    toggleNameInSet(setSelectedForBulkUninstall, serviceName)
 
   const openAppCatalog = (appId?: string) => {
     setCatalogAppId(appId || null)
@@ -287,6 +304,7 @@ export default function SupplyDepotPage(props: {
   // Auto-reload when single-app installation completes or show error (suppressed during bulk modal so queue never gets cut mid-run)
   useEffect(() => {
     if (bulkModalOpen || !installActivity.length) return
+    if (bulkUninstallModalOpen) return
     const last = installActivity[installActivity.length - 1]
     if (last.type === 'completed' || last.type === 'update-complete') {
       const targetSvc = services.find((s) => s.service_name === last.service_name)
@@ -427,6 +445,9 @@ export default function SupplyDepotPage(props: {
 
   const installedServices = filteredServices.filter((s) => s.installed)
   const availableServices = filteredServices.filter((s) => !s.installed)
+  const uninstallableServices = installedServices.filter(
+    (s) => !s.is_unmanaged && s.installation_status !== 'installing'
+  )
 
   const latestActivityByService = installActivity.reduce<Record<string, { message: string; type: string }>>((acc, item) => {
     if (item.service_name) {
@@ -743,7 +764,13 @@ export default function SupplyDepotPage(props: {
                       if (selectedForBulk.size > 0) {
                         setBulkModalOpen(true)
                       } else {
-                        setIsBulkMode((prev) => !prev)
+                        setIsBulkMode((prev) => {
+                          const next = !prev
+                          if (next && selectedForBulkUninstall.size === 0) {
+                            setIsBulkUninstallMode(false)
+                          }
+                          return next
+                        })
                       }
                     }}
                     title="Selecionar vários aplicativos para instalar juntos em fila"
@@ -754,6 +781,37 @@ export default function SupplyDepotPage(props: {
                         ? 'Ocultar Barra em Massa'
                         : 'Instalação em Massa'}
                   </StyledButton>
+                  {(uninstallableServices.length > 0 || selectedForBulkUninstall.size > 0) && (
+                    <StyledButton
+                      icon="IconTrash"
+                      variant={
+                        isBulkUninstallMode || selectedForBulkUninstall.size > 0
+                          ? 'danger'
+                          : 'outline'
+                      }
+                      className="whitespace-nowrap"
+                      onClick={() => {
+                        if (selectedForBulkUninstall.size > 0) {
+                          setBulkUninstallModalOpen(true)
+                        } else {
+                          setIsBulkUninstallMode((prev) => {
+                            const next = !prev
+                            if (next && selectedForBulk.size === 0) {
+                              setIsBulkMode(false)
+                            }
+                            return next
+                          })
+                        }
+                      }}
+                      title="Selecionar vários aplicativos instalados para desinstalar em fila"
+                    >
+                      {selectedForBulkUninstall.size > 0
+                        ? `Desinstalar Selecionados (${selectedForBulkUninstall.size})`
+                        : isBulkUninstallMode
+                          ? 'Ocultar Seleção Remoção'
+                          : 'Desinstalação em Massa'}
+                    </StyledButton>
+                  )}
                 </div>
               </div>
 
@@ -841,104 +899,57 @@ export default function SupplyDepotPage(props: {
               </button>
             </div>
 
-            {/* Tactical Bulk Selection Bar — auto-appears whenever user checks cards or opens bulk mode */}
+            {/* Tactical Bulk Selection Bars — auto-appear whenever user checks cards or opens bulk mode */}
             {(isBulkMode || selectedForBulk.size > 0) && (
-              <div className="p-3.5 rounded-xl bg-desert-orange/10 border border-desert-orange/30 space-y-3 shadow-sm">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div className="flex flex-wrap items-center gap-2 text-xs">
-                    <span className="font-bold text-desert-orange flex items-center gap-1.5 uppercase font-mono-mil">
-                      <IconBolt size={16} />
-                      <span>Download / Instalação Geral:</span>
-                    </span>
-                    <span className="font-mono bg-surface-primary px-2 py-0.5 rounded border border-border-subtle font-bold">
-                      {selectedForBulk.size} de {availableServices.length} selecionados
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setSelectedForBulk(new Set(availableServices.map((s) => s.service_name)))}
-                      className="px-2.5 py-1 rounded bg-surface-primary hover:bg-surface-secondary text-text-primary border border-border-subtle cursor-pointer font-medium"
-                    >
-                      Selecionar Todos ({availableServices.length})
-                    </button>
-                    <button
-                      type="button"
-                      disabled={availableServices.length === 0}
-                      onClick={() => {
-                        setSelectedForBulk(new Set(availableServices.map((s) => s.service_name)))
-                        setBulkModalOpen(true)
-                      }}
-                      className="px-2.5 py-1 rounded bg-desert-orange text-white hover:opacity-90 border border-desert-orange cursor-pointer font-bold disabled:opacity-50"
-                    >
-                      Instalar Todos Agora
-                    </button>
-                    {selectedForBulk.size > 0 && (
-                      <button
-                        type="button"
-                        onClick={() => setSelectedForBulk(new Set())}
-                        className="px-2.5 py-1 rounded bg-surface-primary hover:bg-surface-secondary text-text-muted hover:text-text-primary border border-border-subtle cursor-pointer"
-                      >
-                        Desmarcar
-                      </button>
-                    )}
-                  </div>
+              <BulkSelectionToolbar
+                variant="install"
+                servicesList={availableServices}
+                selectedSet={selectedForBulk}
+                onSelectAll={() =>
+                  setSelectedForBulk(new Set(availableServices.map((s) => s.service_name)))
+                }
+                onRunAllNow={() => {
+                  setSelectedForBulk(new Set(availableServices.map((s) => s.service_name)))
+                  setBulkModalOpen(true)
+                }}
+                onClearSelection={() => setSelectedForBulk(new Set())}
+                onCancel={() => {
+                  setIsBulkMode(false)
+                  setSelectedForBulk(new Set())
+                }}
+                onRunSelected={() => setBulkModalOpen(true)}
+                onToggleCategory={(catId) =>
+                  toggleCategoryInSet(availableServices, catId, setSelectedForBulk)
+                }
+              />
+            )}
 
-                  <div className="flex items-center gap-2">
-                    <StyledButton
-                      size="sm"
-                      variant="outline"
-                      onClick={() => {
-                        setIsBulkMode(false)
-                        setSelectedForBulk(new Set())
-                      }}
-                    >
-                      Cancelar
-                    </StyledButton>
-                    <StyledButton
-                      size="sm"
-                      variant="primary"
-                      icon="IconBolt"
-                      disabled={selectedForBulk.size === 0}
-                      onClick={() => setBulkModalOpen(true)}
-                    >
-                      Instalar Selecionados ({selectedForBulk.size})
-                    </StyledButton>
-                  </div>
-                </div>
-
-                {/* Seleção rápida por Categoria */}
-                <div className="flex flex-wrap items-center gap-1.5 pt-2 border-t border-desert-orange/20">
-                  <span className="text-[0.6875rem] font-semibold text-text-secondary mr-1">
-                    Por Categoria:
-                  </span>
-                  {CATEGORIES.filter(
-                    (c) =>
-                      c.id !== 'all' &&
-                      c.id !== 'installed' &&
-                      c.id !== 'remote-server' &&
-                      availableServices.some((s) => s.category === c.id)
-                  ).map((cat) => {
-                    const catList = availableServices.filter((s) => s.category === cat.id)
-                    const selectedCount = catList.filter((s) => selectedForBulk.has(s.service_name)).length
-                    const allSelected = selectedCount > 0 && selectedCount === catList.length
-                    return (
-                      <button
-                        key={`bulk-cat-${cat.id}`}
-                        type="button"
-                        onClick={() => toggleCategoryForBulk(cat.id)}
-                        className={`px-2 py-0.5 rounded-full text-[0.6875rem] font-semibold border cursor-pointer transition-colors ${
-                          allSelected
-                            ? 'bg-desert-orange text-white border-desert-orange'
-                            : selectedCount > 0
-                              ? 'bg-desert-orange/20 text-desert-orange border-desert-orange/50'
-                              : 'bg-surface-primary text-text-secondary border-border-subtle hover:border-desert-orange'
-                        }`}
-                      >
-                        {cat.label} ({selectedCount}/{catList.length})
-                      </button>
-                    )
-                  })}
-                </div>
-              </div>
+            {(isBulkUninstallMode || selectedForBulkUninstall.size > 0) && (
+              <BulkSelectionToolbar
+                variant="uninstall"
+                servicesList={uninstallableServices}
+                selectedSet={selectedForBulkUninstall}
+                onSelectAll={() =>
+                  setSelectedForBulkUninstall(
+                    new Set(uninstallableServices.map((s) => s.service_name))
+                  )
+                }
+                onRunAllNow={() => {
+                  setSelectedForBulkUninstall(
+                    new Set(uninstallableServices.map((s) => s.service_name))
+                  )
+                  setBulkUninstallModalOpen(true)
+                }}
+                onClearSelection={() => setSelectedForBulkUninstall(new Set())}
+                onCancel={() => {
+                  setIsBulkUninstallMode(false)
+                  setSelectedForBulkUninstall(new Set())
+                }}
+                onRunSelected={() => setBulkUninstallModalOpen(true)}
+                onToggleCategory={(catId) =>
+                  toggleCategoryInSet(uninstallableServices, catId, setSelectedForBulkUninstall)
+                }
+              />
             )}
           </div>
 
@@ -987,6 +998,14 @@ export default function SupplyDepotPage(props: {
                       migrationInstructionsHref={(service.service_name.startsWith(SERVICE_NAMES.KOLIBRI) && educationGen2Installed) ? getSupplyDepotDocLink(SERVICE_NAMES.KOLIBRI) || undefined : undefined}
                       migrationInstructionsText={(service.service_name === SERVICE_NAMES.KOLIBRI) ? 'Como migrar conteúdo para a Gen 2' : 'Como migrar conteúdo da Gen 1'}
                       onOpenCatalog={() => openAppCatalog(service.service_name)}
+                      isBulkMode={isBulkUninstallMode}
+                      bulkVariant="uninstall"
+                      isSelected={selectedForBulkUninstall.has(service.service_name)}
+                      onToggleSelect={
+                        !service.is_unmanaged && service.installation_status !== 'installing'
+                          ? () => toggleSelectUninstall(service.service_name)
+                          : undefined
+                      }
                     />
                   ))}
                 </div>
@@ -1410,6 +1429,24 @@ export default function SupplyDepotPage(props: {
           window.location.reload()
         }}
       />
+
+      <BulkUninstallModal
+        isOpen={bulkUninstallModalOpen}
+        onClose={() => setBulkUninstallModalOpen(false)}
+        selectedServices={services.filter(
+          (s) =>
+            s.installed &&
+            !s.is_unmanaged &&
+            s.installation_status !== 'installing' &&
+            selectedForBulkUninstall.has(s.service_name)
+        )}
+        onCompletedAll={() => {
+          setBulkUninstallModalOpen(false)
+          setIsBulkUninstallMode(false)
+          setSelectedForBulkUninstall(new Set())
+          window.location.reload()
+        }}
+      />
     </AppLayout>
   )
 }
@@ -1444,6 +1481,7 @@ interface AppCardProps {
   migrationInstructionsText?: string
   onOpenCatalog?: () => void
   isBulkMode?: boolean
+  bulkVariant?: 'install' | 'uninstall'
   isSelected?: boolean
   onToggleSelect?: () => void
 }
@@ -1474,6 +1512,7 @@ function AppCard({
   migrationInstructionsText,
   onOpenCatalog,
   isBulkMode,
+  bulkVariant = 'install',
   isSelected,
   onToggleSelect,
 }: AppCardProps) {
@@ -1514,6 +1553,7 @@ function AppCard({
           : getServiceLink(service.ui_location || '', service.custom_url)
 
   const handleOpenClick = (e: React.MouseEvent) => {
+    e.stopPropagation()
     if (typeof window !== 'undefined') {
       const hidden = localStorage.getItem(`nomad_hide_first_open_doc_${service.service_name}`)
       if (!hidden) {
@@ -1549,14 +1589,19 @@ function AppCard({
     onOpenDropdown(isDropdownOpen ? null : service.service_name)
   }
 
+  const canBulkSelect = Boolean(onToggleSelect) && service.installation_status !== 'installing'
+  const isUninstallBulk = bulkVariant === 'uninstall'
+
   return (
     <div
-      onClick={isBulkMode && !service.installed ? onToggleSelect : undefined}
+      onClick={isBulkMode && canBulkSelect ? onToggleSelect : undefined}
       className={`nomad-interactive-card relative flex flex-col rounded-xl border p-4 bg-surface-primary shadow-sm ${
-        isBulkMode && !service.installed ? 'cursor-pointer select-none' : ''
+        isBulkMode && canBulkSelect ? 'cursor-pointer select-none' : ''
       } ${
         isSelected
-          ? 'border-desert-orange ring-2 ring-desert-orange/50 bg-desert-orange/5'
+          ? isUninstallBulk
+            ? 'border-desert-red ring-2 ring-desert-red/50 bg-desert-red/5'
+            : 'border-desert-orange ring-2 ring-desert-orange/50 bg-desert-orange/5'
           : service.installed
             ? 'border-desert-stone-light'
             : 'border-desert-stone-lighter hover:border-desert-stone-light'
@@ -1587,29 +1632,46 @@ function AppCard({
 
         {/* Status indicator + Multi-select checkbox + Guide button */}
         <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
-          {!service.installed && service.installation_status !== 'installing' && (
+          {canBulkSelect && (
             <label
               className={`inline-flex items-center justify-center p-1 rounded-md border transition-colors cursor-pointer mr-0.5 ${
                 isSelected
-                  ? 'border-desert-orange bg-desert-orange/15'
-                  : 'border-border-subtle bg-surface-secondary/80 hover:border-desert-orange/60'
+                  ? isUninstallBulk
+                    ? 'border-desert-red bg-desert-red/15'
+                    : 'border-desert-orange bg-desert-orange/15'
+                  : isUninstallBulk
+                    ? 'border-border-subtle bg-surface-secondary/80 hover:border-desert-red/60'
+                    : 'border-border-subtle bg-surface-secondary/80 hover:border-desert-orange/60'
               }`}
-              title="Selecionar para instalar vários aplicativos juntos"
+              title={
+                isUninstallBulk
+                  ? 'Selecionar para desinstalar vários aplicativos juntos'
+                  : 'Selecionar para instalar vários aplicativos juntos'
+              }
               onClick={(e) => e.stopPropagation()}
             >
               <input
                 type="checkbox"
                 checked={Boolean(isSelected)}
                 onChange={() => onToggleSelect?.()}
-                aria-label={`Selecionar ${service.friendly_name ?? service.service_name} para instalação em lote`}
-                className="w-4 h-4 rounded text-desert-orange focus:ring-desert-orange border-desert-stone cursor-pointer"
+                aria-label={`Selecionar ${service.friendly_name ?? service.service_name} para ${
+                  isUninstallBulk ? 'desinstalação' : 'instalação'
+                } em lote`}
+                className={`w-4 h-4 rounded border-desert-stone cursor-pointer ${
+                  isUninstallBulk
+                    ? 'text-desert-red accent-desert-red focus:ring-desert-red'
+                    : 'text-desert-orange accent-desert-orange focus:ring-desert-orange'
+                }`}
               />
             </label>
           )}
           {onOpenCatalog && (
             <button
               type="button"
-              onClick={onOpenCatalog}
+              onClick={(e) => {
+                e.stopPropagation()
+                onOpenCatalog()
+              }}
               title="Ver o que este app faz, como funciona e exemplos reais no Catálogo"
               className="p-1 rounded-md text-text-muted hover:text-desert-green hover:bg-surface-secondary border border-transparent hover:border-desert-green/30 transition-colors cursor-pointer"
             >
@@ -1774,7 +1836,10 @@ function AppCard({
               size="sm"
               variant="primary"
               icon="IconDownload"
-              onClick={onInstall}
+              onClick={(e) => {
+                e.stopPropagation()
+                onInstall()
+              }}
               fullWidth
             >
               Instalar
@@ -1784,7 +1849,10 @@ function AppCard({
                 size="sm"
                 variant="outline"
                 icon="IconBook"
-                onClick={onOpenCatalog}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onOpenCatalog()
+                }}
                 title="Ver o que este app faz e exemplos de uso"
               >
                 Guia
@@ -2033,5 +2101,134 @@ function DropdownItem({
       {icon}
       {label}
     </button>
+  )
+}
+
+function BulkSelectionToolbar({
+  variant,
+  servicesList,
+  selectedSet,
+  onSelectAll,
+  onRunAllNow,
+  onClearSelection,
+  onCancel,
+  onRunSelected,
+  onToggleCategory,
+}: {
+  variant: 'install' | 'uninstall'
+  servicesList: ServiceSlim[]
+  selectedSet: Set<string>
+  onSelectAll: () => void
+  onRunAllNow: () => void
+  onClearSelection: () => void
+  onCancel: () => void
+  onRunSelected: () => void
+  onToggleCategory: (catId: string) => void
+}) {
+  const isUninstall = variant === 'uninstall'
+  const containerTheme = isUninstall
+    ? 'bg-desert-red/10 border-desert-red/30'
+    : 'bg-desert-orange/10 border-desert-orange/30'
+  const titleTextTheme = isUninstall ? 'text-desert-red' : 'text-desert-orange'
+  const actionBgTheme = isUninstall
+    ? 'bg-desert-red border-desert-red'
+    : 'bg-desert-orange border-desert-orange'
+  const pillBorderDivider = isUninstall ? 'border-desert-red/20' : 'border-desert-orange/20'
+
+  return (
+    <div className={`p-3.5 rounded-xl border space-y-3 shadow-sm ${containerTheme}`}>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          <span className={`font-bold flex items-center gap-1.5 uppercase font-mono-mil ${titleTextTheme}`}>
+            {isUninstall ? <IconTrash size={16} /> : <IconBolt size={16} />}
+            <span>
+              {isUninstall ? 'Remoção / Desinstalação em Massa:' : 'Download / Instalação Geral:'}
+            </span>
+          </span>
+          <span className="font-mono bg-surface-primary px-2 py-0.5 rounded border border-border-subtle font-bold">
+            {selectedSet.size} de {servicesList.length} selecionados
+          </span>
+          <button
+            type="button"
+            disabled={servicesList.length === 0}
+            onClick={onSelectAll}
+            className="px-2.5 py-1 rounded bg-surface-primary hover:bg-surface-secondary text-text-primary border border-border-subtle cursor-pointer font-medium disabled:opacity-50"
+          >
+            Selecionar Todos ({servicesList.length})
+          </button>
+          <button
+            type="button"
+            disabled={servicesList.length === 0}
+            onClick={onRunAllNow}
+            className={`px-2.5 py-1 rounded text-white hover:opacity-90 border cursor-pointer font-bold disabled:opacity-50 ${actionBgTheme}`}
+          >
+            {isUninstall ? 'Desinstalar Todos Agora' : 'Instalar Todos Agora'}
+          </button>
+          {selectedSet.size > 0 && (
+            <button
+              type="button"
+              onClick={onClearSelection}
+              className="px-2.5 py-1 rounded bg-surface-primary hover:bg-surface-secondary text-text-muted hover:text-text-primary border border-border-subtle cursor-pointer"
+            >
+              Desmarcar
+            </button>
+          )}
+        </div>
+
+        <div className="flex items-center gap-2">
+          <StyledButton size="sm" variant="outline" onClick={onCancel}>
+            Cancelar
+          </StyledButton>
+          <StyledButton
+            size="sm"
+            variant={isUninstall ? 'danger' : 'primary'}
+            icon={isUninstall ? 'IconTrash' : 'IconBolt'}
+            disabled={selectedSet.size === 0}
+            onClick={onRunSelected}
+          >
+            {isUninstall
+              ? `Desinstalar Selecionados (${selectedSet.size})`
+              : `Instalar Selecionados (${selectedSet.size})`}
+          </StyledButton>
+        </div>
+      </div>
+
+      {/* Seleção rápida por Categoria */}
+      <div className={`flex flex-wrap items-center gap-1.5 pt-2 border-t ${pillBorderDivider}`}>
+        <span className="text-[0.6875rem] font-semibold text-text-secondary mr-1">
+          Por Categoria:
+        </span>
+        {CATEGORIES.filter(
+          (c) =>
+            c.id !== 'all' &&
+            c.id !== 'installed' &&
+            c.id !== 'remote-server' &&
+            servicesList.some((s) => s.category === c.id)
+        ).map((cat) => {
+          const catList = servicesList.filter((s) => s.category === cat.id)
+          const selectedCount = catList.filter((s) => selectedSet.has(s.service_name)).length
+          const allSelected = selectedCount > 0 && selectedCount === catList.length
+          const pillTheme = allSelected
+            ? `${actionBgTheme} text-white`
+            : selectedCount > 0
+              ? isUninstall
+                ? 'bg-desert-red/20 text-desert-red border-desert-red/50'
+                : 'bg-desert-orange/20 text-desert-orange border-desert-orange/50'
+              : isUninstall
+                ? 'bg-surface-primary text-text-secondary border-border-subtle hover:border-desert-red'
+                : 'bg-surface-primary text-text-secondary border-border-subtle hover:border-desert-orange'
+          return (
+            <button
+              key={`bulk-${variant}-cat-${cat.id}`}
+              type="button"
+              onClick={() => onToggleCategory(cat.id)}
+              className={`px-2 py-0.5 rounded-full text-[0.6875rem] font-semibold border cursor-pointer transition-colors ${pillTheme}`}
+            >
+              {cat.label} ({selectedCount}/{catList.length})
+            </button>
+          )
+        })}
+      </div>
+    </div>
   )
 }

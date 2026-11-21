@@ -79,6 +79,7 @@ export const STACK_BLUEPRINTS: Record<string, StackBlueprint> = {
   [SERVICE_NAMES.OUTLINE]: {
     extraEnv: (hostIp, hostPort) => [
       `URL=http://${hostIp}:${hostPort}`,
+      `COLLABORATION_URL=http://${hostIp}:${hostPort}`,
       `DATABASE_URL=postgres://postgres:nomad_db_pass@${SERVICE_NAMES.OUTLINE}-db:5432/outline`,
       `REDIS_URL=redis://${SERVICE_NAMES.OUTLINE}-redis:6379`,
       'PGSSLMODE=disable',
@@ -139,6 +140,8 @@ export const STACK_BLUEPRINTS: Record<string, StackBlueprint> = {
       'RAILS_ASSUME_SSL=false',
       'GOOD_JOB_EXECUTION_MODE=async',
       'SECRET_KEY_BASE=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
+      `DATABASE_URL=postgres://postgres:nomad_db_pass@${SERVICE_NAMES.MAYBE}-db:5432/maybe_production`,
+      `DB_HOST=${SERVICE_NAMES.MAYBE}-db`,
       `POSTGRES_HOST=${SERVICE_NAMES.MAYBE}-db`,
       'POSTGRES_USER=postgres',
       'POSTGRES_PASSWORD=nomad_db_pass',
@@ -226,19 +229,27 @@ export const STACK_BLUEPRINTS: Record<string, StackBlueprint> = {
   },
 
   [SERVICE_NAMES.BAR_ASSISTANT]: {
+    initUidGid: '33:33',
     extraEnv: (hostIp, hostPort) => [
       `APP_URL=http://${hostIp}:${hostPort}`,
-      'APP_KEY=base64:c29tZXJhbmRvbXN0cmluZ2ZvcmJhcmFzc2lzdGFudA==',
+      'APP_KEY=base64:Tm9tYWRBcHBLZXkzMkJ5dGVzRXhhY3RMZW5ndGgwMDE=',
       'DB_CONNECTION=sqlite',
       'DB_DATABASE=/var/www/cocktails/storage/bar-assistant/database.sqlite',
-      'CACHE_DRIVER=file',
-      'SESSION_DRIVER=file',
+      `REDIS_HOST=${SERVICE_NAMES.BAR_ASSISTANT}-redis`,
+      'REDIS_PORT=6379',
+      'CACHE_DRIVER=redis',
+      'CACHE_STORE=redis',
+      'SESSION_DRIVER=redis',
+      'QUEUE_CONNECTION=sync',
+      'ALLOW_REGISTRATION=true',
       `MEILISEARCH_HOST=http://${SERVICE_NAMES.BAR_ASSISTANT}-meili:7700`,
       'MEILISEARCH_KEY=nomadMeiliMasterKey2026',
     ],
     dependsOnYaml: `    depends_on:
       ${SERVICE_NAMES.BAR_ASSISTANT}-meili:
-        condition: service_started\n`,
+        condition: service_started
+      ${SERVICE_NAMES.BAR_ASSISTANT}-redis:
+        condition: service_healthy\n`,
     sidecarServicesYaml: (s) => `  ${s}-meili:
     image: getmeili/meilisearch:v1.11
     container_name: nomad-${s}-meili
@@ -246,9 +257,11 @@ export const STACK_BLUEPRINTS: Record<string, StackBlueprint> = {
     environment:
       - MEILI_MASTER_KEY=nomadMeiliMasterKey2026
       - MEILI_NO_ANALYTICS=true
+      - MEILI_ENV=production
     volumes:
-      - nomad-${s}-meili:/meili_data`,
-    sidecarVolumeNames: (s) => [`nomad-${s}-meili`],
+      - nomad-${s}-meili:/meili_data
+${buildRedisService(s)}`,
+    sidecarVolumeNames: (s) => [`nomad-${s}-meili`, `nomad-${s}-redis`],
   },
 
   [SERVICE_NAMES.TUBEARCHIVIST]: {
@@ -287,7 +300,7 @@ export const STACK_BLUEPRINTS: Record<string, StackBlueprint> = {
     extraAppVolumes: (s) => [`nomad-${s}-public:/var/www/app/public`],
     extraEnv: (hostIp, hostPort) => [
       `APP_URL=http://${hostIp}:${hostPort}`,
-      'APP_KEY=base64:c29tZXJhbmRvbXN0cmluZ2Zvcmludm9pY2VuaW5qYQ==',
+      'APP_KEY=base64:Tm9tYWRBcHBLZXkzMkJ5dGVzRXhhY3RMZW5ndGgwMDE=',
       'APP_ENV=production',
       'APP_DEBUG=false',
       'REQUIRE_HTTPS=false',
@@ -407,6 +420,11 @@ ${buildRedisService(s)}
   [SERVICE_NAMES.WEEWX]: {
     initUidGid: '1000:1000',
     extraEnv: () => [],
+    composeEntrypointOverride: [
+      '/bin/sh',
+      '-c',
+      'if [ ! -f /data/weewx.conf ] || grep -q "Estacao NOMAD" /data/weewx.conf; then rm -f /data/weewx.conf && weectl station create /data --driver=weewx.drivers.simulator --units=metric --latitude=-23.55 --longitude=-46.63 --altitude=760,meter --location=Estacao_NOMAD --no-prompt; fi; exec ./entrypoint.sh',
+    ],
     sidecarServicesYaml: () => '',
     sidecarVolumeNames: () => [],
   },
@@ -418,6 +436,132 @@ ${buildRedisService(s)}
       'VIKUNJA_DATABASE_TYPE=sqlite',
       'VIKUNJA_DATABASE_PATH=/app/vikunja/files/vikunja.db',
     ],
+    sidecarServicesYaml: () => '',
+    sidecarVolumeNames: () => [],
+  },
+
+  [SERVICE_NAMES.PAPERLESS]: {
+    initUidGid: '1000:1000',
+    extraEnv: (hostIp, hostPort) => [
+      `PAPERLESS_REDIS=redis://${SERVICE_NAMES.PAPERLESS}-redis:6379`,
+      'PAPERLESS_SECRET_KEY=nomad-paperless-secret-key-0123456789abcdef0123456789',
+      `PAPERLESS_URL=http://${hostIp}:${hostPort}`,
+      'PAPERLESS_OCR_LANGUAGE=por',
+      'PAPERLESS_TIME_ZONE=America/Sao_Paulo',
+      'PAPERLESS_WEBSERVER_WORKERS=2',
+      'PAPERLESS_TASK_WORKERS=1',
+      'PAPERLESS_ADMIN_USER=admin',
+      'PAPERLESS_ADMIN_PASSWORD=nomad',
+      'USERMAP_UID=1000',
+      'USERMAP_GID=1000',
+    ],
+    dependsOnYaml: `    depends_on:
+      ${SERVICE_NAMES.PAPERLESS}-redis:
+        condition: service_healthy\n`,
+    sidecarServicesYaml: (s) => buildRedisService(s),
+    sidecarVolumeNames: (s) => [`nomad-${s}-redis`],
+  },
+
+  [SERVICE_NAMES.DEFGUARD]: {
+    extraEnv: (hostIp, hostPort) => [
+      `DEFGUARD_DB_HOST=${SERVICE_NAMES.DEFGUARD}-db`,
+      'DEFGUARD_DB_PORT=5432',
+      'DEFGUARD_DB_USER=postgres',
+      'DEFGUARD_DB_PASSWORD=nomad_db_pass',
+      'DEFGUARD_DB_NAME=defguard',
+      'DEFGUARD_SECRET_KEY=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
+      'DEFGUARD_AUTH_SECRET=abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789',
+      'DEFGUARD_GATEWAY_SECRET=fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210',
+      'DEFGUARD_YUBIBRIDGE_SECRET=0123456789fedcba0123456789fedcba0123456789fedcba0123456789fedcba',
+      'DEFGUARD_COOKIE_INSECURE=true',
+      `DEFGUARD_URL=http://${hostIp}:${hostPort}`,
+      `DEFGUARD_WEBAUTHN_RP_ID=${hostIp}`,
+      'DEFGUARD_HTTP_PORT=80',
+      'DEFGUARD_DISABLE_STATS_PURGE=true',
+      'DEFGUARD_ADMIN_GROUPNAME=admin',
+      'DEFGUARD_DEFAULT_ADMIN_PASSWORD=nomad',
+    ],
+    dependsOnYaml: `    depends_on:
+      ${SERVICE_NAMES.DEFGUARD}-db:
+        condition: service_healthy\n`,
+    sidecarServicesYaml: (s) => buildPgService(s, 'defguard'),
+    sidecarVolumeNames: (s) => [`nomad-${s}-pgdata`],
+  },
+
+  [SERVICE_NAMES.GRAMPS_WEB]: {
+    extraEnv: (hostIp, hostPort) => [
+      'TREE=nomad',
+      'GRAMPSWEB_TREE=nomad',
+      `GRAMPSWEB_BASE_URL=http://${hostIp}:${hostPort}`,
+      'GUNICORN_NUM_WORKERS=2',
+      'GRAMPSWEB_MEDIA_PREFIX=local',
+    ],
+    sidecarServicesYaml: () => '',
+    sidecarVolumeNames: () => [],
+  },
+
+  [SERVICE_NAMES.WG_EASY]: {
+    extraEnv: (hostIp) => [
+      `WG_HOST=${hostIp}`,
+      'PORT=51821',
+      'WG_PORT=51820',
+      'INSECURE=true',
+    ],
+    sidecarServicesYaml: () => '',
+    sidecarVolumeNames: () => [],
+  },
+
+  [SERVICE_NAMES.SPEEDTEST]: {
+    initUidGid: '1000:1000',
+    extraEnv: (hostIp, hostPort) => [
+      'DB_CONNECTION=sqlite',
+      'APP_KEY=base64:Tm9tYWRBcHBLZXkzMkJ5dGVzRXhhY3RMZW5ndGgwMDE=',
+      `APP_URL=http://${hostIp}:${hostPort}`,
+      'PUID=1000',
+      'PGID=1000',
+      'APP_TIMEZONE=America/Sao_Paulo',
+    ],
+    sidecarServicesYaml: () => '',
+    sidecarVolumeNames: () => [],
+  },
+
+  [SERVICE_NAMES.YOUR_SPOTIFY]: {
+    extraEnv: (hostIp, hostPort) => [
+      `API_ENDPOINT=http://${hostIp}:${Number(hostPort) + 1}`,
+    ],
+    dependsOnYaml: `    depends_on:
+      ${SERVICE_NAMES.YOUR_SPOTIFY}-server:
+        condition: service_started\n`,
+    sidecarServicesYaml: (s, hostIp, hostPort) => {
+      const apiPort = Number(hostPort) + 1
+      return `  ${s}-mongo:
+    image: mongo:6
+    container_name: nomad-${s}-mongo
+    restart: unless-stopped
+    volumes:
+      - nomad-${s}-mongo:/data/db
+
+  ${s}-server:
+    image: yooooomi/your_spotify_server:latest
+    container_name: nomad-${s}-server
+    restart: unless-stopped
+    ports:
+      - "${apiPort}:8080"
+    depends_on:
+      - ${s}-mongo
+    environment:
+      - API_ENDPOINT=http://${hostIp}:${apiPort}
+      - CLIENT_ENDPOINT=http://${hostIp}:${hostPort}
+      - MONGO_ENDPOINT=mongodb://${s}-mongo:27017/your_spotify
+      - CORS=all
+      - SPOTIFY_PUBLIC=nomad_configure_spotify_public
+      - SPOTIFY_SECRET=nomad_configure_spotify_secret`
+    },
+    sidecarVolumeNames: (s) => [`nomad-${s}-mongo`],
+  },
+
+  [SERVICE_NAMES.TRANSLATE]: {
+    extraEnv: () => [`KIWIX=http://nomad-${SERVICE_NAMES.KIWIX}:8080`],
     sidecarServicesYaml: () => '',
     sidecarVolumeNames: () => [],
   },
@@ -494,43 +638,6 @@ dns:
       content: `mqtt:
   enabled: false
 cameras: {}
-`,
-    }
-  }
-
-  if (serviceName === SERVICE_NAMES.WEEWX) {
-    return {
-      relativeSubdir: 'weewx',
-      filename: 'weewx.conf',
-      volumeTargetDir: '/data',
-      content: `debug = 0
-WEEWX_ROOT = /data
-[Station]
-  location = "Estacao NOMAD"
-  latitude = -23.55
-  longitude = -46.63
-  altitude = 760, meter
-  station_type = Simulator
-[Simulator]
-  loop_interval = 2.5
-  mode = simulator
-  driver = weewx.drivers.simulator
-[StdReport]
-  HTML_ROOT = public_html
-  [[SeasonsReport]]
-    skin = Seasons
-    enable = true
-[DataBindings]
-  [[wx_binding]]
-    database = archive_sqlite
-[Databases]
-  [[archive_sqlite]]
-    database_name = weewx.sdb
-    database_type = SQLite
-[Engine]
-  [[Services]]
-    archive_services = weewx.engine.StdArchive
-    report_services = weewx.engine.StdReport
 `,
     }
   }

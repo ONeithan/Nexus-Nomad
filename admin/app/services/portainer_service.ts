@@ -390,6 +390,9 @@ export class PortainerService {
                     ports,
                   }
                 })
+                if (!overrideUrl && !overrideApiKey) {
+                  void this.tameRunawayCrashLoops(client, epId, containersResp.data).catch(() => {})
+                }
                 break
               }
             } catch {
@@ -1025,6 +1028,13 @@ export class PortainerService {
     const capAddList: string[] = Array.isArray(config?.HostConfig?.CapAdd)
       ? config.HostConfig.CapAdd.filter((c: any) => typeof c === 'string' && c.trim().length > 0)
       : []
+    const rawSysctls = config?.HostConfig?.Sysctls
+    const sysctlEntries: string[] =
+      rawSysctls && typeof rawSysctls === 'object'
+        ? Object.entries(rawSysctls)
+            .filter(([k, v]) => typeof k === 'string' && v !== undefined && v !== null)
+            .map(([k, v]) => `${k}=${v}`)
+        : []
 
     // 1. Build Ports List accurately (preserving protocol /udp vs /tcp and matching primary UI port)
     const portsList: string[] = []
@@ -1143,6 +1153,10 @@ export class PortainerService {
       capAddList.length > 0
         ? `    cap_add:\n${capAddList.map((c) => `      - ${c}`).join('\n')}\n`
         : ''
+    const sysctlsBlock =
+      sysctlEntries.length > 0
+        ? `    sysctls:\n${sysctlEntries.map((s) => `      - ${s}`).join('\n')}\n`
+        : ''
     const volumesBlock = volumeMounts.map((v) => `      ${v}`).join('\n')
     const envBlock = envVars.map((e) => `      - ${JSON.stringify(e)}`).join('\n')
     const userLine = config?.User ? `    user: "${config.User}"\n` : ''
@@ -1204,7 +1218,7 @@ export class PortainerService {
     image: ${image}
     container_name: nomad-${serviceName}
     restart: unless-stopped
-${networkModeLine}${extraHostsBlock}${capAddBlock}${gpuBlock}${userLine}${shmLine}${entrypointLine}${dependsOnLine}${portsSection}    volumes:
+${networkModeLine}${extraHostsBlock}${capAddBlock}${sysctlsBlock}${gpuBlock}${userLine}${shmLine}${entrypointLine}${dependsOnLine}${portsSection}    volumes:
 ${volumesBlock}
     environment:
 ${envBlock}
@@ -1410,6 +1424,17 @@ ${cmdBlock}${sidecarsSection}${topLevelVolumesBlock}${topLevelNetworksBlock}`
       await new Promise((r) => setTimeout(r, 600))
       // 2. Force-remove any remaining containers (including stopped containers holding target port)
       await deleteMatchingContainers()
+      // Clean up legacy corrupt single-file nginx directory volume (`MS_BIND: not a directory`) for MeshCore Web
+      if (lowerService === 'nomad_meshcore_web') {
+        for (const epId of candidateEpIds) {
+          await client
+            .delete(
+              `/api/endpoints/${epId}/docker/volumes/nomad-nomad_meshcore_web-etc-nginx-conf-d-default-conf?force=true`,
+              { timeout: 10000 }
+            )
+            .catch(() => {})
+        }
+      }
       await new Promise((r) => setTimeout(r, 400))
       // 3. Second pass on stacks and clean up orphan Compose networks
       await deleteMatchingStacks()
@@ -1952,6 +1977,9 @@ ${cmdBlock}${sidecarsSection}${topLevelVolumesBlock}${topLevelNetworksBlock}`
 
   private static deployQueue: Promise<void> = Promise.resolve()
   private static activeDeploys = new Set<string>()
+  private static lastCrashTameAt = 0
+  private static crashTameInProgress = false
+  private static reconcileInProgress = false
 
   private async executeRemoteDeploy(
     service: Service,
@@ -2532,6 +2560,11 @@ ${cmdBlock}${sidecarsSection}${topLevelVolumesBlock}${topLevelNetworksBlock}`
               RestartPolicy: { Name: 'unless-stopped' },
               ...(isHostNetwork ? { NetworkMode: 'host' } : { PortBindings: portBindingsObj, ExtraHosts: ['host.docker.internal:host-gateway'] }),
               ...(capAddList.length > 0 ? { CapAdd: capAddList } : {}),
+              ...(config?.HostConfig?.Sysctls &&
+              typeof config.HostConfig.Sysctls === 'object' &&
+              Object.keys(config.HostConfig.Sysctls).length > 0
+                ? { Sysctls: config.HostConfig.Sysctls }
+                : {}),
               ...(shmBytes ? { ShmSize: shmBytes } : {}),
               Binds: defaultBinds,
               ...(this.pendingGpuServices.has(serviceName)
@@ -3053,6 +3086,426 @@ ${cmdBlock}${sidecarsSection}${topLevelVolumesBlock}${topLevelNetworksBlock}`
       logger.error(`Update error for remote service ${serviceName}: ${err.message}`)
       this.broadcast(serviceName, 'error', `Falha ao atualizar no Portainer: ${err.message}`)
       return { success: false, message: `Falha ao atualizar no Portainer: ${err.message}` }
+    }
+  }
+
+  private extractCleanContainerName(rawContainer: any): string {
+    const raw = (rawContainer?.Names && rawContainer.Names[0]) || ''
+    return String(raw).replace(/^\//, '')
+  }
+
+  private async haltCrashLoopContainer(
+    client: AxiosInstance,
+    endpointId: number,
+    containerId: string,
+    labelName: string,
+    reason: string
+  ): Promise<void> {
+    await client
+      .post(
+        `/api/endpoints/${endpointId}/docker/containers/${containerId}/update`,
+        { RestartPolicy: { Name: 'no' } },
+        { timeout: 8000 }
+      )
+      .catch(() => {})
+    await client
+      .post(`/api/endpoints/${endpointId}/docker/containers/${containerId}/stop?t=2`, null, {
+        timeout: 12000,
+      })
+      .catch(() => {})
+    logger.warn(`[PortainerService] ${reason}: Stopped ${labelName} with RestartPolicy=no`)
+  }
+
+  private isRunawayRestartCandidate(cleanName: string, containerEntry: any): boolean {
+    const lower = cleanName.toLowerCase()
+    if (!lower.startsWith('nomad-nomad_') && !lower.startsWith('nomad_')) {
+      return false
+    }
+    const baseServiceName = lower.startsWith('nomad-') ? lower.slice(6) : lower
+    const composeSvc = String(containerEntry?.Labels?.['com.docker.compose.service'] || '').toLowerCase()
+    if (
+      PortainerService.activeDeploys.has(baseServiceName) ||
+      (composeSvc && PortainerService.activeDeploys.has(composeSvc))
+    ) {
+      return false
+    }
+    const cState = String(containerEntry?.State || '').toLowerCase()
+    const cStatus = String(containerEntry?.Status || '').toLowerCase()
+    return cState === 'restarting' || cStatus.includes('restarting')
+  }
+
+  /**
+   * Immediately disable auto-restart and stop any NOMAD-managed remote container
+   * trapped in a runaway restart storm (`RestartCount >= minRestartCount`).
+   */
+  public async tameRunawayCrashLoops(
+    client: AxiosInstance,
+    endpointId: number,
+    rawContainers?: any[],
+    options?: { force?: boolean; minRestartCount?: number }
+  ): Promise<string[]> {
+    const force = Boolean(options?.force)
+    const minRestartCount = options?.minRestartCount ?? 6
+    const now = Date.now()
+    if (!force && (PortainerService.crashTameInProgress || now - PortainerService.lastCrashTameAt < 60_000)) {
+      return []
+    }
+
+    PortainerService.crashTameInProgress = true
+    PortainerService.lastCrashTameAt = now
+    const tamed: string[] = []
+
+    try {
+      let containers = rawContainers
+      if (!Array.isArray(containers)) {
+        const listResp = await client
+          .get(`/api/endpoints/${endpointId}/docker/containers/json?all=1`, { timeout: 10000 })
+          .catch(() => null)
+        containers = Array.isArray(listResp?.data) ? listResp.data : []
+      }
+
+      for (const c of containers) {
+        const cleanName = this.extractCleanContainerName(c)
+        if (!cleanName || !c?.Id || !this.isRunawayRestartCandidate(cleanName, c)) {
+          continue
+        }
+        const inspectResp = await client
+          .get(`/api/endpoints/${endpointId}/docker/containers/${c.Id}/json`, { timeout: 6000 })
+          .catch(() => null)
+        const restartCount = Number(inspectResp?.data?.RestartCount || 0)
+        if (restartCount >= minRestartCount) {
+          await this.haltCrashLoopContainer(
+            client,
+            endpointId,
+            c.Id,
+            cleanName,
+            `Crash-loop brake engaged (Restarts=${restartCount})`
+          )
+          tamed.push(cleanName)
+        }
+      }
+    } catch (err: any) {
+      logger.warn(`[PortainerService] tameRunawayCrashLoops warning: ${err?.message}`)
+    } finally {
+      PortainerService.crashTameInProgress = false
+    }
+
+    return tamed
+  }
+
+  private static readonly PORTAINER_DRIFT_CHECK_SERVICES = new Set([
+    'nomad_maybe',
+    'nomad_outline',
+    'nomad_paperless',
+    'nomad_defguard',
+    'nomad_gramps_web',
+    'nomad_wgeasy',
+    'nomad_speedtest',
+    'nomad_your_spotify',
+    'nomad_crowdsec',
+    'nomad_npm',
+    'nomad_blocky',
+    'nomad_headscale',
+    'nomad_translate',
+    'nomad_weewx',
+    'nomad_bar_assistant',
+    'nomad_fireflyiii',
+    'nomad_invoice_ninja',
+    'nomad_docmost',
+    'nomad_ghostfolio',
+    'nomad_immich',
+    'nomad_tubearchivist',
+    'nomad_whisper',
+    'nomad_meshcore_web',
+    'nomad_netalertx',
+    'nomad_freepbx',
+  ])
+
+  private hasBrokenContainerDrift(
+    serviceName: string,
+    containerListEntry: any,
+    inspectData: any,
+    defunctImages: Set<string>
+  ): boolean {
+    const cState = String(containerListEntry?.State || '').toLowerCase()
+    const cStatus = String(containerListEntry?.Status || '').toLowerCase()
+    const cImage = String(containerListEntry?.Image || '')
+
+    if (
+      cState === 'restarting' ||
+      cState === 'created' ||
+      cState === 'dead' ||
+      cStatus.includes('unhealthy') ||
+      defunctImages.has(cImage)
+    ) {
+      return true
+    }
+
+    if (!inspectData) {
+      return cState === 'exited' && (!/exited \(0\)/i.test(cStatus) || serviceName === 'nomad_headscale')
+    }
+
+    const restartCount = Number(inspectData?.RestartCount || 0)
+    const exitCode = Number(inspectData?.State?.ExitCode || 0)
+    if (restartCount >= 3) return true
+    if (cState === 'exited' && (exitCode !== 0 || restartCount >= 1 || serviceName === 'nomad_headscale')) {
+      return true
+    }
+
+    const envArr: string[] = Array.isArray(inspectData?.Config?.Env) ? inspectData.Config.Env : []
+    const mounts: any[] = Array.isArray(inspectData?.Mounts) ? inspectData.Mounts : []
+    const networks = Object.keys(inspectData?.NetworkSettings?.Networks || {})
+    const cmdArr: string[] = Array.isArray(inspectData?.Config?.Cmd) ? inspectData.Config.Cmd : []
+
+    const hasEnv = (prefix: string) => envArr.some((e) => e.startsWith(prefix))
+    const hasMount = (dest: string) => mounts.some((m) => m?.Destination === dest)
+    const onSharedNet = networks.includes(PortainerService.SHARED_NOMAD_NETWORK)
+
+    const driftChecks: Record<string, () => boolean> = {
+      nomad_maybe: () => !hasEnv('DATABASE_URL='),
+      nomad_outline: () => !hasEnv('COLLABORATION_URL='),
+      nomad_paperless: () => !hasEnv('PAPERLESS_REDIS='),
+      nomad_defguard: () => !hasEnv('DEFGUARD_DB_HOST='),
+      nomad_gramps_web: () => !hasEnv('GRAMPSWEB_TREE='),
+      nomad_wgeasy: () => !hasEnv('WG_HOST='),
+      nomad_speedtest: () => !hasEnv('DB_CONNECTION='),
+      nomad_your_spotify: () => !onSharedNet || !hasEnv('API_ENDPOINT='),
+      nomad_crowdsec: () => !hasMount('/var/lib/crowdsec/data'),
+      nomad_npm: () => !hasMount('/etc/letsencrypt'),
+      nomad_blocky: () => envArr.some((e) => e === 'BLOCKY_CONFIG_FILE=/app/config.yml'),
+      nomad_headscale: () => cmdArr.length === 0,
+      nomad_docmost: () => !hasEnv('DATABASE_URL=') || !onSharedNet,
+      nomad_ghostfolio: () => !hasEnv('DATABASE_URL=') || !onSharedNet,
+      nomad_immich: () => !onSharedNet,
+      nomad_invoice_ninja: () => !onSharedNet,
+      nomad_tubearchivist: () => !hasEnv('ES_URL='),
+      nomad_translate: () => !envArr.some((e) => e.includes('nomad-nomad_kiwix_server')),
+    }
+
+    const checkFn = driftChecks[serviceName]
+    return checkFn ? checkFn() : false
+  }
+
+  /**
+   * Startup / post-upgrade self-healing for Portainer remote containers:
+   * 1. Halts runaway crash loops immediately to relieve remote CPU/RAM pressure.
+   * 2. Detects broken, unhealthy, defunct-image, or pre-blueprint drifted containers.
+   * 3. Sequentially repairs them one-by-one using updated Stack Blueprints & catalog configs.
+   */
+  public async reconcileRemoteContainersOnStartup(): Promise<void> {
+    if (PortainerService.reconcileInProgress) return
+    PortainerService.reconcileInProgress = true
+
+    try {
+      const enabled = await this.isEnabled()
+      const { client, baseUrl, apiKey } = await this.getClient()
+      if (!enabled || !baseUrl || !apiKey) return
+
+      const defaultEpId = await this.getEndpointId()
+      const candidateEpIds = await this.resolveCandidateEndpointIds(client, defaultEpId)
+
+      let resolvedEpId = 0
+      let containersData: any[] | null = null
+      for (const epId of candidateEpIds) {
+        const resp = await client
+          .get(`/api/endpoints/${epId}/docker/containers/json?all=1`, { timeout: 10000 })
+          .catch(() => null)
+        if (Array.isArray(resp?.data)) {
+          resolvedEpId = epId
+          containersData = resp.data
+          break
+        }
+      }
+      if (!resolvedEpId || !containersData) return
+
+      // Phase 0: Immediately break any active runaway restart storm before deploying
+      await this.tameRunawayCrashLoops(client, resolvedEpId, containersData, {
+        force: true,
+        minRestartCount: 2,
+      })
+
+      const { SystemService } = await import('#services/system_service')
+      const { default: ServiceSeeder } = await import('../../database/seeders/service_seeder.js')
+      const currentVersion = SystemService.getAppVersion()
+      const lastReconcileVersion = (await KVStore.getValue('portainer.lastReconcileVersion')) as
+        | string
+        | null
+      const versionUpgraded = currentVersion !== lastReconcileVersion
+
+      const hasListLevelAnomalies = containersData.some((c: any) => {
+        const lower = this.extractCleanContainerName(c).toLowerCase()
+        if (!lower.startsWith('nomad-nomad_') && !lower.startsWith('nomad_')) return false
+        const st = String(c?.State || '').toLowerCase()
+        const statusText = String(c?.Status || '').toLowerCase()
+        return (
+          st === 'restarting' ||
+          st === 'created' ||
+          st === 'dead' ||
+          statusText.includes('unhealthy') ||
+          ServiceSeeder.DEFUNCT_CONTAINER_IMAGES.has(String(c?.Image || '')) ||
+          (st === 'exited' && !/exited \(0\)/i.test(statusText))
+        )
+      })
+
+      if (!versionUpgraded && !hasListLevelAnomalies) {
+        return
+      }
+
+      const curatedServices = await Service.query()
+        .where('is_custom', false)
+        .where((q) => {
+          q.whereNull('is_user_modified').orWhere('is_user_modified', false)
+        })
+
+      const primaryByService = new Map<string, { cleanName: string; entry: any }>()
+      for (const svc of curatedServices) {
+        const expectedPrefixed = `nomad-${svc.service_name}`.toLowerCase()
+        const expectedLegacy = svc.service_name.toLowerCase()
+        const found = containersData.find((c: any) => {
+          const cleanLower = this.extractCleanContainerName(c).toLowerCase()
+          return cleanLower === expectedPrefixed || cleanLower === expectedLegacy
+        })
+        if (found?.Id) {
+          primaryByService.set(svc.service_name, {
+            cleanName: this.extractCleanContainerName(found),
+            entry: found,
+          })
+        }
+      }
+
+      const repairTargets: Array<{
+        service: Service
+        containerId: string
+        cleanName: string
+        cState: string
+      }> = []
+
+      for (const svc of curatedServices) {
+        const match = primaryByService.get(svc.service_name)
+        if (!match || PortainerService.activeDeploys.has(svc.service_name)) continue
+
+        const cState = String(match.entry?.State || '').toLowerCase()
+        const cStatus = String(match.entry?.Status || '').toLowerCase()
+        const cImage = String(match.entry?.Image || '')
+
+        const needsInspect =
+          cState !== 'running' ||
+          cStatus.includes('unhealthy') ||
+          ServiceSeeder.DEFUNCT_CONTAINER_IMAGES.has(cImage) ||
+          (versionUpgraded && PortainerService.PORTAINER_DRIFT_CHECK_SERVICES.has(svc.service_name))
+
+        let inspectData: any = null
+        if (needsInspect) {
+          const inspResp = await client
+            .get(`/api/endpoints/${resolvedEpId}/docker/containers/${match.entry.Id}/json`, {
+              timeout: 8000,
+            })
+            .catch(() => null)
+          inspectData = inspResp?.data || null
+        }
+
+        if (
+          this.hasBrokenContainerDrift(
+            svc.service_name,
+            match.entry,
+            inspectData,
+            ServiceSeeder.DEFUNCT_CONTAINER_IMAGES
+          )
+        ) {
+          repairTargets.push({
+            service: svc,
+            containerId: match.entry.Id,
+            cleanName: match.cleanName,
+            cState,
+          })
+        }
+      }
+
+      if (repairTargets.length > 0) {
+        logger.info(
+          `[PortainerService] Auto-remediation detected ${repairTargets.length} broken/stale container(s): ${repairTargets.map((t) => t.service.service_name).join(', ')}`
+        )
+
+        // Phase 1: Immediately halt broken/restarting/unhealthy targets before starting rebuilds
+        for (const target of repairTargets) {
+          if (target.cState === 'restarting' || target.cState === 'running') {
+            await this.haltCrashLoopContainer(
+              client,
+              resolvedEpId,
+              target.containerId,
+              target.cleanName,
+              'Auto-remediation triage pause'
+            )
+          }
+        }
+
+        // Phase 2: Sort Kiwix before Translate and sequentially redeploy one-by-one
+        repairTargets.sort((a, b) => {
+          if (a.service.service_name === 'nomad_kiwix_server') return -1
+          if (b.service.service_name === 'nomad_kiwix_server') return 1
+          return a.service.service_name.localeCompare(b.service.service_name)
+        })
+
+        const { DockerService } = await import('#services/docker_service')
+        const dockerService = new DockerService()
+        const hostIp = (await this.getTargetHost()) || PortainerService.DEFAULT_TARGET_HOST
+
+        for (const target of repairTargets) {
+          if (PortainerService.activeDeploys.has(target.service.service_name)) continue
+
+          const freshSvc = await Service.query()
+            .where('service_name', target.service.service_name)
+            .first()
+            .catch(() => null)
+          if (!freshSvc || freshSvc.is_custom || freshSvc.is_user_modified) continue
+
+          let config: any = {}
+          try {
+            if (freshSvc.container_config) {
+              config =
+                typeof freshSvc.container_config === 'string'
+                  ? JSON.parse(freshSvc.container_config)
+                  : freshSvc.container_config
+            }
+          } catch {
+            config = {}
+          }
+
+          const hostPort = this.resolveNumericPort(freshSvc.ui_location, config, freshSvc.service_name)
+          const preinstall = await dockerService.prepareServicePreinstall(freshSvc.service_name)
+          freshSvc.installation_status = 'installing'
+          await freshSvc.save().catch(() => {})
+
+          logger.info(
+            `[PortainerService] Auto-remediation rebuilding ${freshSvc.service_name} (${target.cleanName})...`
+          )
+          await this.executeRemoteDeploy(
+            freshSvc,
+            config,
+            hostPort,
+            hostIp,
+            client,
+            apiKey,
+            resolvedEpId,
+            preinstall
+          ).catch((err: any) => {
+            logger.warn(
+              `[PortainerService] Auto-remediation failed for ${freshSvc.service_name}: ${err?.message}`
+            )
+          })
+
+          // Gentle cooldown between rebuilds so the remote Docker host never saturates CPU/RAM
+          await new Promise((r) => setTimeout(r, 4000))
+        }
+      }
+
+      if (currentVersion && currentVersion !== 'dev' && currentVersion !== '0.0.0') {
+        await KVStore.setValue('portainer.lastReconcileVersion', currentVersion).catch(() => {})
+      }
+    } catch (err: any) {
+      logger.warn(`[PortainerService] reconcileRemoteContainersOnStartup warning: ${err?.message}`)
+    } finally {
+      PortainerService.reconcileInProgress = false
     }
   }
 }

@@ -556,6 +556,7 @@ test('CSS animations, hover cascade, reduced-motion, contrast and release metada
   // 3) All custom animation classes referenced in TSX exist in app.css
   for (const cls of [
     'nomad-page-enter',
+    'nomad-update-pill',
     'nomad-split-wing-left',
     'nomad-split-wing-right',
     'nomad-split-pre-exit',
@@ -613,11 +614,11 @@ test('CSS animations, hover cascade, reduced-motion, contrast and release metada
     assert.ok(routes.includes(`documented(${snippet}`), `Missing documented() wrapper for ${snippet}`)
   }
 
-  // 8) Triple version sync to v1.0.40 across workflow and boot gate
-  assert.match(workflow, /# Build release trigger: v1\.0\.40/)
-  assert.match(workflow, /default: '1\.0\.40-nexus'/)
-  assert.match(workflow, /inputs\.version \|\| '1\.0\.40-nexus'/)
-  assert.match(bootGate, /:\s*'v1\.0\.40'/)
+  // 8) Triple version sync to v1.0.41 across workflow and boot gate
+  assert.match(workflow, /# Build release trigger: v1\.0\.41/)
+  assert.match(workflow, /default: '1\.0\.41-nexus'/)
+  assert.match(workflow, /inputs\.version \|\| '1\.0\.41-nexus'/)
+  assert.match(bootGate, /:\s*'v1\.0\.41'/)
 
   // 9) Bulk install & Portainer hardening checks (real sequential wait + port collision resolution + catalog port uniqueness + live progress polling)
   const [bulkModal, supplyDepot, portainerSvc, seeder, systemSvc] = await Promise.all([
@@ -726,6 +727,9 @@ test('stack blueprints, starter configs, multi-port and 8080 container port fixe
     'nomad_bar_assistant',
     'nomad_tubearchivist',
     'nomad_invoice_ninja',
+    'nomad_paperless',
+    'nomad_defguard',
+    'nomad_your_spotify',
   ]) {
     const bp = bpMod.getStackBlueprint(sName)
     assert.ok(bp, `Missing multi-service stack blueprint for ${sName}`)
@@ -746,12 +750,12 @@ test('stack blueprints, starter configs, multi-port and 8080 container port fixe
     assert.equal(parsed?.networks?.default?.external, true)
   }
 
-  for (const cfgApp of ['nomad_blocky', 'nomad_headscale', 'nomad_frigate', 'nomad_weewx']) {
+  for (const cfgApp of ['nomad_blocky', 'nomad_headscale', 'nomad_frigate']) {
     const cfg = bpMod.getStarterConfigFile(cfgApp, '192.168.1.10', '8625')
     assert.ok(cfg && cfg.content.trim().length > 10, `Missing starter config for ${cfgApp}`)
   }
 
-  // Verify single-service blueprints solving all 13 batch install failures
+  // Verify single-service blueprints + WeeWX weectl station create + Bar Assistant Redis/32-byte APP_KEY/UID 33
   const invBp = bpMod.getStackBlueprint('nomad_inventree')
   assert.ok(invBp?.composeEntrypointOverride?.join(' ').includes('invoke migrate'))
   assert.doesNotMatch(invBp!.composeEntrypointOverride!.join(' '), /\$/)
@@ -759,13 +763,82 @@ test('stack blueprints, starter configs, multi-port and 8080 container port fixe
   assert.ok(bpMod.getStackBlueprint('nomad_woodpecker')?.extraEnv('192.168.1.10', '8880').includes('WOODPECKER_GITHUB=true'))
   assert.ok(bpMod.getStackBlueprint('nomad_vikunja')?.extraEnv('192.168.1.10', '8950').includes('VIKUNJA_SERVICE_PUBLICURL=http://192.168.1.10:8950/'))
   assert.ok(bpMod.getStackBlueprint('nomad_netalertx')?.extraEnv('192.168.1.10', '8610').includes('PORT=8610'))
-  assert.equal(bpMod.getStackBlueprint('nomad_weewx')?.initUidGid, '1000:1000')
 
-  // Verify fixed container ports, Orthanc jodogne replacement, 3x pull retry, 304 ignore, shared bridge net, fallback entrypoint, and animation onAnimationEnd
+  const weewxBp = bpMod.getStackBlueprint('nomad_weewx')
+  assert.equal(weewxBp?.initUidGid, '1000:1000')
+  assert.ok(weewxBp?.composeEntrypointOverride?.join(' ').includes('weectl station create'))
+  assert.equal(bpMod.getStarterConfigFile('nomad_weewx', '192.168.1.10', '8915'), null)
+
+  const barBp = bpMod.getStackBlueprint('nomad_bar_assistant')
+  assert.equal(barBp?.initUidGid, '33:33')
+  const barEnv = barBp!.extraEnv('192.168.1.10', '8560')
+  const barAppKey = barEnv.find((e: string) => e.startsWith('APP_KEY=base64:'))?.split('base64:')[1] || ''
+  assert.equal(Buffer.from(barAppKey, 'base64').length, 32, 'Laravel APP_KEY must decode to exact 32 bytes (AES-256)')
+  assert.ok(barEnv.some((e: string) => e.startsWith('REDIS_HOST=')))
+
+  // Verify v1.0.41 live-audited app blueprints (Maybe, Outline, DefGuard, Paperless, Gramps Web, WG-Easy, Speedtest, Your_Spotify, Translate)
+  const maybeEnv = bpMod.getStackBlueprint('nomad_maybe')!.extraEnv('192.168.1.10', '8580')
+  assert.ok(maybeEnv.includes('DATABASE_URL=postgres://postgres:nomad_db_pass@nomad_maybe-db:5432/maybe_production'))
+  assert.ok(maybeEnv.includes('DB_HOST=nomad_maybe-db'))
+
+  const outlineEnv = bpMod.getStackBlueprint('nomad_outline')!.extraEnv('192.168.1.10', '8510')
+  assert.ok(outlineEnv.includes('COLLABORATION_URL=http://192.168.1.10:8510'))
+
+  const defguardEnv = bpMod.getStackBlueprint('nomad_defguard')!.extraEnv('192.168.1.10', '8620')
+  const defguardSecret = defguardEnv.find((e: string) => e.startsWith('DEFGUARD_SECRET_KEY='))?.split('=')[1] || ''
+  assert.equal(defguardSecret.length, 64)
+  assert.ok(defguardEnv.includes('DEFGUARD_HTTP_PORT=80'))
+  assert.ok(defguardEnv.includes('DEFGUARD_COOKIE_INSECURE=true'))
+
+  const grampsEnv = bpMod.getStackBlueprint('nomad_gramps_web')!.extraEnv('192.168.1.10', '8555')
+  assert.ok(grampsEnv.includes('TREE=nomad'))
+  assert.ok(grampsEnv.includes('GRAMPSWEB_TREE=nomad'))
+
+  const wgEnv = bpMod.getStackBlueprint('nomad_wgeasy')!.extraEnv('192.168.1.10', '8630')
+  assert.ok(wgEnv.includes('WG_HOST=192.168.1.10'))
+  assert.ok(wgEnv.includes('INSECURE=true'))
+
+  const speedEnv = bpMod.getStackBlueprint('nomad_speedtest')!.extraEnv('192.168.1.10', '8685')
+  assert.ok(speedEnv.includes('DB_CONNECTION=sqlite'))
+  const speedKey = speedEnv.find((e: string) => e.startsWith('APP_KEY=base64:'))?.split('base64:')[1] || ''
+  assert.equal(Buffer.from(speedKey, 'base64').length, 32)
+
+  const spotifyBp = bpMod.getStackBlueprint('nomad_your_spotify')!
+  assert.ok(spotifyBp.extraEnv('192.168.1.10', '8740').includes('API_ENDPOINT=http://192.168.1.10:8741'))
+  assert.ok(spotifyBp.sidecarServicesYaml('nomad_your_spotify', '192.168.1.10', '8740').includes('yooooomi/your_spotify_server:latest'))
+
+  const translateEnv = bpMod.getStackBlueprint('nomad_translate')!.extraEnv('192.168.1.10', '8460')
+  assert.ok(translateEnv.includes('KIWIX=http://nomad-nomad_kiwix_server:8080'))
+
+  const [adonisRc, remediationProvider, bulkUninstallModal, bulkQueueFrame, supplyDepotPage] = await Promise.all([
+    readFile(new URL('../../adonisrc.ts', import.meta.url), 'utf8'),
+    readFile(new URL('../../providers/portainer_remediation_provider.ts', import.meta.url), 'utf8'),
+    readFile(new URL('../../inertia/components/BulkUninstallModal.tsx', import.meta.url), 'utf8'),
+    readFile(new URL('../../inertia/components/BulkQueueFrame.tsx', import.meta.url), 'utf8'),
+    readFile(new URL('../../inertia/pages/supply-depot.tsx', import.meta.url), 'utf8'),
+  ])
+  assert.match(adonisRc, /#providers\/portainer_remediation_provider/)
+  assert.match(remediationProvider, /reconcileRemoteContainersOnStartup/)
+  assert.match(bulkUninstallModal, /api\.uninstallService/)
+  assert.match(bulkUninstallModal, /api\.deleteCustomApp/)
+  assert.match(bulkUninstallModal, /Remover também as imagens Docker/)
+  assert.match(bulkQueueFrame, /Interromper Fila/)
+  assert.match(supplyDepotPage, /Desinstalação em Massa/)
+  assert.match(supplyDepotPage, /Desinstalar Todos Agora/)
+  assert.match(supplyDepotPage, /bulkVariant="uninstall"/)
+  assert.match(supplyDepotPage, /if \(bulkUninstallModalOpen\) return/)
+
+  // Verify fixed container ports, Orthanc jodogne replacement, 3x pull retry, 304 ignore, shared bridge net, fallback entrypoint, auto-remediation, and seamless cross-morph animations
   const homeTsx = await readFile(new URL('../../inertia/pages/home.tsx', import.meta.url), 'utf8')
   assert.match(homeTsx, /onAnimationEnd=\{\(e\) =>/)
-  assert.match(homeTsx, /advanceDiskPhase/)
+  assert.match(homeTsx, /finishDiskMorph/)
+  assert.match(homeTsx, /col-start-1 row-start-1/)
+  assert.match(homeTsx, /nomad-update-pill/)
   assert.match(seeder, /BLOCKY_CONFIG_FILE=\/app\/config\/config\.yml/)
+  assert.match(seeder, /\/var\/lib\/crowdsec\/data/)
+  assert.match(seeder, /\/etc\/letsencrypt/)
+  assert.match(seeder, /net\.ipv4\.conf\.all\.src_valid_mark/)
+  assert.match(seeder, /public static readonly DEFUNCT_CONTAINER_IMAGES/)
   assert.match(seeder, /jbtronics\/part-db1:latest/)
   assert.match(seeder, /jodogne\/orthanc-plugins:latest/)
   assert.match(seeder, /NetworkMode:\s*'host'/)
@@ -779,6 +852,10 @@ test('stack blueprints, starter configs, multi-port and 8080 container port fixe
   assert.match(portainerSvc, /ensureSharedNomadNetwork/)
   assert.match(portainerSvc, /ensureStorageOwnershipAndStarterConfig/)
   assert.match(portainerSvc, /composeEntrypointOverride/)
+  assert.match(portainerSvc, /sysctls:/)
+  assert.match(portainerSvc, /nomad-nomad_meshcore_web-etc-nginx-conf-d-default-conf/)
+  assert.match(portainerSvc, /tameRunawayCrashLoops/)
+  assert.match(portainerSvc, /reconcileRemoteContainersOnStartup/)
   assert.match(portainerSvc, /port is already allocated/)
   assert.match(portainerSvc, /maxPullAttempts = 3/)
   assert.match(portainerSvc, /httpStatus === 304/)

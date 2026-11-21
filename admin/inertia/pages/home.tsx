@@ -31,6 +31,7 @@ import {
   IconBrain,
   IconDownload,
   IconArrowRight,
+  IconRefresh,
 } from '@tabler/icons-react'
 import axios from 'axios'
 import { Head, Link, router, usePage } from '@inertiajs/react'
@@ -388,6 +389,9 @@ export default function Home(props: {
     }
     return DEFAULT_DASHBOARD_CONFIG
   })
+  const dashboardConfigRef = useRef(dashboardConfig)
+  dashboardConfigRef.current = dashboardConfig
+  const [updateBannerDismissed, setUpdateBannerDismissed] = useState(false)
   const [dashboardModalOpen, setDashboardModalOpen] = useState(false)
 
   const saveDashboardConfig = (next: DashboardConfig) => {
@@ -557,9 +561,9 @@ export default function Home(props: {
   : null
   const activeDownloadPercent = currentActiveJob ? Math.round(currentActiveJob.progress || 0) : 0
 
-  type SplitMergePhase = 'idle' | 'splitting-out' | 'merging-out' | 'split-in' | 'merge-in'
-  const [diskTransitionPhase, setDiskTransitionPhase] = useState<SplitMergePhase>('idle')
-  const [cpuTransitionPhase, setCpuTransitionPhase] = useState<SplitMergePhase>('idle')
+  type MorphAnimState = 'idle' | 'to-split' | 'to-merged'
+  const [diskAnimState, setDiskAnimState] = useState<MorphAnimState>('idle')
+  const [cpuAnimState, setCpuAnimState] = useState<MorphAnimState>('idle')
   const diskAnimTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const cpuAnimTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const diskPhaseTokenRef = useRef(0)
@@ -572,67 +576,53 @@ export default function Home(props: {
     }
   }, [])
 
-  const advanceDiskPhase = (expectedPhase: SplitMergePhase, token: number) => {
-    if (diskPhaseTokenRef.current !== token) return
+  const finishDiskMorph = (expectedState: MorphAnimState, token: number) => {
+    if (diskPhaseTokenRef.current !== token || expectedState === 'idle') return
     diskPhaseTokenRef.current += 1
-    const nextToken = diskPhaseTokenRef.current
     if (diskAnimTimerRef.current) {
       clearTimeout(diskAnimTimerRef.current)
       diskAnimTimerRef.current = null
     }
-    if (expectedPhase === 'splitting-out') {
-      saveDashboardConfig({ ...dashboardConfig, poolsCombined: false })
-      setDiskTransitionPhase('split-in')
-      diskAnimTimerRef.current = setTimeout(() => advanceDiskPhase('split-in', nextToken), 1500)
-    } else if (expectedPhase === 'merging-out') {
-      saveDashboardConfig({ ...dashboardConfig, poolsCombined: true })
-      setDiskTransitionPhase('merge-in')
-      diskAnimTimerRef.current = setTimeout(() => advanceDiskPhase('merge-in', nextToken), 1500)
-    } else {
-      setDiskTransitionPhase('idle')
-    }
+    saveDashboardConfig({
+      ...dashboardConfigRef.current,
+      poolsCombined: expectedState === 'to-merged',
+    })
+    setDiskAnimState('idle')
   }
 
-  const advanceCpuPhase = (expectedPhase: SplitMergePhase, token: number) => {
-    if (cpuPhaseTokenRef.current !== token) return
+  const finishCpuMorph = (expectedState: MorphAnimState, token: number) => {
+    if (cpuPhaseTokenRef.current !== token || expectedState === 'idle') return
     cpuPhaseTokenRef.current += 1
-    const nextToken = cpuPhaseTokenRef.current
     if (cpuAnimTimerRef.current) {
       clearTimeout(cpuAnimTimerRef.current)
       cpuAnimTimerRef.current = null
     }
-    if (expectedPhase === 'splitting-out') {
-      saveDashboardConfig({ ...dashboardConfig, cpuCombined: false })
-      setCpuTransitionPhase('split-in')
-      cpuAnimTimerRef.current = setTimeout(() => advanceCpuPhase('split-in', nextToken), 1500)
-    } else if (expectedPhase === 'merging-out') {
-      saveDashboardConfig({ ...dashboardConfig, cpuCombined: true })
-      setCpuTransitionPhase('merge-in')
-      cpuAnimTimerRef.current = setTimeout(() => advanceCpuPhase('merge-in', nextToken), 1500)
-    } else {
-      setCpuTransitionPhase('idle')
-    }
+    saveDashboardConfig({
+      ...dashboardConfigRef.current,
+      cpuCombined: expectedState === 'to-merged',
+    })
+    setCpuAnimState('idle')
   }
 
   const handleTogglePoolsCombined = () => {
+    if (diskAnimState !== 'idle') return
     if (diskAnimTimerRef.current) clearTimeout(diskAnimTimerRef.current)
-    const willSplit = dashboardConfig.poolsCombined
-    const phase: SplitMergePhase = willSplit ? 'splitting-out' : 'merging-out'
+    const nextState: MorphAnimState = dashboardConfigRef.current.poolsCombined ? 'to-split' : 'to-merged'
     diskPhaseTokenRef.current += 1
     const token = diskPhaseTokenRef.current
-    setDiskTransitionPhase(phase)
-    // Fallback generoso: só dispara caso a aba fique em segundo plano; normalmente onAnimationEnd avança no último frame real
-    diskAnimTimerRef.current = setTimeout(() => advanceDiskPhase(phase, token), 1300)
+    setDiskAnimState(nextState)
+    // Timer de segurança apenas caso a aba esteja inativa; normalmente onAnimationEnd conclui em 850ms ao final real
+    diskAnimTimerRef.current = setTimeout(() => finishDiskMorph(nextState, token), 1200)
   }
 
   const handleToggleCpuCombined = () => {
+    if (cpuAnimState !== 'idle') return
     if (cpuAnimTimerRef.current) clearTimeout(cpuAnimTimerRef.current)
-    const willSplit = dashboardConfig.cpuCombined
-    const phase: SplitMergePhase = willSplit ? 'splitting-out' : 'merging-out'
+    const nextState: MorphAnimState = dashboardConfigRef.current.cpuCombined ? 'to-split' : 'to-merged'
     cpuPhaseTokenRef.current += 1
     const token = cpuPhaseTokenRef.current
-    setCpuTransitionPhase(phase)
-    cpuAnimTimerRef.current = setTimeout(() => advanceCpuPhase(phase, token), 1300)
+    setCpuAnimState(nextState)
+    cpuAnimTimerRef.current = setTimeout(() => finishCpuMorph(nextState, token), 1200)
   }
 
   const handleOpenAiHub = () => {
@@ -791,20 +781,44 @@ export default function Home(props: {
   return (
     <AppLayout>
       <Head title="Centro de Comando" />
-      {updateInfo?.updateAvailable && (
-        <div className="flex justify-center items-center px-4 sm:px-6 pt-4 w-full max-w-[85rem] mx-auto">
-          <Alert
-            title="Uma nova atualização está disponível!"
-            type="info-inverted"
-            variant="solid"
-            className="w-full"
-            buttonProps={{
-              variant: 'primary',
-              children: 'Ver Atualizações',
-              icon: 'IconSettings',
-              onClick: () => router.visit('/settings/update'),
-            }}
-          />
+      {updateInfo?.updateAvailable && !updateBannerDismissed && (
+        <div className="px-4 sm:px-6 pt-3 w-full max-w-[85rem] mx-auto">
+          <div className="nomad-update-pill relative overflow-hidden flex items-center justify-between gap-3 px-3.5 py-2 rounded-lg border border-desert-orange/45 bg-surface-primary/95 shadow-sm">
+            <div className="flex items-center gap-2.5 min-w-0 text-xs">
+              <span className="relative flex h-2 w-2 shrink-0">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-desert-orange opacity-75" />
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-desert-orange" />
+              </span>
+              <span className="px-1.5 py-0.5 rounded bg-desert-orange/15 border border-desert-orange/30 text-desert-orange font-mono font-bold uppercase tracking-wider shrink-0">
+                {updateInfo.latestVersion
+                  ? `v${String(updateInfo.latestVersion).replace(/^v/i, '')}`
+                  : 'ATUALIZAÇÃO'}
+              </span>
+              <span className="text-text-primary font-medium truncate">
+                Nova versão do N.O.M.A.D. disponível para instalação
+              </span>
+            </div>
+            <div className="flex items-center gap-1.5 shrink-0">
+              <button
+                type="button"
+                onClick={() => router.visit('/settings/update')}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-desert-orange hover:bg-desert-orange-light text-white text-xs font-semibold transition-all cursor-pointer shadow-xs"
+              >
+                <IconRefresh size={13} />
+                <span>Atualizar</span>
+                <IconArrowRight size={13} />
+              </button>
+              <button
+                type="button"
+                onClick={() => setUpdateBannerDismissed(true)}
+                aria-label="Ocultar aviso"
+                title="Ocultar aviso"
+                className="p-1 rounded-md text-text-muted hover:text-text-primary hover:bg-surface-secondary transition-colors cursor-pointer"
+              >
+                <IconX size={14} />
+              </button>
+            </div>
+          </div>
         </div>
       )}
       <WhatsNewBanner />
@@ -925,7 +939,7 @@ export default function Home(props: {
                     <button
                       type="button"
                       onClick={handleTogglePoolsCombined}
-                      disabled={diskTransitionPhase !== 'idle'}
+                      disabled={diskAnimState !== 'idle'}
                       title={
                         dashboardConfig.poolsCombined
                           ? 'Separar os discos físicos em cartões individuais com animação'
@@ -933,12 +947,12 @@ export default function Home(props: {
                       }
                       className="group px-3 py-1 rounded-md text-xs font-semibold border border-border-default bg-surface-secondary hover:border-desert-tan text-text-secondary hover:text-text-primary transition-all cursor-pointer inline-flex items-center gap-1.5 disabled:opacity-75"
                     >
-                      {diskTransitionPhase === 'splitting-out' || diskTransitionPhase === 'split-in' ? (
+                      {diskAnimState === 'to-split' ? (
                         <>
                           <IconLayoutGrid size={14} className="text-desert-tan" />
                           <span>Separando...</span>
                         </>
-                      ) : diskTransitionPhase === 'merging-out' || diskTransitionPhase === 'merge-in' ? (
+                      ) : diskAnimState === 'to-merged' ? (
                         <>
                           <IconBox size={14} className="text-desert-tan" />
                           <span>Unificando...</span>
@@ -968,254 +982,281 @@ export default function Home(props: {
                   <div className="rounded-xl border border-border-default bg-surface-primary p-5 text-xs text-text-muted">
                     Coletando telemetria real dos discos físicos conectados...
                   </div>
-                ) : dashboardConfig.poolsCombined ? (
-                  /* NOVA VISUALIZAÇÃO UNIFICADA REAL (1 ÚNICO CARD COESO) */
-                  <div
-                    onAnimationEnd={(e) => {
-                      if (e.target !== e.currentTarget || !e.animationName.startsWith('nomad-')) return
-                      if (diskTransitionPhase === 'splitting-out' || diskTransitionPhase === 'merge-in') {
-                        advanceDiskPhase(diskTransitionPhase, diskPhaseTokenRef.current)
-                      }
-                    }}
-                    className={`rounded-xl border border-border-default border-t-2 border-t-desert-tan bg-surface-primary p-4 sm:p-5 shadow-sm transition-colors ${
-                      diskTransitionPhase === 'splitting-out'
-                        ? 'nomad-split-pre-exit'
-                        : diskTransitionPhase === 'merge-in'
-                          ? 'nomad-merge-lock'
-                          : 'nomad-telemetry-panel'
-                    }`}
-                  >
-                    {diskTransitionPhase === 'splitting-out' && (
-                      <span className="nomad-cleave-beam" aria-hidden="true" />
-                    )}
-                    <div className="flex flex-col lg:flex-row lg:items-center gap-5">
-                      {/* Bloco Esquerdo: Gauge Consolidado Único */}
-                      <div className="flex items-center gap-4 lg:w-[300px] lg:pr-5 lg:border-r border-border-default/60 shrink-0">
-                        <CircularGauge
-                          percentage={combinedPercent}
-                          size={96}
-                          strokeWidth={9}
-                          color={combinedGaugeColor}
-                          label={`${combinedPercent.toFixed(1)}%`}
-                          sublabel="TOTAL"
-                        />
-                        <div className="space-y-1 min-w-0">
-                          <span className="inline-flex items-center gap-1.5 text-xs font-semibold px-2 py-0.5 rounded bg-surface-secondary border border-border-subtle text-desert-tan">
-                            {displayMountTargets.length}{' '}
-                            {displayMountTargets.length === 1 ? 'Disco Conectado' : 'Discos Unificados'}
-                          </span>
-                          <div className="text-base font-bold text-text-primary">
-                            Pool Global
-                          </div>
-                          <div className="text-xs text-text-secondary font-mono tabular-nums">
-                            Usado: <strong className="text-text-primary">{formatBytes(usedCombinedBytes)}</strong>
-                          </div>
-                          <div className="text-xs text-text-secondary font-mono tabular-nums">
-                            Livre: <strong className="text-emerald-400">{formatBytes(freeCombinedBytes)}</strong> de {formatBytes(totalCombinedBytes)}
+                ) : (() => {
+                  const showUnifiedDisk = dashboardConfig.poolsCombined || diskAnimState !== 'idle'
+                  const showSeparatedDisk = !dashboardConfig.poolsCombined || diskAnimState !== 'idle'
+
+                  const unifiedDiskNode = showUnifiedDisk ? (
+                    <div
+                      onAnimationEnd={(e) => {
+                        if (e.target !== e.currentTarget || e.animationName !== 'nomad-merge-lock') return
+                        if (diskAnimState === 'to-merged') {
+                          finishDiskMorph('to-merged', diskPhaseTokenRef.current)
+                        }
+                      }}
+                      className={`${
+                        diskAnimState !== 'idle' ? 'col-start-1 row-start-1 w-full ' : ''
+                      }rounded-xl border border-border-default border-t-2 border-t-desert-tan bg-surface-primary p-4 sm:p-5 shadow-sm ${
+                        diskAnimState === 'to-split'
+                          ? 'pointer-events-none nomad-split-pre-exit'
+                          : diskAnimState === 'to-merged'
+                            ? 'z-10 nomad-merge-lock'
+                            : 'nomad-telemetry-panel'
+                      }`}
+                    >
+                      {diskAnimState === 'to-split' && (
+                        <span className="nomad-cleave-beam" aria-hidden="true" />
+                      )}
+                      <div className="flex flex-col lg:flex-row lg:items-center gap-5">
+                        {/* Bloco Esquerdo: Gauge Consolidado Único */}
+                        <div className="flex items-center gap-4 lg:w-[300px] lg:pr-5 lg:border-r border-border-default/60 shrink-0">
+                          <CircularGauge
+                            percentage={combinedPercent}
+                            size={96}
+                            strokeWidth={9}
+                            color={combinedGaugeColor}
+                            label={`${combinedPercent.toFixed(1)}%`}
+                            sublabel="TOTAL"
+                          />
+                          <div className="space-y-1 min-w-0">
+                            <span className="inline-flex items-center gap-1.5 text-xs font-semibold px-2 py-0.5 rounded bg-surface-secondary border border-border-subtle text-desert-tan">
+                              {displayMountTargets.length}{' '}
+                              {displayMountTargets.length === 1 ? 'Disco Conectado' : 'Discos Unificados'}
+                            </span>
+                            <div className="text-base font-bold text-text-primary">
+                              Pool Global
+                            </div>
+                            <div className="text-xs text-text-secondary font-mono tabular-nums">
+                              Usado: <strong className="text-text-primary">{formatBytes(usedCombinedBytes)}</strong>
+                            </div>
+                            <div className="text-xs text-text-secondary font-mono tabular-nums">
+                              Livre: <strong className="text-emerald-400">{formatBytes(freeCombinedBytes)}</strong> de {formatBytes(totalCombinedBytes)}
+                            </div>
                           </div>
                         </div>
-                      </div>
 
-                      {/* Bloco Direito: Barra Segmentada Única + Lista Compacta de Volumes */}
-                      <div className="flex-1 min-w-0 space-y-3">
-                        {/* Barra horizontal multi-disco comparativa */}
-                        <div>
-                          <div className="flex items-center justify-between text-xs text-text-secondary mb-1.5">
-                            <span className="font-medium text-text-primary">
-                              Ocupação Consolidada ({formatBytes(usedCombinedBytes)} / {formatBytes(totalCombinedBytes)})
-                            </span>
-                            <span className="font-mono tabular-nums text-emerald-400 font-semibold">
-                              {formatBytes(freeCombinedBytes)} disponíveis
-                            </span>
+                        {/* Bloco Direito: Barra Segmentada Única + Lista Compacta de Volumes */}
+                        <div className="flex-1 min-w-0 space-y-3">
+                          {/* Barra horizontal multi-disco comparativa */}
+                          <div>
+                            <div className="flex items-center justify-between text-xs text-text-secondary mb-1.5">
+                              <span className="font-medium text-text-primary">
+                                Ocupação Consolidada ({formatBytes(usedCombinedBytes)} / {formatBytes(totalCombinedBytes)})
+                              </span>
+                              <span className="font-mono tabular-nums text-emerald-400 font-semibold">
+                                {formatBytes(freeCombinedBytes)} disponíveis
+                              </span>
+                            </div>
+                            <div className="h-3 w-full rounded-full bg-surface-secondary border border-border-default/60 overflow-hidden flex">
+                              {displayMountTargets.map((target, idx) => {
+                                const free = target.freeBytes || 0
+                                const total = target.totalBytes || 1
+                                const used = Math.max(0, total - free)
+                                const sharePct = totalCombinedBytes > 0 ? (used / totalCombinedBytes) * 100 : 0
+                                const palette = ['#06b6d4', '#c2a677', '#22c55e', '#f59e0b']
+                                if (sharePct <= 0) return null
+                                return (
+                                  <div
+                                    key={target.path}
+                                    title={`${target.path}: ${formatBytes(used)} em uso`}
+                                    className="h-full transition-all duration-700 nomad-progress-shimmer"
+                                    style={{
+                                      width: `${Math.max(sharePct, 1)}%`,
+                                      backgroundColor: palette[idx % palette.length],
+                                    }}
+                                  />
+                                )
+                              })}
+                            </div>
                           </div>
-                          <div className="h-3 w-full rounded-full bg-surface-secondary border border-border-default/60 overflow-hidden flex">
+
+                          {/* Linhas compactas por volume dentro do mesmo card */}
+                          <div className="divide-y divide-border-subtle/70 rounded-lg border border-border-subtle bg-surface-secondary/60">
                             {displayMountTargets.map((target, idx) => {
-                              const free = target.freeBytes || 0
                               const total = target.totalBytes || 1
+                              const free = target.freeBytes || 0
                               const used = Math.max(0, total - free)
-                              const sharePct = totalCombinedBytes > 0 ? (used / totalCombinedBytes) * 100 : 0
-                              const palette = ['#06b6d4', '#c2a677', '#22c55e', '#f59e0b']
-                              if (sharePct <= 0) return null
+                              const usedPercent = Math.min(Math.max((used / total) * 100, 0), 100)
+                              const isInternal =
+                                target.path === '/app/storage' ||
+                                target.path === '/storage' ||
+                                target.label.toLowerCase().includes('interno')
+                              const poolTitle = isInternal
+                                ? 'NVMe Sistema (Interno)'
+                                : `Disco Secundário (HD ${idx})`
+                              const dotPalette = ['bg-cyan-400', 'bg-desert-tan', 'bg-emerald-400', 'bg-amber-400']
+
                               return (
                                 <div
                                   key={target.path}
-                                  title={`${target.path}: ${formatBytes(used)} em uso`}
-                                  className="h-full transition-all duration-700 nomad-progress-shimmer"
-                                  style={{
-                                    width: `${Math.max(sharePct, 1)}%`,
-                                    backgroundColor: palette[idx % palette.length],
-                                  }}
-                                />
+                                  className="px-3 py-2 flex flex-wrap items-center justify-between gap-2 text-xs"
+                                >
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${dotPalette[idx % dotPalette.length]}`} />
+                                    <span className="font-semibold text-text-primary">{poolTitle}</span>
+                                    <code className="px-1.5 py-0.5 rounded bg-surface-primary border border-border-subtle font-mono text-text-secondary">
+                                      {target.path}
+                                    </code>
+                                    <span className="hidden sm:inline text-text-muted">
+                                      • {isInternal ? 'Sistema & Docker' : 'Dados & Acervo'}
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center gap-4 font-mono tabular-nums ml-auto">
+                                    <span className="text-text-secondary">
+                                      <strong className="text-text-primary">{formatBytes(used)}</strong> / {formatBytes(total)}
+                                    </span>
+                                    <span className="text-emerald-400 font-semibold hidden sm:inline">
+                                      {formatBytes(free)} livres
+                                    </span>
+                                    <span className="px-2 py-0.5 rounded bg-surface-primary border border-border-default font-bold text-text-primary w-14 text-center">
+                                      {usedPercent.toFixed(1)}%
+                                    </span>
+                                  </div>
+                                </div>
                               )
                             })}
                           </div>
                         </div>
+                      </div>
 
-                        {/* Linhas compactas por volume dentro do mesmo card */}
-                        <div className="divide-y divide-border-subtle/70 rounded-lg border border-border-subtle bg-surface-secondary/60">
-                          {displayMountTargets.map((target, idx) => {
-                            const total = target.totalBytes || 1
-                            const free = target.freeBytes || 0
-                            const used = Math.max(0, total - free)
-                            const usedPercent = Math.min(Math.max((used / total) * 100, 0), 100)
-                            const isInternal =
-                              target.path === '/app/storage' ||
-                              target.path === '/storage' ||
-                              target.label.toLowerCase().includes('interno')
-                            const poolTitle = isInternal
-                              ? 'NVMe Sistema (Interno)'
-                              : `Disco Secundário (HD ${idx})`
-                            const dotPalette = ['bg-cyan-400', 'bg-desert-tan', 'bg-emerald-400', 'bg-amber-400']
-
-                            return (
-                              <div
-                                key={target.path}
-                                className="px-3 py-2 flex flex-wrap items-center justify-between gap-2 text-xs"
-                              >
-                                <div className="flex items-center gap-2 min-w-0">
-                                  <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${dotPalette[idx % dotPalette.length]}`} />
-                                  <span className="font-semibold text-text-primary">{poolTitle}</span>
-                                  <code className="px-1.5 py-0.5 rounded bg-surface-primary border border-border-subtle font-mono text-text-secondary">
-                                    {target.path}
-                                  </code>
-                                  <span className="hidden sm:inline text-text-muted">
-                                    • {isInternal ? 'Sistema & Docker' : 'Dados & Acervo'}
-                                  </span>
-                                </div>
-                                <div className="flex items-center gap-4 font-mono tabular-nums ml-auto">
-                                  <span className="text-text-secondary">
-                                    <strong className="text-text-primary">{formatBytes(used)}</strong> / {formatBytes(total)}
-                                  </span>
-                                  <span className="text-emerald-400 font-semibold hidden sm:inline">
-                                    {formatBytes(free)} livres
-                                  </span>
-                                  <span className="px-2 py-0.5 rounded bg-surface-primary border border-border-default font-bold text-text-primary w-14 text-center">
-                                    {usedPercent.toFixed(1)}%
-                                  </span>
-                                </div>
-                              </div>
-                            )
-                          })}
+                      <div className="pt-3 mt-3 border-t border-border-default/50 flex flex-wrap items-center justify-between gap-2 text-xs text-text-muted">
+                        <div className="flex items-center gap-3">
+                          <span className="inline-flex items-center gap-1.5 text-emerald-400 font-medium">
+                            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                            <span>Unidades Online &amp; Saudáveis</span>
+                          </span>
+                          <span className="hidden sm:inline">• Mapeamento em lote ativo • Erros FS: 0</span>
+                        </div>
+                        <div className="flex items-center gap-4">
+                          <Link
+                            href="/settings/storage"
+                            className="font-semibold text-desert-tan hover:text-desert-orange inline-flex items-center gap-1 transition-colors"
+                          >
+                            <span>Configurar Discos &amp; Samba</span>
+                            <IconArrowRight size={14} />
+                          </Link>
                         </div>
                       </div>
                     </div>
+                  ) : null
 
-                    <div className="pt-3 mt-3 border-t border-border-default/50 flex flex-wrap items-center justify-between gap-2 text-xs text-text-muted">
-                      <div className="flex items-center gap-3">
-                        <span className="inline-flex items-center gap-1.5 text-emerald-400 font-medium">
-                          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                          <span>Unidades Online &amp; Saudáveis</span>
-                        </span>
-                        <span className="hidden sm:inline">• Mapeamento em lote ativo • Erros FS: 0</span>
-                      </div>
-                      <div className="flex items-center gap-4">
-                        <Link
-                          href="/settings/storage"
-                          className="font-semibold text-desert-tan hover:text-desert-orange inline-flex items-center gap-1 transition-colors"
-                        >
-                          <span>Configurar Discos &amp; Samba</span>
-                          <IconArrowRight size={14} />
-                        </Link>
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  /* MODO CARDS SEPARADOS (OPCIONAL VIA BOTÃO) */
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {displayMountTargets.map((target, idx) => {
-                      const total = target.totalBytes || 1
-                      const free = target.freeBytes || 0
-                      const used = Math.max(0, total - free)
-                      const usedPercent = Math.min(Math.max((used / total) * 100, 0), 100)
-                      const gaugeColor =
-                        usedPercent >= 85 ? '#ef4444' : usedPercent >= 70 ? '#f59e0b' : '#06b6d4'
-                      const isInternal =
-                        target.path === '/app/storage' ||
-                        target.path === '/storage' ||
-                        target.label.toLowerCase().includes('interno')
-                      const poolTitle = isInternal
-                        ? 'NVMe Sistema (Interno)'
-                        : `Disco Secundário (HD ${idx})`
+                  const separatedDiskNode = showSeparatedDisk ? (
+                    <div
+                      className={`${
+                        diskAnimState !== 'idle'
+                          ? `col-start-1 row-start-1 w-full ${diskAnimState === 'to-split' ? 'z-10' : 'pointer-events-none'}`
+                          : ''
+                      } grid grid-cols-1 md:grid-cols-2 gap-4`}
+                    >
+                      {displayMountTargets.map((target, idx) => {
+                        const total = target.totalBytes || 1
+                        const free = target.freeBytes || 0
+                        const used = Math.max(0, total - free)
+                        const usedPercent = Math.min(Math.max((used / total) * 100, 0), 100)
+                        const gaugeColor =
+                          usedPercent >= 85 ? '#ef4444' : usedPercent >= 70 ? '#f59e0b' : '#06b6d4'
+                        const isInternal =
+                          target.path === '/app/storage' ||
+                          target.path === '/storage' ||
+                          target.label.toLowerCase().includes('interno')
+                        const poolTitle = isInternal
+                          ? 'NVMe Sistema (Interno)'
+                          : `Disco Secundário (HD ${idx})`
 
-                      const splitCardAnimClass =
-                        diskTransitionPhase === 'merging-out'
-                          ? idx % 2 === 0
-                            ? 'nomad-merge-pre-left'
-                            : 'nomad-merge-pre-right'
-                          : diskTransitionPhase === 'split-in'
+                        const splitCardAnimClass =
+                          diskAnimState === 'to-merged'
                             ? idx % 2 === 0
-                              ? 'nomad-split-wing-left'
-                              : 'nomad-split-wing-right'
-                            : 'nomad-telemetry-panel'
+                              ? 'nomad-merge-pre-left'
+                              : 'nomad-merge-pre-right'
+                            : diskAnimState === 'to-split'
+                              ? idx % 2 === 0
+                                ? 'nomad-split-wing-left'
+                                : 'nomad-split-wing-right'
+                              : 'nomad-telemetry-panel'
 
-                      return (
-                        <div
-                          key={target.path}
-                          onAnimationEnd={(e) => {
-                            if (idx !== 0 || e.target !== e.currentTarget || !e.animationName.startsWith('nomad-')) return
-                            if (diskTransitionPhase === 'merging-out' || diskTransitionPhase === 'split-in') {
-                              advanceDiskPhase(diskTransitionPhase, diskPhaseTokenRef.current)
-                            }
-                          }}
-                          className={`rounded-xl border border-border-default border-t-2 border-t-desert-tan bg-surface-primary p-4 flex flex-col justify-between shadow-sm ${splitCardAnimClass}`}
-                        >
-                          <div className="flex items-center justify-between pb-2.5 mb-3 border-b border-border-default/60">
-                            <div className="flex items-center gap-2 min-w-0">
-                              <span className="text-xs font-mono px-2 py-0.5 rounded bg-surface-secondary border border-border-default text-desert-tan font-semibold">
-                                DISCO {idx + 1}
-                              </span>
-                              <span className="font-bold text-sm text-text-primary truncate">
-                                {poolTitle}
-                              </span>
+                        return (
+                          <div
+                            key={target.path}
+                            onAnimationEnd={(e) => {
+                              if (idx !== 0 || e.target !== e.currentTarget || e.animationName !== 'nomad-split-wing-left') return
+                              if (diskAnimState === 'to-split') {
+                                finishDiskMorph('to-split', diskPhaseTokenRef.current)
+                              }
+                            }}
+                            className={`rounded-xl border border-border-default border-t-2 border-t-desert-tan bg-surface-primary p-4 flex flex-col justify-between shadow-sm ${splitCardAnimClass}`}
+                          >
+                            <div className="flex items-center justify-between pb-2.5 mb-3 border-b border-border-default/60">
+                              <div className="flex items-center gap-2 min-w-0">
+                                <span className="text-xs font-mono px-2 py-0.5 rounded bg-surface-secondary border border-border-default text-desert-tan font-semibold">
+                                  DISCO {idx + 1}
+                                </span>
+                                <span className="font-bold text-sm text-text-primary truncate">
+                                  {poolTitle}
+                                </span>
+                              </div>
+                              <Link
+                                href="/settings/system#discos"
+                                title="Detalhes de particionamento"
+                                className="text-text-muted hover:text-desert-tan p-1 transition-colors"
+                              >
+                                <IconAdjustments size={15} />
+                              </Link>
                             </div>
-                            <Link
-                              href="/settings/system#discos"
-                              title="Detalhes de particionamento"
-                              className="text-text-muted hover:text-desert-tan p-1 transition-colors"
-                            >
-                              <IconAdjustments size={15} />
-                            </Link>
-                          </div>
 
-                          <div className="flex items-center gap-4">
-                            <CircularGauge
-                              percentage={usedPercent}
-                              size={88}
-                              strokeWidth={8}
-                              color={gaugeColor}
-                              label={`${usedPercent.toFixed(1)}%`}
-                              sublabel="USO"
-                            />
-                            <div className="space-y-1.5 min-w-0 text-xs flex-1">
-                              <div className="text-text-secondary truncate">
-                                Ponto: <code className="font-mono font-semibold text-text-primary">{target.path}</code>
-                              </div>
-                              <div className="text-text-secondary font-mono tabular-nums">
-                                Em Uso: <strong className="text-text-primary">{formatBytes(used)}</strong>
-                              </div>
-                              <div className="text-text-secondary font-mono tabular-nums">
-                                Livre: <strong className="text-emerald-400">{formatBytes(free)}</strong> de {formatBytes(total)}
-                              </div>
-                              <div className="inline-flex items-center gap-1.5 text-emerald-400 font-semibold pt-0.5">
-                                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                                <span>Online // Saudável</span>
+                            <div className="flex items-center gap-4">
+                              <CircularGauge
+                                percentage={usedPercent}
+                                size={88}
+                                strokeWidth={8}
+                                color={gaugeColor}
+                                label={`${usedPercent.toFixed(1)}%`}
+                                sublabel="USO"
+                              />
+                              <div className="space-y-1.5 min-w-0 text-xs flex-1">
+                                <div className="text-text-secondary truncate">
+                                  Ponto: <code className="font-mono font-semibold text-text-primary">{target.path}</code>
+                                </div>
+                                <div className="text-text-secondary font-mono tabular-nums">
+                                  Em Uso: <strong className="text-text-primary">{formatBytes(used)}</strong>
+                                </div>
+                                <div className="text-text-secondary font-mono tabular-nums">
+                                  Livre: <strong className="text-emerald-400">{formatBytes(free)}</strong> de {formatBytes(total)}
+                                </div>
+                                <div className="inline-flex items-center gap-1.5 text-emerald-400 font-semibold pt-0.5">
+                                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                                  <span>Online // Saudável</span>
+                                </div>
                               </div>
                             </div>
                           </div>
-                        </div>
-                      )
-                    })}
-                  </div>
-                )}
+                        )
+                      })}
+                    </div>
+                  ) : null
+
+                  if (diskAnimState !== 'idle') {
+                    return (
+                      <div className="grid grid-cols-1 items-start relative overflow-x-clip">
+                        {unifiedDiskNode}
+                        {separatedDiskNode}
+                      </div>
+                    )
+                  }
+                  return dashboardConfig.poolsCombined ? unifiedDiskNode : separatedDiskNode
+                })()}
               </div>
             )}
 
             {/* Linha de Processamento (Tempo Real 2s), Memória RAM (Matemática Correta) e Log/Fila */}
             {(() => {
+              const showCpuSplitOrMorph =
+                (!dashboardConfig.cpuCombined || cpuAnimState !== 'idle') &&
+                (dashboardConfig.cpuUsage || dashboardConfig.cpuModel)
+              const cpuCardSlots = dashboardConfig.cpuCombined && cpuAnimState === 'idle'
+                ? 1
+                : (dashboardConfig.cpuUsage ? 1 : 0) + (dashboardConfig.cpuModel ? 1 : 0)
               const hwCount =
-                (dashboardConfig.cpuCombined
-                  ? 1
-                  : (dashboardConfig.cpuUsage ? 1 : 0) + (dashboardConfig.cpuModel ? 1 : 0)) +
+                cpuCardSlots +
                 (dashboardConfig.memory ? 1 : 0) +
                 (dashboardConfig.eventLog ? 1 : 0)
               if (hwCount === 0) return null
@@ -1227,231 +1268,260 @@ export default function Home(props: {
                     : hwCount === 3
                       ? 'lg:col-span-4'
                       : 'lg:col-span-3'
+              const cpuWrapperSpan =
+                cpuCardSlots === 2
+                  ? hwCount === 2
+                    ? 'md:col-span-2 lg:col-span-12'
+                    : hwCount === 3
+                      ? 'md:col-span-2 lg:col-span-8'
+                      : 'md:col-span-2 lg:col-span-6'
+                  : hwColSpan
 
               const ramColor =
                 memUsedPercent >= 85 ? '#ef4444' : memUsedPercent >= 65 ? '#f59e0b' : '#22c55e'
               const cpuColor =
                 cpuPercent >= 85 ? '#ef4444' : cpuPercent >= 60 ? '#f59e0b' : '#06b6d4'
 
-              return (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-4">
-                  {/* CPU: MODO UNIFICADO EM TEMPO REAL */}
-                  {dashboardConfig.cpuCombined ? (
+              const showUnifiedCpu = dashboardConfig.cpuCombined || cpuAnimState !== 'idle'
+              const showSeparatedCpu = showCpuSplitOrMorph
+
+              const unifiedCpuNode = showUnifiedCpu ? (
+                <div
+                  onAnimationEnd={(e) => {
+                    if (e.target !== e.currentTarget || e.animationName !== 'nomad-merge-lock') return
+                    if (cpuAnimState === 'to-merged') {
+                      finishCpuMorph('to-merged', cpuPhaseTokenRef.current)
+                    }
+                  }}
+                  className={`${
+                    cpuAnimState !== 'idle' ? 'col-start-1 row-start-1 w-full h-full ' : ''
+                  }rounded-xl border border-border-default bg-surface-primary p-4 flex flex-col justify-between shadow-sm hover:border-desert-tan/70 ${
+                    cpuAnimState === 'to-split'
+                      ? 'pointer-events-none nomad-split-pre-exit'
+                      : cpuAnimState === 'to-merged'
+                        ? 'z-10 nomad-merge-lock'
+                        : 'nomad-telemetry-panel'
+                  }`}
+                >
+                  {cpuAnimState === 'to-split' && (
+                    <span className="nomad-cleave-beam" aria-hidden="true" />
+                  )}
+                  <div className="flex items-center justify-between pb-2.5 mb-3 border-b border-border-default/60">
+                    <div className="flex items-center gap-2">
+                      <IconCpu size={16} className="text-cyan-400" />
+                      <span className="text-xs font-bold uppercase tracking-wider text-text-primary">
+                        Processador (CPU)
+                      </span>
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-400 text-[0.6875rem] font-mono font-semibold">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                        AO VIVO
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleToggleCpuCombined}
+                      disabled={cpuAnimState !== 'idle'}
+                      title="Separar carga e modelo em 2 cards com animação"
+                      className="text-xs text-text-muted hover:text-desert-tan cursor-pointer font-medium transition-colors disabled:opacity-75"
+                    >
+                      {cpuAnimState === 'to-split' ? 'Separando...' : 'Separar'}
+                    </button>
+                  </div>
+
+                  <div className="flex items-center gap-4">
+                    <CircularGauge
+                      percentage={cpuPercent}
+                      size={88}
+                      strokeWidth={8}
+                      color={cpuColor}
+                      label={hasTelemetry ? `${Math.round(cpuPercent)}%` : '--'}
+                      sublabel="CARGA"
+                    />
+                    <div className="space-y-1 min-w-0 flex-1 text-xs">
+                      <div className="text-sm font-bold text-text-primary truncate" title={cpuBrand}>
+                        {cpuBrand}
+                      </div>
+                      <div className="text-text-secondary font-mono tabular-nums">
+                        {hasTelemetry ? `${cpuPhysical} Cores / ${cpuCores} Threads` : '-- Cores / -- Threads'}
+                      </div>
+                      <div className="text-text-secondary font-mono tabular-nums">
+                        Clock: <strong className="text-text-primary">{hasTelemetry ? `${Number(cpuSpeedGHz).toFixed(2)} GHz` : '--'}</strong>
+                        {cpuTempC !== null && (
+                          <span className="ml-2 text-desert-tan">• {cpuTempC}°C</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Mini Gráfico de Pulso em Tempo Real (2s) */}
+                  <div className="pt-3 mt-3 border-t border-border-default/50">
+                    <div className="flex items-end gap-1 h-7 mb-1.5" aria-label="Histórico de uso da CPU em tempo real">
+                      {Array.from({ length: 18 }).map((_, idx) => {
+                        const offset = 18 - cpuHistory.length
+                        const val = idx >= offset ? cpuHistory[idx - offset] : 0
+                        const hasVal = idx >= offset
+                        return (
+                          <div
+                            key={idx}
+                            className="flex-1 h-full bg-surface-secondary rounded-xs flex items-end overflow-hidden"
+                          >
+                            <div
+                              className="w-full rounded-xs transition-all duration-300"
+                              style={{
+                                height: hasVal ? `${Math.max(val, 8)}%` : '10%',
+                                backgroundColor: hasVal
+                                  ? val >= 85
+                                    ? '#ef4444'
+                                    : val >= 60
+                                      ? '#f59e0b'
+                                      : '#06b6d4'
+                                  : 'rgba(255,255,255,0.08)',
+                              }}
+                            />
+                          </div>
+                        )
+                      })}
+                    </div>
+                    <div className="flex items-center justify-between text-xs text-text-muted">
+                      <span>Atualização a cada 2s</span>
+                      <span className="text-emerald-400 font-semibold">
+                        {!hasTelemetry
+                          ? 'Conectando...'
+                          : cpuPercent < 20
+                            ? 'Operação Estável'
+                            : cpuPercent < 75
+                              ? 'Em Processamento'
+                              : 'Carga Elevada'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              ) : null
+
+              const separatedCpuNode = showSeparatedCpu ? (
+                <div
+                  className={`${
+                    cpuAnimState !== 'idle'
+                      ? `col-start-1 row-start-1 w-full h-full ${cpuAnimState === 'to-split' ? 'z-10' : 'pointer-events-none'}`
+                      : ''
+                  } grid grid-cols-1 ${dashboardConfig.cpuUsage && dashboardConfig.cpuModel ? 'sm:grid-cols-2' : ''} gap-4`}
+                >
+                  {dashboardConfig.cpuUsage && (
                     <div
                       onAnimationEnd={(e) => {
-                        if (e.target !== e.currentTarget || !e.animationName.startsWith('nomad-')) return
-                        if (cpuTransitionPhase === 'splitting-out' || cpuTransitionPhase === 'merge-in') {
-                          advanceCpuPhase(cpuTransitionPhase, cpuPhaseTokenRef.current)
+                        if (e.target !== e.currentTarget || e.animationName !== 'nomad-split-wing-left') return
+                        if (cpuAnimState === 'to-split') {
+                          finishCpuMorph('to-split', cpuPhaseTokenRef.current)
                         }
                       }}
-                      className={`${hwColSpan} rounded-xl border border-border-default bg-surface-primary p-4 flex flex-col justify-between shadow-sm hover:border-desert-tan/70 ${
-                        cpuTransitionPhase === 'splitting-out'
-                          ? 'nomad-split-pre-exit'
-                          : cpuTransitionPhase === 'merge-in'
-                            ? 'nomad-merge-lock'
+                      className={`rounded-xl border border-border-default bg-surface-primary p-4 flex flex-col justify-between shadow-sm hover:border-desert-tan/70 ${
+                        cpuAnimState === 'to-merged'
+                          ? 'nomad-merge-pre-left'
+                          : cpuAnimState === 'to-split'
+                            ? 'nomad-split-wing-left'
                             : 'nomad-telemetry-panel'
                       }`}
                     >
-                      {cpuTransitionPhase === 'splitting-out' && (
-                        <span className="nomad-cleave-beam" aria-hidden="true" />
-                      )}
                       <div className="flex items-center justify-between pb-2.5 mb-3 border-b border-border-default/60">
                         <div className="flex items-center gap-2">
                           <IconCpu size={16} className="text-cyan-400" />
                           <span className="text-xs font-bold uppercase tracking-wider text-text-primary">
-                            Processador (CPU)
-                          </span>
-                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-400 text-[0.6875rem] font-mono font-semibold">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                            AO VIVO
+                            Utilização da CPU
                           </span>
                         </div>
                         <button
                           type="button"
                           onClick={handleToggleCpuCombined}
-                          disabled={cpuTransitionPhase !== 'idle'}
-                          title="Separar carga e modelo em 2 cards com animação"
+                          disabled={cpuAnimState !== 'idle'}
+                          title="Unificar carga e modelo com animação"
                           className="text-xs text-text-muted hover:text-desert-tan cursor-pointer font-medium transition-colors disabled:opacity-75"
                         >
-                          {cpuTransitionPhase === 'splitting-out' || cpuTransitionPhase === 'split-in'
-                            ? 'Separando...'
-                            : 'Separar'}
+                          {cpuAnimState === 'to-merged' ? 'Unificando...' : 'Unificar'}
                         </button>
                       </div>
-
-                      <div className="flex items-center gap-4">
+                      <div className="flex items-center justify-center py-2">
                         <CircularGauge
                           percentage={cpuPercent}
-                          size={88}
-                          strokeWidth={8}
+                          size={94}
+                          strokeWidth={9}
                           color={cpuColor}
                           label={hasTelemetry ? `${Math.round(cpuPercent)}%` : '--'}
-                          sublabel="CARGA"
+                          sublabel="AO VIVO"
                         />
-                        <div className="space-y-1 min-w-0 flex-1 text-xs">
-                          <div className="text-sm font-bold text-text-primary truncate" title={cpuBrand}>
-                            {cpuBrand}
-                          </div>
-                          <div className="text-text-secondary font-mono tabular-nums">
-                            {hasTelemetry ? `${cpuPhysical} Cores / ${cpuCores} Threads` : '-- Cores / -- Threads'}
-                          </div>
-                          <div className="text-text-secondary font-mono tabular-nums">
-                            Clock: <strong className="text-text-primary">{hasTelemetry ? `${Number(cpuSpeedGHz).toFixed(2)} GHz` : '--'}</strong>
-                            {cpuTempC !== null && (
-                              <span className="ml-2 text-desert-tan">• {cpuTempC}°C</span>
-                            )}
-                          </div>
-                        </div>
                       </div>
-
-                      {/* Mini Gráfico de Pulso em Tempo Real (2s) */}
-                      <div className="pt-3 mt-3 border-t border-border-default/50">
-                        <div className="flex items-end gap-1 h-7 mb-1.5" aria-label="Histórico de uso da CPU em tempo real">
-                          {Array.from({ length: 18 }).map((_, idx) => {
-                            const offset = 18 - cpuHistory.length
-                            const val = idx >= offset ? cpuHistory[idx - offset] : 0
-                            const hasVal = idx >= offset
-                            return (
-                              <div
-                                key={idx}
-                                className="flex-1 h-full bg-surface-secondary rounded-xs flex items-end overflow-hidden"
-                              >
-                                <div
-                                  className="w-full rounded-xs transition-all duration-300"
-                                  style={{
-                                    height: hasVal ? `${Math.max(val, 8)}%` : '10%',
-                                    backgroundColor: hasVal
-                                      ? val >= 85
-                                        ? '#ef4444'
-                                        : val >= 60
-                                          ? '#f59e0b'
-                                          : '#06b6d4'
-                                      : 'rgba(255,255,255,0.08)',
-                                  }}
-                                />
-                              </div>
-                            )
-                          })}
-                        </div>
-                        <div className="flex items-center justify-between text-xs text-text-muted">
-                          <span>Atualização a cada 2s</span>
-                          <span className="text-emerald-400 font-semibold">
-                            {!hasTelemetry
-                              ? 'Conectando...'
-                              : cpuPercent < 20
-                                ? 'Operação Estável'
-                                : cpuPercent < 75
-                                  ? 'Em Processamento'
-                                  : 'Carga Elevada'}
-                          </span>
-                        </div>
+                      <div className="pt-2.5 border-t border-border-default/50 flex items-center justify-between text-xs text-text-muted">
+                        <span>Pulso: 2s</span>
+                        <span className="text-emerald-400 font-semibold font-mono tabular-nums">
+                          {hasTelemetry ? `${Number(cpuSpeedGHz).toFixed(2)} GHz` : '--'}
+                        </span>
                       </div>
                     </div>
-                  ) : (
-                    /* CPU: MODO SEPARADO (2 CARDS) */
-                    <>
-                      {dashboardConfig.cpuUsage && (
-                        <div
-                          onAnimationEnd={(e) => {
-                            if (e.target !== e.currentTarget || !e.animationName.startsWith('nomad-')) return
-                            if (cpuTransitionPhase === 'merging-out' || cpuTransitionPhase === 'split-in') {
-                              advanceCpuPhase(cpuTransitionPhase, cpuPhaseTokenRef.current)
-                            }
-                          }}
-                          className={`${hwColSpan} rounded-xl border border-border-default bg-surface-primary p-4 flex flex-col justify-between shadow-sm hover:border-desert-tan/70 ${
-                            cpuTransitionPhase === 'merging-out'
-                              ? 'nomad-merge-pre-left'
-                              : cpuTransitionPhase === 'split-in'
-                                ? 'nomad-split-wing-left'
-                                : 'nomad-telemetry-panel'
-                          }`}
-                        >
-                          <div className="flex items-center justify-between pb-2.5 mb-3 border-b border-border-default/60">
-                            <div className="flex items-center gap-2">
-                              <IconCpu size={16} className="text-cyan-400" />
-                              <span className="text-xs font-bold uppercase tracking-wider text-text-primary">
-                                Utilização da CPU
-                              </span>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={handleToggleCpuCombined}
-                              disabled={cpuTransitionPhase !== 'idle'}
-                              title="Unificar carga e modelo com animação"
-                              className="text-xs text-text-muted hover:text-desert-tan cursor-pointer font-medium transition-colors disabled:opacity-75"
-                            >
-                              {cpuTransitionPhase === 'merging-out' || cpuTransitionPhase === 'merge-in'
-                                ? 'Unificando...'
-                                : 'Unificar'}
-                            </button>
-                          </div>
-                          <div className="flex items-center justify-center py-2">
-                            <CircularGauge
-                              percentage={cpuPercent}
-                              size={94}
-                              strokeWidth={9}
-                              color={cpuColor}
-                              label={hasTelemetry ? `${Math.round(cpuPercent)}%` : '--'}
-                              sublabel="AO VIVO"
-                            />
-                          </div>
-                          <div className="pt-2.5 border-t border-border-default/50 flex items-center justify-between text-xs text-text-muted">
-                            <span>Pulso: 2s</span>
-                            <span className="text-emerald-400 font-semibold font-mono tabular-nums">
-                              {hasTelemetry ? `${Number(cpuSpeedGHz).toFixed(2)} GHz` : '--'}
-                            </span>
-                          </div>
-                        </div>
-                      )}
-
-                      {dashboardConfig.cpuModel && (
-                        <div
-                          onAnimationEnd={(e) => {
-                            if (dashboardConfig.cpuUsage || e.target !== e.currentTarget || !e.animationName.startsWith('nomad-')) return
-                            if (cpuTransitionPhase === 'merging-out' || cpuTransitionPhase === 'split-in') {
-                              advanceCpuPhase(cpuTransitionPhase, cpuPhaseTokenRef.current)
-                            }
-                          }}
-                          className={`${hwColSpan} rounded-xl border border-border-default bg-surface-primary p-4 flex flex-col justify-between shadow-sm hover:border-desert-tan/70 ${
-                            cpuTransitionPhase === 'merging-out'
-                              ? 'nomad-merge-pre-right'
-                              : cpuTransitionPhase === 'split-in'
-                                ? 'nomad-split-wing-right'
-                                : 'nomad-telemetry-panel'
-                          }`}
-                        >
-                          <div className="flex items-center justify-between pb-2.5 mb-3 border-b border-border-default/60">
-                            <span className="text-xs font-bold uppercase tracking-wider text-text-primary">
-                              Processador Host
-                            </span>
-                            <span className="text-xs font-mono text-desert-olive font-semibold">
-                              {sysInfo?.os?.arch || 'x86_64'}
-                            </span>
-                          </div>
-                          <div className="py-1 space-y-2 text-xs">
-                            <div className="text-sm font-bold text-text-primary line-clamp-2" title={cpuBrand}>
-                              {cpuBrand}
-                            </div>
-                            <div className="text-text-secondary font-mono tabular-nums">
-                              Núcleos:{' '}
-                              <strong className="text-desert-tan">
-                                {hasTelemetry ? `${cpuPhysical} Cores / ${cpuCores} Threads` : '--'}
-                              </strong>
-                            </div>
-                            <div className="text-text-secondary font-mono tabular-nums">
-                              Frequência: <strong className="text-text-primary">{hasTelemetry ? `${Number(cpuSpeedGHz).toFixed(2)} GHz` : '--'}</strong>
-                            </div>
-                          </div>
-                          <div className="pt-2.5 border-t border-border-default/50 flex items-center justify-between text-xs text-text-muted">
-                            <span>Temperatura</span>
-                            <span className="text-emerald-400 font-semibold">
-                              {cpuTempC !== null ? `${cpuTempC}°C` : 'Nominal'}
-                            </span>
-                          </div>
-                        </div>
-                      )}
-                    </>
                   )}
+
+                  {dashboardConfig.cpuModel && (
+                    <div
+                      onAnimationEnd={(e) => {
+                        if (dashboardConfig.cpuUsage || e.target !== e.currentTarget || e.animationName !== 'nomad-split-wing-right') return
+                        if (cpuAnimState === 'to-split') {
+                          finishCpuMorph('to-split', cpuPhaseTokenRef.current)
+                        }
+                      }}
+                      className={`rounded-xl border border-border-default bg-surface-primary p-4 flex flex-col justify-between shadow-sm hover:border-desert-tan/70 ${
+                        cpuAnimState === 'to-merged'
+                          ? 'nomad-merge-pre-right'
+                          : cpuAnimState === 'to-split'
+                            ? 'nomad-split-wing-right'
+                            : 'nomad-telemetry-panel'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between pb-2.5 mb-3 border-b border-border-default/60">
+                        <span className="text-xs font-bold uppercase tracking-wider text-text-primary">
+                          Processador Host
+                        </span>
+                        <span className="text-xs font-mono text-desert-olive font-semibold">
+                          {sysInfo?.os?.arch || 'x86_64'}
+                        </span>
+                      </div>
+                      <div className="py-1 space-y-2 text-xs">
+                        <div className="text-sm font-bold text-text-primary line-clamp-2" title={cpuBrand}>
+                          {cpuBrand}
+                        </div>
+                        <div className="text-text-secondary font-mono tabular-nums">
+                          Núcleos:{' '}
+                          <strong className="text-desert-tan">
+                            {hasTelemetry ? `${cpuPhysical} Cores / ${cpuCores} Threads` : '--'}
+                          </strong>
+                        </div>
+                        <div className="text-text-secondary font-mono tabular-nums">
+                          Frequência: <strong className="text-text-primary">{hasTelemetry ? `${Number(cpuSpeedGHz).toFixed(2)} GHz` : '--'}</strong>
+                        </div>
+                      </div>
+                      <div className="pt-2.5 border-t border-border-default/50 flex items-center justify-between text-xs text-text-muted">
+                        <span>Temperatura</span>
+                        <span className="text-emerald-400 font-semibold">
+                          {cpuTempC !== null ? `${cpuTempC}°C` : 'Nominal'}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : null
+
+              return (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-4">
+                  {/* CPU: CROSS-MORPH CONTÍNUO EM 1 ESTÁGIO (UNIFICADO <-> SEPARADO) */}
+                  <div className={`${cpuWrapperSpan} grid grid-cols-1 items-stretch relative overflow-x-clip`}>
+                    {cpuAnimState !== 'idle' ? (
+                      <>
+                        {unifiedCpuNode}
+                        {separatedCpuNode}
+                      </>
+                    ) : dashboardConfig.cpuCombined ? (
+                      unifiedCpuNode
+                    ) : (
+                      separatedCpuNode
+                    )}
+                  </div>
 
                   {/* MEMÓRIA RAM REAL (CORRIGIDA: Em Uso Real = Total - Disponível) */}
                   {dashboardConfig.memory && (

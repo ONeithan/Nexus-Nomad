@@ -1229,12 +1229,12 @@ export class DockerService {
       } else if (serviceName === SERVICE_NAMES.HOMEBOX) {
         extraEnv.push(`HBOX_AUTH_API_KEY_PEPPER=${await this._resolveHomeboxPepper()}`)
       } else if (serviceName === SERVICE_NAMES.FIREFLY_III) {
-        extraEnv.push('APP_KEY=base64:c29tZXJhbmRvbXN0cmluZ2ZvcmZpcmVmbHlpaWk=')
+        extraEnv.push('APP_KEY=base64:Tm9tYWRBcHBLZXkzMkJ5dGVzRXhhY3RMZW5ndGgwMDE=')
         extraEnv.push('DB_CONNECTION=sqlite')
         extraEnv.push('TRUSTED_PROXIES=**')
         extraEnv.push('DEFAULT_CURRENCY=BRL')
       } else if (serviceName === SERVICE_NAMES.BAR_ASSISTANT) {
-        extraEnv.push('APP_KEY=base64:c29tZXJhbmRvbXN0cmluZ2ZvcmJhcmFzc2lzdGFudA==')
+        extraEnv.push('APP_KEY=base64:Tm9tYWRBcHBLZXkzMkJ5dGVzRXhhY3RMZW5ndGgwMDE=')
         extraEnv.push('DB_CONNECTION=sqlite')
         extraEnv.push('CACHE_DRIVER=file')
         extraEnv.push('SESSION_DRIVER=file')
@@ -1242,8 +1242,31 @@ export class DockerService {
         extraEnv.push('JWT_SECRET_KEY=kitchenowl-jwt-secret-nomad-2026!')
         extraEnv.push('JWT_SECRET=kitchenowl-jwt-secret-nomad-key!')
       } else if (serviceName === SERVICE_NAMES.SPEEDTEST) {
-        extraEnv.push('APP_KEY=base64:c29tZXJhbmRvbXN0cmluZ2ZvcnNwZWVkdGVzdA==')
+        extraEnv.push('APP_KEY=base64:Tm9tYWRBcHBLZXkzMkJ5dGVzRXhhY3RMZW5ndGgwMDE=')
         extraEnv.push('DB_CONNECTION=sqlite')
+        extraEnv.push('PUID=1000')
+        extraEnv.push('PGID=1000')
+        extraEnv.push('APP_TIMEZONE=America/Sao_Paulo')
+      } else if (serviceName === SERVICE_NAMES.PAPERLESS) {
+        extraEnv.push('PAPERLESS_SECRET_KEY=nomad-paperless-secret-key-0123456789abcdef0123456789')
+        extraEnv.push('PAPERLESS_WEBSERVER_WORKERS=2')
+        extraEnv.push('PAPERLESS_TASK_WORKERS=1')
+        extraEnv.push('PAPERLESS_ADMIN_USER=admin')
+        extraEnv.push('PAPERLESS_ADMIN_PASSWORD=nomad')
+        extraEnv.push('USERMAP_UID=1000')
+        extraEnv.push('USERMAP_GID=1000')
+      } else if (serviceName === SERVICE_NAMES.DEFGUARD) {
+        extraEnv.push('DEFGUARD_SECRET_KEY=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef')
+        extraEnv.push('DEFGUARD_AUTH_SECRET=abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789')
+        extraEnv.push('DEFGUARD_GATEWAY_SECRET=fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210')
+        extraEnv.push('DEFGUARD_YUBIBRIDGE_SECRET=0123456789fedcba0123456789fedcba0123456789fedcba0123456789fedcba')
+        extraEnv.push('DEFGUARD_COOKIE_INSECURE=true')
+        extraEnv.push('DEFGUARD_HTTP_PORT=80')
+      } else if (serviceName === SERVICE_NAMES.GRAMPS_WEB) {
+        extraEnv.push('TREE=nomad')
+        extraEnv.push('GRAMPSWEB_TREE=nomad')
+        extraEnv.push('GUNICORN_NUM_WORKERS=2')
+        extraEnv.push('GRAMPSWEB_MEDIA_PREFIX=local')
       } else if (serviceName === SERVICE_NAMES.CROWDSEC) {
         extraEnv.push('DISABLE_ONLINE_API=true')
       } else if (serviceName === SERVICE_NAMES.BLOCKY) {
