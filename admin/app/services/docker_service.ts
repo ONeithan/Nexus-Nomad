@@ -1229,27 +1229,32 @@ export class DockerService {
       } else if (serviceName === SERVICE_NAMES.HOMEBOX) {
         extraEnv.push(`HBOX_AUTH_API_KEY_PEPPER=${await this._resolveHomeboxPepper()}`)
       } else if (serviceName === SERVICE_NAMES.FIREFLY_III) {
-        extraEnv.push('APP_KEY=base64:Tm9tYWRBcHBLZXkzMkJ5dGVzRXhhY3RMZW5ndGgwMDE=')
+        extraEnv.push(`APP_KEY=${await this._resolveLaravelAppKey(serviceName)}`)
         extraEnv.push('DB_CONNECTION=sqlite')
         extraEnv.push('TRUSTED_PROXIES=**')
         extraEnv.push('DEFAULT_CURRENCY=BRL')
       } else if (serviceName === SERVICE_NAMES.BAR_ASSISTANT) {
-        extraEnv.push('APP_KEY=base64:Tm9tYWRBcHBLZXkzMkJ5dGVzRXhhY3RMZW5ndGgwMDE=')
+        extraEnv.push(`APP_KEY=${await this._resolveLaravelAppKey(serviceName)}`)
         extraEnv.push('DB_CONNECTION=sqlite')
         extraEnv.push('DB_DATABASE=/var/www/cocktails/storage/bar-assistant/database.ba3.sqlite')
         extraEnv.push('CACHE_DRIVER=file')
         extraEnv.push('SESSION_DRIVER=file')
+      } else if (serviceName === SERVICE_NAMES.INVOICE_NINJA) {
+        extraEnv.push(`APP_KEY=${await this._resolveLaravelAppKey(serviceName)}`)
       } else if (serviceName === SERVICE_NAMES.KITCHENOWL) {
         extraEnv.push('JWT_SECRET_KEY=kitchenowl-jwt-secret-nomad-2026!')
         extraEnv.push('JWT_SECRET=kitchenowl-jwt-secret-nomad-key!')
       } else if (serviceName === SERVICE_NAMES.SPEEDTEST) {
-        extraEnv.push('APP_KEY=base64:Tm9tYWRBcHBLZXkzMkJ5dGVzRXhhY3RMZW5ndGgwMDE=')
+        extraEnv.push(`APP_KEY=${await this._resolveLaravelAppKey(serviceName)}`)
         extraEnv.push('DB_CONNECTION=sqlite')
+        extraEnv.push('DB_DATABASE=/config/database.sqlite')
         extraEnv.push('PUID=1000')
         extraEnv.push('PGID=1000')
         extraEnv.push('APP_TIMEZONE=America/Sao_Paulo')
       } else if (serviceName === SERVICE_NAMES.PAPERLESS) {
         extraEnv.push('PAPERLESS_SECRET_KEY=nomad-paperless-secret-key-0123456789abcdef0123456789')
+        extraEnv.push('PAPERLESS_OCR_LANGUAGE=por')
+        extraEnv.push('PAPERLESS_OCR_LANGUAGES=por')
         extraEnv.push('PAPERLESS_WEBSERVER_WORKERS=2')
         extraEnv.push('PAPERLESS_TASK_WORKERS=1')
         extraEnv.push('PAPERLESS_ADMIN_USER=admin')
@@ -1350,8 +1355,16 @@ export class DockerService {
         const targetFile = join(targetDir, starterCfg.filename)
         await mkdir(targetDir, { recursive: true }).catch(() => {})
         await chmod(targetDir, 0o777).catch(() => {})
-        const exists = await access(targetFile).then(() => true).catch(() => false)
-        if (!exists) {
+        let shouldWriteStarter = !(await access(targetFile).then(() => true).catch(() => false))
+        if (!shouldWriteStarter && serviceName === SERVICE_NAMES.HEADSCALE) {
+          const { readFile } = await import('fs/promises')
+          const existingYaml = await readFile(targetFile, 'utf8').catch(() => '')
+          // Replace legacy Headscale starter config missing v0.23+ required dns.nameservers / override_local_dns keys
+          if (!existingYaml.includes('nameservers:') || !existingYaml.includes('override_local_dns:')) {
+            shouldWriteStarter = true
+          }
+        }
+        if (shouldWriteStarter) {
           await writeFile(targetFile, starterCfg.content, 'utf8').catch(() => {})
           await chmod(targetFile, 0o666).catch(() => {})
         }
@@ -2038,6 +2051,35 @@ export class DockerService {
     return pepper
   }
 
+  /**
+   * Generate and persist a cryptographic 32-byte Laravel APP_KEY per service installation
+   * so ciphertexts and sessions remain valid across container updates without hardcoding keys in source.
+   */
+  private async _resolveLaravelAppKey(serviceName: string): Promise<string> {
+    const keyMap = {
+      [SERVICE_NAMES.BAR_ASSISTANT]: 'apps.nomad_bar_assistant.laravelAppKey',
+      [SERVICE_NAMES.FIREFLY_III]: 'apps.nomad_fireflyiii.laravelAppKey',
+      [SERVICE_NAMES.INVOICE_NINJA]: 'apps.nomad_invoice_ninja.laravelAppKey',
+      [SERVICE_NAMES.SPEEDTEST]: 'apps.nomad_speedtest.laravelAppKey',
+    } as const
+    const kvKey = keyMap[serviceName as keyof typeof keyMap]
+    if (kvKey) {
+      const existing = await KVStore.getValue(kvKey)
+      if (
+        typeof existing === 'string' &&
+        existing.startsWith('base64:') &&
+        Buffer.from(existing.slice(7), 'base64').length === 32
+      ) {
+        return existing
+      }
+      const generated = `base64:${randomBytes(32).toString('base64')}`
+      await KVStore.setValue(kvKey, generated)
+      logger.info(`[DockerService] Generated and persisted Laravel APP_KEY for ${serviceName}`)
+      return generated
+    }
+    return `base64:${randomBytes(32).toString('base64')}`
+  }
+
   private async _resolveAmdHsaOverride({
     quiet = false,
     containerEnv,
@@ -2329,6 +2371,17 @@ export class DockerService {
         !finalEnv.some((e: string) => e.startsWith('HBOX_AUTH_API_KEY_PEPPER='))
       ) {
         finalEnv = [...finalEnv, `HBOX_AUTH_API_KEY_PEPPER=${await this._resolveHomeboxPepper()}`]
+      }
+      if (
+        [
+          SERVICE_NAMES.FIREFLY_III,
+          SERVICE_NAMES.BAR_ASSISTANT,
+          SERVICE_NAMES.INVOICE_NINJA,
+          SERVICE_NAMES.SPEEDTEST,
+        ].includes(serviceName as any) &&
+        !finalEnv.some((e: string) => e.startsWith('APP_KEY='))
+      ) {
+        finalEnv = [...finalEnv, `APP_KEY=${await this._resolveLaravelAppKey(serviceName)}`]
       }
 
       const newContainerConfig: any = {
@@ -2844,6 +2897,17 @@ export class DockerService {
         !recreateEnv.some((e: string) => e.startsWith('HBOX_AUTH_API_KEY_PEPPER='))
       ) {
         recreateEnv = [...recreateEnv, `HBOX_AUTH_API_KEY_PEPPER=${await this._resolveHomeboxPepper()}`]
+      }
+      if (
+        [
+          SERVICE_NAMES.FIREFLY_III,
+          SERVICE_NAMES.BAR_ASSISTANT,
+          SERVICE_NAMES.INVOICE_NINJA,
+          SERVICE_NAMES.SPEEDTEST,
+        ].includes(serviceName as any) &&
+        !recreateEnv.some((e: string) => e.startsWith('APP_KEY='))
+      ) {
+        recreateEnv = [...recreateEnv, `APP_KEY=${await this._resolveLaravelAppKey(serviceName)}`]
       }
 
       const newContainer = await this.docker.createContainer({

@@ -615,11 +615,11 @@ test('CSS animations, hover cascade, reduced-motion, contrast and release metada
     assert.ok(routes.includes(`documented(${snippet}`), `Missing documented() wrapper for ${snippet}`)
   }
 
-  // 8) Triple version sync to v1.0.42 across workflow and boot gate
-  assert.match(workflow, /# Build release trigger: v1\.0\.42/)
-  assert.match(workflow, /default: '1\.0\.42-nexus'/)
-  assert.match(workflow, /inputs\.version \|\| '1\.0\.42-nexus'/)
-  assert.match(bootGate, /:\s*'v1\.0\.42'/)
+  // 8) Triple version sync to v1.0.43 across workflow and boot gate
+  assert.match(workflow, /# Build release trigger: v1\.0\.43/)
+  assert.match(workflow, /default: '1\.0\.43-nexus'/)
+  assert.match(workflow, /inputs\.version \|\| '1\.0\.43-nexus'/)
+  assert.match(bootGate, /:\s*'v1\.0\.43'/)
 
   // 9) Bulk install & Portainer hardening checks (real sequential wait + port collision resolution + catalog port uniqueness + live progress polling)
   const [bulkModal, supplyDepot, portainerSvc, seeder, systemSvc] = await Promise.all([
@@ -782,10 +782,43 @@ test('stack blueprints, starter configs, multi-port and 8080 container port fixe
   assert.ok(barBp!.sidecarServicesYaml('nomad_bar_assistant', '192.168.1.10', '8560').includes('getmeili/meilisearch:v1.56'))
   assert.ok(barBp!.sidecarServicesYaml('nomad_bar_assistant', '192.168.1.10', '8560').includes('http://localhost:7700/health'))
 
-  // Verify v1.0.41 live-audited app blueprints (Maybe, Outline, DefGuard, Paperless, Gramps Web, WG-Easy, Speedtest, Your_Spotify, Translate)
-  const maybeEnv = bpMod.getStackBlueprint('nomad_maybe')!.extraEnv('192.168.1.10', '8580')
-  assert.ok(maybeEnv.includes('DATABASE_URL=postgres://postgres:nomad_db_pass@nomad_maybe-db:5432/maybe_production'))
-  assert.ok(maybeEnv.includes('DB_HOST=nomad_maybe-db'))
+  // Verify v1.0.43 live-audited app blueprints (Maybe, Paperless, Bar Assistant, Headscale, Immich, Ghostfolio, Speedtest, TubeArchivist, Your_Spotify, Invoice Ninja, Translate)
+  const maybeBp = bpMod.getStackBlueprint('nomad_maybe')!
+  const maybeEnv = maybeBp.extraEnv('192.168.1.10', '8580')
+  assert.ok(maybeEnv.includes('DATABASE_URL=postgres://postgres:nomad_db_pass@nomad-maybe-db:5432/maybe_production'))
+  assert.ok(maybeEnv.includes('DB_HOST=nomad-maybe-db'))
+  assert.ok(maybeEnv.includes('REDIS_URL=redis://nomad-maybe-redis:6379/1'))
+  assert.ok(maybeBp.sidecarServicesYaml('nomad_maybe', '192.168.1.10', '8580').includes('nomad-maybe-db:'))
+
+  const paperlessBp = bpMod.getStackBlueprint('nomad_paperless')!
+  const paperlessEnv = paperlessBp.extraEnv('192.168.1.10', '8492')
+  assert.ok(paperlessEnv.includes('PAPERLESS_OCR_LANGUAGE=por'))
+  assert.ok(paperlessEnv.includes('PAPERLESS_OCR_LANGUAGES=por'))
+  assert.match(paperlessBp.healthcheckYaml || '', /start_period:\s*120s/)
+
+  const headscaleCfg = bpMod.getStarterConfigFile('nomad_headscale', '192.168.1.10', '8625')!
+  assert.match(headscaleCfg.content, /nameservers:/)
+  assert.match(headscaleCfg.content, /global:\s*\n\s*- 1\.1\.1\.1/)
+  assert.match(headscaleCfg.content, /override_local_dns:\s*false/)
+  assert.match(headscaleCfg.content, /base_domain:\s*nomad\.local/)
+
+  const immichBp = bpMod.getStackBlueprint('nomad_immich')!
+  const immichEnv = immichBp.extraEnv('192.168.1.10', '8700')
+  assert.ok(immichEnv.includes('DB_VECTOR_EXTENSION=vectorchord'))
+  assert.ok(immichEnv.includes('IMMICH_MEDIA_LOCATION=/usr/src/app/upload'))
+  const immichSidecars = immichBp.sidecarServicesYaml('nomad_immich', '192.168.1.10', '8700')
+  assert.ok(immichSidecars.includes('ghcr.io/immich-app/postgres:14-vectorchord0.4.3-pgvectors0.2.0'))
+  assert.ok(immichSidecars.includes('POSTGRES_INITDB_ARGS=--data-checksums'))
+  assert.ok(immichBp.sidecarVolumeNames('nomad_immich').includes('nomad-nomad_immich-vchord'))
+
+  assert.ok(barBp!.sidecarServicesYaml('nomad_bar_assistant', '192.168.1.10', '8560').includes('rm -rf /meili_data/data.ms'))
+
+  const ghostEnv = bpMod.getStackBlueprint('nomad_ghostfolio')!.extraEnv('192.168.1.10', '8580')
+  assert.ok(ghostEnv.some((e: string) => e.includes('sslmode=disable')))
+  assert.doesNotMatch(ghostEnv.join('\n'), /sslmode=prefer/)
+
+  const tubeEnv = bpMod.getStackBlueprint('nomad_tubearchivist')!.extraEnv('192.168.1.10', '8710')
+  assert.doesNotMatch(tubeEnv.join('\n'), /HOST_UID|HOST_GID/)
 
   const outlineEnv = bpMod.getStackBlueprint('nomad_outline')!.extraEnv('192.168.1.10', '8510')
   assert.ok(outlineEnv.includes('COLLABORATION_URL=http://192.168.1.10:8510'))
@@ -804,14 +837,19 @@ test('stack blueprints, starter configs, multi-port and 8080 container port fixe
   assert.ok(wgEnv.includes('WG_HOST=192.168.1.10'))
   assert.ok(wgEnv.includes('INSECURE=true'))
 
-  const speedEnv = bpMod.getStackBlueprint('nomad_speedtest')!.extraEnv('192.168.1.10', '8685')
+  const speedBp = bpMod.getStackBlueprint('nomad_speedtest')!
+  const speedEnv = speedBp.extraEnv('192.168.1.10', '8685')
   assert.ok(speedEnv.includes('DB_CONNECTION=sqlite'))
+  assert.ok(speedEnv.includes('DB_DATABASE=/config/database.sqlite'))
+  assert.ok(speedBp.composeEntrypointOverride?.join(' ').includes('touch /config/database.sqlite'))
   const speedKey = speedEnv.find((e: string) => e.startsWith('APP_KEY=base64:'))?.split('base64:')[1] || ''
   assert.equal(Buffer.from(speedKey, 'base64').length, 32)
 
   const spotifyBp = bpMod.getStackBlueprint('nomad_your_spotify')!
   assert.ok(spotifyBp.extraEnv('192.168.1.10', '8740').includes('API_ENDPOINT=http://192.168.1.10:8741'))
-  assert.ok(spotifyBp.sidecarServicesYaml('nomad_your_spotify', '192.168.1.10', '8740').includes('yooooomi/your_spotify_server:latest'))
+  const spotifySidecar = spotifyBp.sidecarServicesYaml('nomad_your_spotify', '192.168.1.10', '8740')
+  assert.ok(spotifySidecar.includes('yooooomi/your_spotify_server:latest'))
+  assert.ok(spotifySidecar.includes('CORS=i-want-a-security-vulnerability-and-want-to-allow-all-origins'))
 
   const translateEnv = bpMod.getStackBlueprint('nomad_translate')!.extraEnv('192.168.1.10', '8460')
   assert.ok(translateEnv.includes('KIWIX=http://nomad-nomad_kiwix_server:8080'))
@@ -867,6 +905,19 @@ test('stack blueprints, starter configs, multi-port and 8080 container port fixe
   assert.match(portainerSvc, /httpStatus === 304/)
   assert.match(portainerSvc, /createdStack\?\.Status === 4/)
   assert.match(portainerSvc, /iAttempt < 24/)
+  assert.match(portainerSvc, /boundKeys\.add\(primaryProtoKey\)/)
+  assert.match(portainerSvc, /healthcheckLine/)
+  assert.match(portainerSvc, /sidecarsByService/)
+  assert.match(portainerSvc, /visitedDeps/)
+  assert.match(portainerSvc, /override_local_dns:/)
+  assert.match(seeder, /PAPERLESS_OCR_LANGUAGES=por/)
+
+  // Validate Headscale starter config YAML strictly parses with js-yaml and zero syntax errors
+  const { createRequire: createReq2 } = await import('node:module')
+  const yamlHeadscale = createReq2(import.meta.url)('js-yaml').load(headscaleCfg.content) as any
+  assert.equal(yamlHeadscale?.dns?.override_local_dns, false)
+  assert.deepEqual(yamlHeadscale?.dns?.nameservers?.global, ['1.1.1.1', '9.9.9.9'])
+  assert.equal(yamlHeadscale?.noise?.private_key_path, '/etc/headscale/noise_private.key')
 
   // Verify v1.0.41 storage/download path resolution, realpath deduplication for .tmp files, non-overlapping split/merge animation & minimalist update capsule
   const [downloadSvc, storageMgr, mapSvc, zimSvc, downloadsPage, activeDownloadsTsx, appCss] = await Promise.all([
@@ -891,4 +942,25 @@ test('stack blueprints, starter configs, multi-port and 8080 container port fixe
   assert.match(homeTsx, /nomad-merge-seam/)
   assert.match(appCss, /transform-origin: right center/)
   assert.match(appCss, /nomad-merge-seam-flash/)
+
+  // Verify v1.0.43 security & collection link validation hardening (zero hardcoded Laravel base64 APP_KEYs + healthy URLs)
+  const [bpRaw, dockerSvcRaw, kiwixCategoriesRaw, urlWorkflowRaw] = await Promise.all([
+    readFile(new URL('../../app/utils/app_stack_blueprints.ts', import.meta.url), 'utf8'),
+    readFile(new URL('../../app/services/docker_service.ts', import.meta.url), 'utf8'),
+    readFile(new URL('../../../collections/kiwix-categories.json', import.meta.url), 'utf8'),
+    readFile(new URL('../../../.github/workflows/validate-collection-urls.yml', import.meta.url), 'utf8'),
+  ])
+  const hardcodedAppKeyPattern = /APP_KEY=base64:[A-Za-z0-9+/=]{20,}/
+  assert.doesNotMatch(bpRaw, hardcodedAppKeyPattern)
+  assert.doesNotMatch(dockerSvcRaw, hardcodedAppKeyPattern)
+  assert.doesNotMatch(seeder, hardcodedAppKeyPattern)
+  const runtimeKey = bpMod.buildDefaultLaravelAppKey('nomad_bar_assistant')
+  assert.ok(runtimeKey.startsWith('base64:'))
+  assert.equal(Buffer.from(runtimeKey.slice(7), 'base64').length, 32)
+  assert.match(dockerSvcRaw, /private async _resolveLaravelAppKey/)
+  assert.match(portainerSvc, /hasPreinstalledAppKey/)
+  assert.match(kiwixCategoriesRaw, /devdocs_en_react_2026-11\.zim/)
+  assert.doesNotMatch(kiwixCategoriesRaw, /devdocs_en_react_2026-02\.zim/)
+  assert.match(urlWorkflowRaw, /\/tmp\/kiwix-dir-cache/)
+  assert.match(urlWorkflowRaw, /--retry-all-errors/)
 })

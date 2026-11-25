@@ -89,6 +89,10 @@ export const KV_STORE_SCHEMA = {
   'ai.autoFixGpuPassthrough':   'boolean',
   'gpu.autoRemediatedAt':       'string',
   'apps.homebox.apiKeyPepper':  'string',
+  'apps.nomad_bar_assistant.laravelAppKey': 'string',
+  'apps.nomad_fireflyiii.laravelAppKey':    'string',
+  'apps.nomad_invoice_ninja.laravelAppKey': 'string',
+  'apps.nomad_speedtest.laravelAppKey':     'string',
   'benchmark.rerunBannerDismissed': 'boolean',
   // Drug Reference v1 — export_date of the last successfully completed
   // openFDA drug-label ingest (e.g. "2026-06-06"). Written by

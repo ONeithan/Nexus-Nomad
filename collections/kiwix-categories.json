@@ -1,5 +1,5 @@
 {
-  "spec_version": "2026-11-15-pt",
+  "spec_version": "2026-11-25-pt",
   "categories": [
     {
       "name": "Medicina & Saúde",
@@ -638,10 +638,10 @@
             },
             {
               "id": "devdocs_en_react",
-              "version": "2026-02",
+              "version": "2026-11",
               "title": "Documentação Oficial do React",
               "description": "Guia de componentes, hooks modernos, ciclo de vida e estado reativo",
-              "url": "https://download.kiwix.org/zim/devdocs/devdocs_en_react_2026-02.zim",
+              "url": "https://download.kiwix.org/zim/devdocs/devdocs_en_react_2026-11.zim",
               "size_mb": 3
             },
             {

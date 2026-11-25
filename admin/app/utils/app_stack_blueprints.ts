@@ -1,4 +1,15 @@
+import { createHash } from 'node:crypto'
 import { SERVICE_NAMES } from '../../constants/service_names.js'
+
+/**
+ * Generates a deterministic 32-byte (AES-256-CBC) Laravel APP_KEY fallback at runtime
+ * without embedding hardcoded `base64:` secret literals in source control.
+ * Prefer the persistent random key stored in KVStore via `DockerService._resolveLaravelAppKey`.
+ */
+export function buildDefaultLaravelAppKey(serviceName: string): string {
+  const seed = `${process.env.APP_KEY || 'nexus-nomad-runtime'}:${serviceName}:laravel-aes-256-cbc`
+  return `base64:${createHash('sha256').update(seed).digest('base64')}`
+}
 
 export interface StackBlueprint {
   /** Additional env vars injected into the primary app container (resolved with hostIp/hostPort). */
@@ -19,6 +30,8 @@ export interface StackBlueprint {
   composeEntrypointOverride?: string[]
   /** Optional UID:GID (e.g. '1000:1000') chowned onto mounted storage dirs before container boot. */
   initUidGid?: string
+  /** Optional Docker Compose healthcheck YAML block for the primary app service. */
+  healthcheckYaml?: string
 }
 
 export interface StarterConfigFile {
@@ -118,7 +131,7 @@ export const STACK_BLUEPRINTS: Record<string, StackBlueprint> = {
   [SERVICE_NAMES.GHOSTFOLIO]: {
     extraEnv: () => [
       'NODE_ENV=production',
-      `DATABASE_URL=postgresql://postgres:nomad_db_pass@${SERVICE_NAMES.GHOSTFOLIO}-db:5432/ghostfolio?connect_timeout=300&sslmode=prefer`,
+      `DATABASE_URL=postgresql://postgres:nomad_db_pass@${SERVICE_NAMES.GHOSTFOLIO}-db:5432/ghostfolio?connect_timeout=300&sslmode=disable`,
       `REDIS_HOST=${SERVICE_NAMES.GHOSTFOLIO}-redis`,
       'REDIS_PORT=6379',
       'ACCESS_TOKEN_SALT=nomad-ghostfolio-salt-2026-secure',
@@ -140,20 +153,38 @@ export const STACK_BLUEPRINTS: Record<string, StackBlueprint> = {
       'RAILS_ASSUME_SSL=false',
       'GOOD_JOB_EXECUTION_MODE=async',
       'SECRET_KEY_BASE=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
-      `DATABASE_URL=postgres://postgres:nomad_db_pass@${SERVICE_NAMES.MAYBE}-db:5432/maybe_production`,
-      `DB_HOST=${SERVICE_NAMES.MAYBE}-db`,
-      `POSTGRES_HOST=${SERVICE_NAMES.MAYBE}-db`,
+      // Ruby URI::RFC2396_Parser rejects underscores (`nomad_maybe-db`), so use hyphenated DNS service names
+      'DATABASE_URL=postgres://postgres:nomad_db_pass@nomad-maybe-db:5432/maybe_production',
+      'DB_HOST=nomad-maybe-db',
+      'POSTGRES_HOST=nomad-maybe-db',
       'POSTGRES_USER=postgres',
       'POSTGRES_PASSWORD=nomad_db_pass',
       'POSTGRES_DB=maybe_production',
-      `REDIS_URL=redis://${SERVICE_NAMES.MAYBE}-redis:6379/1`,
+      'REDIS_URL=redis://nomad-maybe-redis:6379/1',
     ],
     dependsOnYaml: `    depends_on:
-      ${SERVICE_NAMES.MAYBE}-db:
+      nomad-maybe-db:
         condition: service_healthy
-      ${SERVICE_NAMES.MAYBE}-redis:
+      nomad-maybe-redis:
         condition: service_healthy\n`,
-    sidecarServicesYaml: (s) => `${buildPgService(s, 'maybe_production')}\n${buildRedisService(s)}`,
+    sidecarServicesYaml: (s) => `  nomad-maybe-db:
+    image: postgres:16-alpine
+    container_name: nomad-${s}-db
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=nomad_db_pass
+      - POSTGRES_DB=maybe_production
+    volumes:
+      - nomad-${s}-pgdata:/var/lib/postgresql/data
+${pgHealthcheck.replace('pg_isready -U postgres', 'pg_isready -U postgres -d maybe_production')}
+  nomad-maybe-redis:
+    image: redis:7-alpine
+    container_name: nomad-${s}-redis
+    restart: unless-stopped
+    volumes:
+      - nomad-${s}-redis:/data
+${redisHealthcheck}`,
     sidecarVolumeNames: (s) => [`nomad-${s}-pgdata`, `nomad-${s}-redis`],
   },
 
@@ -215,6 +246,9 @@ export const STACK_BLUEPRINTS: Record<string, StackBlueprint> = {
       'DB_USERNAME=postgres',
       'DB_PASSWORD=nomad_db_pass',
       'DB_DATABASE_NAME=immich',
+      'DB_VECTOR_EXTENSION=vectorchord',
+      'DB_SSL_MODE=disable',
+      'IMMICH_MEDIA_LOCATION=/usr/src/app/upload',
       `REDIS_HOSTNAME=${SERVICE_NAMES.IMMICH}-redis`,
       'IMMICH_TELEMETRY_INCLUDE=',
     ],
@@ -223,16 +257,29 @@ export const STACK_BLUEPRINTS: Record<string, StackBlueprint> = {
         condition: service_healthy
       ${SERVICE_NAMES.IMMICH}-redis:
         condition: service_healthy\n`,
-    sidecarServicesYaml: (s) =>
-      `${buildPgService(s, 'immich', 'tensorchord/pgvecto-rs:pg16-v0.2.0')}\n${buildRedisService(s)}`,
-    sidecarVolumeNames: (s) => [`nomad-${s}-pgdata`, `nomad-${s}-redis`],
+    sidecarServicesYaml: (s) => `  ${s}-db:
+    image: ghcr.io/immich-app/postgres:14-vectorchord0.4.3-pgvectors0.2.0
+    container_name: nomad-${s}-db
+    restart: unless-stopped
+    shm_size: "128mb"
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=nomad_db_pass
+      - POSTGRES_DB=immich
+      - POSTGRES_INITDB_ARGS=--data-checksums
+      - DB_STORAGE_TYPE=HDD
+    volumes:
+      - nomad-${s}-vchord:/var/lib/postgresql/data
+${pgHealthcheck.replace('pg_isready -U postgres', 'pg_isready -U postgres -d immich')}
+${buildRedisService(s)}`,
+    sidecarVolumeNames: (s) => [`nomad-${s}-vchord`, `nomad-${s}-redis`],
   },
 
   [SERVICE_NAMES.BAR_ASSISTANT]: {
     initUidGid: '33:33',
     extraEnv: (hostIp, hostPort) => [
       `APP_URL=http://${hostIp}:${hostPort}`,
-      'APP_KEY=base64:Tm9tYWRBcHBLZXkzMkJ5dGVzRXhhY3RMZW5ndGgwMDE=',
+      `APP_KEY=${buildDefaultLaravelAppKey(SERVICE_NAMES.BAR_ASSISTANT)}`,
       'DB_CONNECTION=sqlite',
       'DB_DATABASE=/var/www/cocktails/storage/bar-assistant/database.ba3.sqlite',
       `REDIS_HOST=${SERVICE_NAMES.BAR_ASSISTANT}-redis`,
@@ -255,11 +302,14 @@ export const STACK_BLUEPRINTS: Record<string, StackBlueprint> = {
     image: getmeili/meilisearch:v1.56
     container_name: nomad-${s}-meili
     restart: unless-stopped
+    entrypoint:
+      - /bin/sh
+      - -c
+      - 'if [ -f /meili_data/data.ms/VERSION ] && ! grep -qE "^1\\.5[0-9]\\." /meili_data/data.ms/VERSION; then rm -rf /meili_data/data.ms; fi; exec /sbin/tini -- /bin/meilisearch'
     environment:
       - MEILI_MASTER_KEY=nomadMeiliMasterKey2026
       - MEILI_NO_ANALYTICS=true
       - MEILI_ENV=production
-      - MEILI_UPGRADE_DB=true
     volumes:
       - nomad-${s}-meili:/meili_data
     healthcheck:
@@ -276,8 +326,7 @@ ${buildRedisService(s)}`,
       `ES_URL=http://${SERVICE_NAMES.TUBEARCHIVIST}-es:9200`,
       `REDIS_CON=redis://${SERVICE_NAMES.TUBEARCHIVIST}-redis:6379`,
       'TA_HOST=0.0.0.0:8000',
-      `HOST_UID=1000`,
-      `HOST_GID=1000`,
+      'TA_PORT=8000',
       'TA_USERNAME=admin',
       'TA_PASSWORD=nomad',
       'ELASTIC_PASSWORD=nomad_db_pass',
@@ -296,6 +345,7 @@ ${buildRedisService(s)}`,
     environment:
       - discovery.type=single-node
       - xpack.security.enabled=false
+      - cluster.routing.allocation.disk.threshold_enabled=false
       - ES_JAVA_OPTS=-Xms256m -Xmx512m
     volumes:
       - nomad-${s}-esdata:/usr/share/elasticsearch/data`,
@@ -307,7 +357,7 @@ ${buildRedisService(s)}`,
     extraAppVolumes: (s) => [`nomad-${s}-public:/var/www/app/public`],
     extraEnv: (hostIp, hostPort) => [
       `APP_URL=http://${hostIp}:${hostPort}`,
-      'APP_KEY=base64:Tm9tYWRBcHBLZXkzMkJ5dGVzRXhhY3RMZW5ndGgwMDE=',
+      `APP_KEY=${buildDefaultLaravelAppKey(SERVICE_NAMES.INVOICE_NINJA)}`,
       'APP_ENV=production',
       'APP_DEBUG=false',
       'REQUIRE_HTTPS=false',
@@ -454,6 +504,7 @@ ${buildRedisService(s)}
       'PAPERLESS_SECRET_KEY=nomad-paperless-secret-key-0123456789abcdef0123456789',
       `PAPERLESS_URL=http://${hostIp}:${hostPort}`,
       'PAPERLESS_OCR_LANGUAGE=por',
+      'PAPERLESS_OCR_LANGUAGES=por',
       'PAPERLESS_TIME_ZONE=America/Sao_Paulo',
       'PAPERLESS_WEBSERVER_WORKERS=2',
       'PAPERLESS_TASK_WORKERS=1',
@@ -462,6 +513,12 @@ ${buildRedisService(s)}
       'USERMAP_UID=1000',
       'USERMAP_GID=1000',
     ],
+    healthcheckYaml: `    healthcheck:
+      test: ["CMD", "curl", "-fs", "-S", "-L", "--max-time", "3", "http://localhost:8000"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 120s\n`,
     dependsOnYaml: `    depends_on:
       ${SERVICE_NAMES.PAPERLESS}-redis:
         condition: service_healthy\n`,
@@ -522,11 +579,17 @@ ${buildRedisService(s)}
     initUidGid: '1000:1000',
     extraEnv: (hostIp, hostPort) => [
       'DB_CONNECTION=sqlite',
-      'APP_KEY=base64:Tm9tYWRBcHBLZXkzMkJ5dGVzRXhhY3RMZW5ndGgwMDE=',
+      'DB_DATABASE=/config/database.sqlite',
+      `APP_KEY=${buildDefaultLaravelAppKey(SERVICE_NAMES.SPEEDTEST)}`,
       `APP_URL=http://${hostIp}:${hostPort}`,
       'PUID=1000',
       'PGID=1000',
       'APP_TIMEZONE=America/Sao_Paulo',
+    ],
+    composeEntrypointOverride: [
+      '/bin/sh',
+      '-c',
+      'mkdir -p /config && [ -f /config/database.sqlite ] || touch /config/database.sqlite; chown 1000:1000 /config/database.sqlite; exec /init',
     ],
     sidecarServicesYaml: () => '',
     sidecarVolumeNames: () => [],
@@ -560,7 +623,7 @@ ${buildRedisService(s)}
       - API_ENDPOINT=http://${hostIp}:${apiPort}
       - CLIENT_ENDPOINT=http://${hostIp}:${hostPort}
       - MONGO_ENDPOINT=mongodb://${s}-mongo:27017/your_spotify
-      - CORS=all
+      - CORS=i-want-a-security-vulnerability-and-want-to-allow-all-origins
       - SPOTIFY_PUBLIC=nomad_configure_spotify_public
       - SPOTIFY_SECRET=nomad_configure_spotify_secret`
     },
@@ -616,23 +679,41 @@ blocking:
       content: `server_url: http://${hostIp}:${hostPort}
 listen_addr: 0.0.0.0:8080
 metrics_listen_addr: 127.0.0.1:9090
-private_key_path: /etc/headscale/private.key
+grpc_listen_addr: 127.0.0.1:50443
+grpc_allow_insecure: false
 noise:
   private_key_path: /etc/headscale/noise_private.key
 prefixes:
   v4: 100.64.0.0/10
   v6: fd7a:115c:a1e0::/48
+  allocation: sequential
 derp:
   server:
     enabled: false
   urls: []
   paths: []
+  auto_update_enabled: false
 database:
   type: sqlite
   sqlite:
     path: /etc/headscale/db.sqlite
+    write_ahead_log: true
+policy:
+  mode: file
+  path: ""
 dns:
-  magic_dns: false
+  magic_dns: true
+  base_domain: nomad.local
+  override_local_dns: false
+  nameservers:
+    global:
+      - 1.1.1.1
+      - 9.9.9.9
+    split: {}
+  search_domains: []
+  extra_records: []
+unix_socket: /var/run/headscale/headscale.sock
+unix_socket_permission: "0770"
 `,
     }
   }
